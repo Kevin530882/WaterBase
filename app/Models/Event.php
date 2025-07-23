@@ -16,6 +16,8 @@ class Event extends Model
         'time',
         'duration',
         'description',
+        'points',
+        'badge',
         'maxVolunteers',
         'status',
         'user_id',
