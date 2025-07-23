@@ -35,10 +35,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }, []);
 
     const login = (token: string, user: User) => {
-        // Set state first, then localStorage
+        // Update state first (this triggers re-renders immediately)
         setToken(token);
         setUser(user);
         
+        // Then update localStorage
         localStorage.setItem('auth_token', token);
         localStorage.setItem('user', JSON.stringify(user));
     };
@@ -56,10 +57,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         } catch (error) {
         console.error('Logout error:', error);
         } finally {
-        // Clear state first, then localStorage
+        // Clear state first (triggers re-render immediately)
         setToken(null);
         setUser(null);
         
+        // Then clear localStorage
         localStorage.removeItem('auth_token');
         localStorage.removeItem('user');
         }

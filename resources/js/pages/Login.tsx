@@ -14,13 +14,15 @@ import Navigation from "@/components/Navigation";
 import { Mail, Lock, LogIn, AlertCircle } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { useAuth } from "@/contexts/AuthContext";
 
 export const Login = () => {
 
+const { login } = useAuth(); // Add this line to get the login function
 const [formData, setFormData] = useState({
-email: "",
-password: "",
-rememberMe: false,
+    email: "",
+    password: "",
+    rememberMe: false,
 });
 
 const [isLoading, setIsLoading] = useState(false);
@@ -34,28 +36,27 @@ const handleSubmit = async (e: React.FormEvent) => {
 
     try {
         const response = await fetch('/api/login', {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Accept': 'application/json',
-            },
-            body: JSON.stringify({
-                email: formData.email,
-                password: formData.password,
-            }),
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'Accept': 'application/json',
+        },
+        body: JSON.stringify({
+            email: formData.email,
+            password: formData.password,
+        }),
         });
 
         const data = await response.json();
 
         if (response.ok) {
-            // Store the token and user info
-            localStorage.setItem('auth_token', data.access_token);
-            localStorage.setItem('user', JSON.stringify(data.user));
-
-            // Redirect to home
+        // Use the login function from AuthContext instead of manually setting localStorage
+        login(data.access_token, data.user);
+        
+        // Redirect to home
         navigate('/');
         } else {
-            setError(data.message || 'Login failed. Please try again.');
+        setError(data.message || 'Login failed. Please try again.');
         }
     } catch (error) {
         console.error('Login error:', error);
