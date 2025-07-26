@@ -15,6 +15,7 @@ interface AuthContextType {
     login: (token: string, user: User) => void;
     logout: () => void;
     isAuthenticated: boolean;
+    isLoading: boolean; // Add loading state
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -22,6 +23,7 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     const [user, setUser] = useState<User | null>(null);
     const [token, setToken] = useState<string | null>(null);
+    const [isLoading, setIsLoading] = useState(true); // Start with loading = true
 
     useEffect(() => {
         // Check for existing auth on app load
@@ -29,24 +31,29 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const storedUser = localStorage.getItem('user');
         
         if (storedToken && storedUser) {
-        setToken(storedToken);
-        setUser(JSON.parse(storedUser));
+        try {
+            setToken(storedToken);
+            setUser(JSON.parse(storedUser));
+        } catch (error) {
+            console.error('Error parsing stored user data:', error);
+            // Clear invalid data
+            localStorage.removeItem('auth_token');
+            localStorage.removeItem('user');
         }
+        }
+        
+        setIsLoading(false); // Auth check complete
     }, []);
 
     const login = (token: string, user: User) => {
-        // Update state first (this triggers re-renders immediately)
         setToken(token);
         setUser(user);
-        
-        // Then update localStorage
         localStorage.setItem('auth_token', token);
         localStorage.setItem('user', JSON.stringify(user));
     };
 
     const logout = async () => {
         try {
-        // Call logout API
         await fetch('/api/logout', {
             method: 'POST',
             headers: {
@@ -57,11 +64,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         } catch (error) {
         console.error('Logout error:', error);
         } finally {
-        // Clear state first (triggers re-render immediately)
         setToken(null);
         setUser(null);
-        
-        // Then clear localStorage
         localStorage.removeItem('auth_token');
         localStorage.removeItem('user');
         }
@@ -73,6 +77,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         login,
         logout,
         isAuthenticated: !!token && !!user,
+        isLoading, // Include loading state
     };
 
     return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

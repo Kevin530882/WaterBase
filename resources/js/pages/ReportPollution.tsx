@@ -23,40 +23,209 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Zap } from "lucide-react";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Zap, AlertCircle, CheckCircle, Upload as UploadIcon } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Camera, MapPin, Upload, Smartphone } from "lucide-react";
+import { useAuth } from "@/contexts/AuthContext";
 
 export const ReportPollution = () => {
+  const { user, isAuthenticated } = useAuth();
   const [showReportForm, setShowReportForm] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitStatus, setSubmitStatus] = useState<'idle' | 'success' | 'error'>('idle');
+  const [errorMessage, setErrorMessage] = useState('');
+  
   // Form state
   const [newReport, setNewReport] = useState({
     title: "",
-    description: "",
+    content: "", // Changed from description to match backend
     address: "",
     latitude: "",
     longitude: "",
-    type: "",
+    pollutionType: "", // Changed from type to match backend
+    severityByUser: "", // Added severity field
+    image: null as File | null, // Added image field
   });
 
-  const handleSubmitReport = () => {
-    // This would normally submit to backend
-    console.log("Submitting report:", newReport);
-    setShowReportForm(false);
-    setNewReport({
-      title: "",
-      description: "",
-      address: "",
-      latitude: "",
-      longitude: "",
-      type: "",
+  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      // Validate file type
+      const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif'];
+      if (!allowedTypes.includes(file.type)) {
+        setErrorMessage('Please select a valid image file (JPEG, PNG, or GIF)');
+        return;
+      }
+      
+      // Validate file size (max 5MB)
+      if (file.size > 5 * 1024 * 1024) {
+        setErrorMessage('Image file size must be less than 5MB');
+        return;
+      }
+      
+      setNewReport({ ...newReport, image: file });
+      setErrorMessage('');
+    }
+  };
+
+  const convertImageToBase64 = (file: File): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        if (reader.result) {
+          resolve(reader.result as string);
+        } else {
+          reject(new Error('Failed to convert image'));
+        }
+      };
+      reader.onerror = () => reject(new Error('Failed to read file'));
+      reader.readAsDataURL(file);
     });
+  };
+
+  const validateForm = () => {
+    if (!newReport.title.trim()) {
+      setErrorMessage('Title is required');
+      return false;
+    }
+    if (!newReport.content.trim()) {
+      setErrorMessage('Content description is required');
+      return false;
+    }
+    if (!newReport.address.trim()) {
+      setErrorMessage('Address is required');
+      return false;
+    }
+    if (!newReport.latitude || !newReport.longitude) {
+      setErrorMessage('Latitude and longitude are required');
+      return false;
+    }
+    if (!newReport.pollutionType) {
+      setErrorMessage('Pollution type is required');
+      return false;
+    }
+    if (!newReport.severityByUser) {
+      setErrorMessage('Severity level is required');
+      return false;
+    }
+    if (!newReport.image) {
+      setErrorMessage('Image is required');
+      return false;
+    }
+    
+    // Validate coordinates are numbers
+    const lat = parseFloat(newReport.latitude);
+    const lng = parseFloat(newReport.longitude);
+    if (isNaN(lat) || isNaN(lng)) {
+      setErrorMessage('Please enter valid latitude and longitude values');
+      return false;
+    }
+    
+    // Validate coordinate ranges
+    if (lat < -90 || lat > 90 || lng < -180 || lng > 180) {
+      setErrorMessage('Please enter valid coordinate values');
+      return false;
+    }
+    
+    return true;
+  };
+
+  const handleSubmitReport = async () => {
+    if (!validateForm()) {
+      return;
+    }
+
+    setIsSubmitting(true);
+    setErrorMessage('');
+    setSubmitStatus('idle');
+
+    try {
+      // Convert image to base64
+      const imageBase64 = await convertImageToBase64(newReport.image!);
+
+      const reportData = {
+        title: newReport.title,
+        content: newReport.content,
+        address: newReport.address,
+        latitude: parseFloat(newReport.latitude),
+        longitude: parseFloat(newReport.longitude),
+        pollutionType: newReport.pollutionType,
+        status: 'pending', // Default status
+        image: imageBase64,
+        severityByUser: newReport.severityByUser,
+        user_id: user?.id || 1, // Use authenticated user ID
+      };
+
+      const response = await fetch('/api/reports', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('auth_token')}`,
+        },
+        body: JSON.stringify(reportData),
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        setSubmitStatus('success');
+        
+        // Reset form
+        setNewReport({
+          title: "",
+          content: "",
+          address: "",
+          latitude: "",
+          longitude: "",
+          pollutionType: "",
+          severityByUser: "",
+          image: null,
+        });
+
+        // Close dialog after 2 seconds
+        setTimeout(() => {
+          setShowReportForm(false);
+          setSubmitStatus('idle');
+        }, 2000);
+      } else {
+        throw new Error(data.message || 'Failed to submit report');
+      }
+    } catch (error) {
+      console.error('Submit error:', error);
+      setSubmitStatus('error');
+      setErrorMessage(error instanceof Error ? error.message : 'Failed to submit report. Please try again.');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const handleAIGenerate = () => {
     // Non-functional for now as requested
     console.log("AI Generate Report - Coming Soon");
+  };
+
+  // Auto-detect location (optional enhancement)
+  const handleGetCurrentLocation = () => {
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          setNewReport({
+            ...newReport,
+            latitude: position.coords.latitude.toString(),
+            longitude: position.coords.longitude.toString(),
+          });
+        },
+        (error) => {
+          console.error('Geolocation error:', error);
+          setErrorMessage('Could not get current location. Please enter coordinates manually.');
+        }
+      );
+    } else {
+      setErrorMessage('Geolocation is not supported by this browser.');
+    }
   };
 
   return (
@@ -90,9 +259,12 @@ export const ReportPollution = () => {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <Button className="w-full bg-waterbase-500 hover:bg-waterbase-600">
+              <Button 
+                className="w-full bg-waterbase-500 hover:bg-waterbase-600"
+                disabled
+              >
                 <Camera className="w-4 h-4 mr-2" />
-                Take Photo Report
+                Take Photo Report (Coming Soon)
               </Button>
             </CardContent>
           </Card>
@@ -106,7 +278,7 @@ export const ReportPollution = () => {
                 Detailed Report
               </CardTitle>
               <CardDescription className="text-waterbase-600">
-                Submit a comprehensive report with multiple photos and detailed
+                Submit a comprehensive report with photos and detailed
                 information.
               </CardDescription>
             </CardHeader>
@@ -116,12 +288,13 @@ export const ReportPollution = () => {
                   <Button
                     variant="outline"
                     className="w-full border-enviro-300 text-enviro-700 hover:bg-enviro-50"
+                    disabled={!isAuthenticated}
                   >
                     <Upload className="w-4 h-4 mr-2" />
                     Create Detailed Report
                   </Button>
                 </DialogTrigger>
-                <DialogContent className="max-w-md">
+                <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
                   <DialogHeader>
                     <DialogTitle>Report Water Pollution</DialogTitle>
                     <DialogDescription>
@@ -130,9 +303,26 @@ export const ReportPollution = () => {
                   </DialogHeader>
 
                   <div className="space-y-4">
+                    {/* Status Messages */}
+                    {submitStatus === 'success' && (
+                      <Alert className="border-green-200 bg-green-50">
+                        <CheckCircle className="h-4 w-4 text-green-600" />
+                        <AlertDescription className="text-green-700">
+                          Report submitted successfully! Thank you for helping protect our waterways.
+                        </AlertDescription>
+                      </Alert>
+                    )}
+
+                    {(submitStatus === 'error' || errorMessage) && (
+                      <Alert variant="destructive">
+                        <AlertCircle className="h-4 w-4" />
+                        <AlertDescription>{errorMessage}</AlertDescription>
+                      </Alert>
+                    )}
+
                     <div>
                       <label className="text-sm font-medium mb-1 block">
-                        Title
+                        Title *
                       </label>
                       <Input
                         placeholder="Brief description of the pollution"
@@ -140,29 +330,31 @@ export const ReportPollution = () => {
                         onChange={(e) =>
                           setNewReport({ ...newReport, title: e.target.value })
                         }
+                        disabled={isSubmitting}
                       />
                     </div>
 
                     <div>
                       <label className="text-sm font-medium mb-1 block">
-                        Content
+                        Content *
                       </label>
                       <Textarea
                         placeholder="Detailed description of what you observed..."
-                        value={newReport.description}
+                        value={newReport.content}
                         onChange={(e) =>
                           setNewReport({
                             ...newReport,
-                            description: e.target.value,
+                            content: e.target.value,
                           })
                         }
                         rows={3}
+                        disabled={isSubmitting}
                       />
                     </div>
 
                     <div>
                       <label className="text-sm font-medium mb-1 block">
-                        Address
+                        Address *
                       </label>
                       <Input
                         placeholder="Full address of the location"
@@ -173,13 +365,14 @@ export const ReportPollution = () => {
                             address: e.target.value,
                           })
                         }
+                        disabled={isSubmitting}
                       />
                     </div>
 
                     <div className="grid grid-cols-2 gap-2">
                       <div>
                         <label className="text-sm font-medium mb-1 block">
-                          Latitude
+                          Latitude *
                         </label>
                         <Input
                           placeholder="14.5995"
@@ -190,11 +383,12 @@ export const ReportPollution = () => {
                               latitude: e.target.value,
                             })
                           }
+                          disabled={isSubmitting}
                         />
                       </div>
                       <div>
                         <label className="text-sm font-medium mb-1 block">
-                          Longitude
+                          Longitude *
                         </label>
                         <Input
                           placeholder="121.0008"
@@ -205,60 +399,138 @@ export const ReportPollution = () => {
                               longitude: e.target.value,
                             })
                           }
+                          disabled={isSubmitting}
                         />
+                      </div>
+                    </div>
+
+                    <div className="text-center">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={handleGetCurrentLocation}
+                        disabled={isSubmitting}
+                      >
+                        <MapPin className="w-4 h-4 mr-2" />
+                        Use Current Location
+                      </Button>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <label className="text-sm font-medium mb-1 block">
+                          Pollution Type *
+                        </label>
+                        <Select
+                          value={newReport.pollutionType}
+                          onValueChange={(value) =>
+                            setNewReport({ ...newReport, pollutionType: value })
+                          }
+                          disabled={isSubmitting}
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select pollution type" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="Industrial Waste">Industrial Waste</SelectItem>
+                            <SelectItem value="Plastic Pollution">Plastic Pollution</SelectItem>
+                            <SelectItem value="Sewage Discharge">Sewage Discharge</SelectItem>
+                            <SelectItem value="Chemical Pollution">Chemical Pollution</SelectItem>
+                            <SelectItem value="Oil Spill">Oil Spill</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      <div>
+                        <label className="text-sm font-medium mb-1 block">
+                          Severity Level *
+                        </label>
+                        <Select
+                          value={newReport.severityByUser}
+                          onValueChange={(value) =>
+                            setNewReport({ ...newReport, severityByUser: value })
+                          }
+                          disabled={isSubmitting}
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select severity" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="low">Low</SelectItem>
+                            <SelectItem value="medium">Medium</SelectItem>
+                            <SelectItem value="high">High</SelectItem>
+                            <SelectItem value="critical">Critical</SelectItem>
+                          </SelectContent>
+                        </Select>
                       </div>
                     </div>
 
                     <div>
                       <label className="text-sm font-medium mb-1 block">
-                        Pollution Type
+                        Upload Image *
                       </label>
-                      <Select
-                        value={newReport.type}
-                        onValueChange={(value) =>
-                          setNewReport({ ...newReport, type: value })
-                        }
-                      >
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select pollution type" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="industrial">
-                            Industrial Waste
-                          </SelectItem>
-                          <SelectItem value="plastic">
-                            Plastic Pollution
-                          </SelectItem>
-                          <SelectItem value="sewage">
-                            Sewage Discharge
-                          </SelectItem>
-                          <SelectItem value="chemical">
-                            Chemical Pollution
-                          </SelectItem>
-                          <SelectItem value="oil">Oil Spill</SelectItem>
-                        </SelectContent>
-                      </Select>
+                      <div className="border-2 border-dashed border-gray-300 rounded-lg p-4 text-center">
+                        <input
+                          type="file"
+                          accept="image/*"
+                          onChange={handleImageChange}
+                          className="hidden"
+                          id="image-upload"
+                          disabled={isSubmitting}
+                        />
+                        <label
+                          htmlFor="image-upload"
+                          className="cursor-pointer flex flex-col items-center"
+                        >
+                          <UploadIcon className="w-8 h-8 text-gray-400 mb-2" />
+                          <span className="text-sm text-gray-600">
+                            {newReport.image 
+                              ? `Selected: ${newReport.image.name}`
+                              : 'Click to upload image or drag and drop'
+                            }
+                          </span>
+                          <span className="text-xs text-gray-500 mt-1">
+                            JPEG, PNG, GIF up to 5MB
+                          </span>
+                        </label>
+                      </div>
                     </div>
 
-                    <div className="flex space-x-2">
+                    <div className="flex space-x-2 pt-4">
                       <Button
                         onClick={handleSubmitReport}
+                        disabled={isSubmitting || submitStatus === 'success'}
                         className="flex-1 bg-waterbase-500 hover:bg-waterbase-600"
                       >
-                        Submit Report
+                        {isSubmitting ? (
+                          <>
+                            <div className="w-4 h-4 mr-2 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                            Submitting...
+                          </>
+                        ) : (
+                          'Submit Report'
+                        )}
                       </Button>
                       <Button
                         variant="outline"
                         onClick={handleAIGenerate}
+                        disabled={isSubmitting}
                         className="flex-1 border-enviro-300 text-enviro-700 hover:bg-enviro-50"
                       >
                         <Zap className="w-4 h-4 mr-1" />
-                        AI Generate
+                        AI Generate (Soon)
                       </Button>
                     </div>
                   </div>
                 </DialogContent>
               </Dialog>
+
+              {!isAuthenticated && (
+                <p className="text-xs text-gray-500 mt-2 text-center">
+                  Please log in to submit a report
+                </p>
+              )}
             </CardContent>
           </Card>
         </div>
@@ -277,8 +549,7 @@ export const ReportPollution = () => {
                 1. Capture
               </h3>
               <p className="text-waterbase-600 text-sm">
-                Take photos of pollution using your smartphone with automatic
-                GPS tagging
+                Take photos of pollution and gather location details
               </p>
             </div>
 
@@ -302,18 +573,10 @@ export const ReportPollution = () => {
                 3. Verify & Map
               </h3>
               <p className="text-waterbase-600 text-sm">
-                AI verifies your report and adds it to the public pollution map
+                Report is reviewed and added to the public pollution map
               </p>
             </div>
           </div>
-        </div>
-
-        <div className="mt-8 text-center">
-          <p className="text-waterbase-600 text-sm">
-            This feature is coming soon. The full reporting system will include
-            photo upload, GPS tagging, AI verification, and integration with the
-            live map.
-          </p>
         </div>
       </div>
     </div>

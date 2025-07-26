@@ -22,7 +22,9 @@ return new class extends Migration
             $table->string('pollutionType');
             $table->enum('status', ['pending', 'verified', 'resolved'])->default('pending');
             $table->text('image');
-            $table->enum('severityLevel', ['low', 'medium', 'high', 'critical'])->default('low');
+            $table->enum('severityByUser', ['low', 'medium', 'high', 'critical'])->change();
+            $table->enum('severityByAI', ['low', 'medium', 'high', 'critical'])->change()->default('low');
+            $table->decimal('severityPercentage', 5, 2)->default(0.00);
             $table->foreignId('user_id')->constrained()->onDelete('cascade');
             $table->timestamps();
         });

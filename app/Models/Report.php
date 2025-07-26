@@ -9,14 +9,15 @@ class Report extends Model
     //
     protected $fillable = [
         'title',
-        'content',
+        'content', 
         'address',
         'latitude',
         'longitude',
         'pollutionType',
-        'status',
+        'severityByUser',
         'image',
         'user_id',
+        'status'
     ];
 
     public function user()

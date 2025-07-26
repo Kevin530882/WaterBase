@@ -5,8 +5,8 @@ namespace App\Enums;
 enum SeverityLevel: string
 {
     //
-    case Low = "low";
-    case Medium = "medium";
-    case High = "high";
-    case Critical = "critical";
+    case LOW = "low";
+    case MEDIUM = "medium";
+    case HIGH = "high";
+    case CRITICAL = "critical";
 }
