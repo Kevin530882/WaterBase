@@ -88,6 +88,24 @@ interface AreaReport {
     reports: Report[];
 }
 
+interface CleanupEvent {
+    id: number;
+    title: string;
+    location: string;
+    date: string;
+    time: string;
+    duration: string;
+    maxVolunteers: number;
+    description: string;
+    rewardPoints: number;
+    rewardBadge: string;
+    rewardAdditional: string;
+    areaId: number;
+    organizerId: number;
+    status: 'recruiting' | 'active' | 'completed' | 'cancelled';
+    currentVolunteers: number;
+}
+
 // Mock existing cleanup events (keep as mockup)
 const existingEvents = [
     {
@@ -133,29 +151,66 @@ const existingEvents = [
 ];
 
 export const OrganizerPortal = () => {
-    const { token } = useAuth();
+    const { token, user } = useAuth();
     const [activeTab, setActiveTab] = useState("areas");
     const [showCreateEvent, setShowCreateEvent] = useState(false);
     const [selectedArea, setSelectedArea] = useState<AreaReport | null>(null);
     const [showImageDialog, setShowImageDialog] = useState(false);
     const [selectedReport, setSelectedReport] = useState<Report | null>(null);
-    const [showAllImages, setShowAllImages] = useState(false);
     const [reports, setReports] = useState<Report[]>([]);
     const [eligibleAreas, setEligibleAreas] = useState<AreaReport[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState("");
+    const [isCreatingEvent, setIsCreatingEvent] = useState(false);
+    const [eventError, setEventError] = useState("");
+    const [showAreaDetails, setShowAreaDetails] = useState(false);
+    const [hoveredImage, setHoveredImage] = useState<string | null>(null);
+    const [createdEvents, setCreatedEvents] = useState<any[]>([]);
+    const [isLoadingEvents, setIsLoadingEvents] = useState(false);
+
+    const fetchCreatedEvents = async () => {
+        if (!user?.id) return;
+        
+        try {
+            setIsLoadingEvents(true);
+            
+            const response = await fetch(`/api/events?user_id=${user.id}`, {
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Accept': 'application/json',
+                },
+            });
+
+            if (response.ok) {
+                const data = await response.json();
+                setCreatedEvents(data);
+            } else {
+                console.error('Failed to fetch events');
+            }
+        } catch (error) {
+            console.error('Error fetching events:', error);
+        } finally {
+            setIsLoadingEvents(false);
+        }
+    };
+
+    // Update the useEffect to also fetch events
+    useEffect(() => {
+        fetchReports();
+        if (user?.id) {
+            fetchCreatedEvents();
+        }
+    }, [user?.id]);
 
     const [newEvent, setNewEvent] = useState({
         title: "",
-        area: "",
         date: "",
         time: "",
         duration: "",
         maxVolunteers: "",
         description: "",
-        rewardType: "",
         rewardPoints: "",
-        rewardCertificate: "",
+        rewardBadge: "",
         rewardAdditional: "",
     });
 
@@ -193,56 +248,121 @@ export const OrganizerPortal = () => {
 
     // Process reports into areas with sufficient report counts
     const processEligibleAreas = (allReports: Report[]) => {
-        // Group reports by location (address)
+        // Group reports by coordinates (latitude and longitude)
+        // Using a tolerance of ~0.01 degrees (approximately 1km) to group nearby reports
+        const COORDINATE_TOLERANCE = 0.01;
         const locationGroups: { [key: string]: Report[] } = {};
         
         allReports.forEach(report => {
-        const location = report.address || 'Unknown Location';
-        if (!locationGroups[location]) {
-            locationGroups[location] = [];
-        }
-        locationGroups[location].push(report);
+            // Validate coordinates before processing
+            const lat = parseFloat(report.latitude?.toString() || '0');
+            const lng = parseFloat(report.longitude?.toString() || '0');
+            
+            // Skip reports with invalid coordinates
+            if (isNaN(lat) || isNaN(lng) || lat === 0 || lng === 0) {
+                console.warn('Skipping report with invalid coordinates:', report.id, { lat: report.latitude, lng: report.longitude });
+                return;
+            }
+            
+            // Round coordinates to create location groups within tolerance
+            const roundedLat = Math.round(lat / COORDINATE_TOLERANCE) * COORDINATE_TOLERANCE;
+            const roundedLng = Math.round(lng / COORDINATE_TOLERANCE) * COORDINATE_TOLERANCE;
+            const locationKey = `${roundedLat.toFixed(3)},${roundedLng.toFixed(3)}`;
+            
+            if (!locationGroups[locationKey]) {
+                locationGroups[locationKey] = [];
+            }
+            locationGroups[locationKey].push(report);
         });
 
         // Convert to eligible areas (minimum 3 reports per area)
         const areas: AreaReport[] = Object.entries(locationGroups)
-        .filter(([_, reports]) => reports.length >= 3)
-        .map(([location, areaReports], index) => {
-            const latestReport = areaReports.sort((a, b) => 
-            new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-            )[0];
+            .filter(([_, reports]) => reports.length >= 3)
+            .map(([locationKey, areaReports], index) => {
+                const latestReport = areaReports.sort((a, b) => 
+                    new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+                )[0];
 
-            // Determine overall severity level
-            const severityLevels = areaReports.map(r => r.severityByUser);
-            const hasCritical = severityLevels.includes('critical');
-            const hasHigh = severityLevels.includes('high');
-            const overallSeverity = hasCritical ? 'Critical' : hasHigh ? 'High' : 'Medium';
+                // Calculate average coordinates for the area center with validation
+                const validReports = areaReports.filter(report => {
+                    const lat = parseFloat(report.latitude?.toString() || '0');
+                    const lng = parseFloat(report.longitude?.toString() || '0');
+                    return !isNaN(lat) && !isNaN(lng) && lat !== 0 && lng !== 0;
+                });
 
-            // Determine cleanup effort based on report count
-            const effortMap = {
-            small: areaReports.length <= 5,
-            medium: areaReports.length <= 10,
-            large: areaReports.length > 10,
-            };
-            const effort = Object.keys(effortMap).find(key => effortMap[key as keyof typeof effortMap]) || 'Medium';
+                if (validReports.length === 0) {
+                    console.warn('No valid coordinates found for location group:', locationKey);
+                    return null; // Skip this area
+                }
 
-            return {
-            id: index + 1,
-            location,
-            coordinates: { 
-                lat: latestReport.latitude, 
-                lng: latestReport.longitude 
-            },
-            reportCount: areaReports.length,
-            severityLevel: overallSeverity,
-            lastReported: new Date(latestReport.created_at).toLocaleDateString(),
-            description: `${areaReports.length} verified reports of ${latestReport.pollutionType.toLowerCase()}`,
-            estimatedCleanupEffort: effort.charAt(0).toUpperCase() + effort.slice(1),
-            priority: hasCritical ? 'critical' : hasHigh ? 'high' : 'medium',
-            reports: areaReports,
-            };
-        });
+                const avgLat = validReports.reduce((sum, report) => {
+                    return sum + parseFloat(report.latitude?.toString() || '0');
+                }, 0) / validReports.length;
 
+                const avgLng = validReports.reduce((sum, report) => {
+                    return sum + parseFloat(report.longitude?.toString() || '0');
+                }, 0) / validReports.length;
+
+                // Double-check the calculated averages
+                if (isNaN(avgLat) || isNaN(avgLng)) {
+                    console.error('Calculated NaN coordinates for area:', locationKey, { avgLat, avgLng, validReports });
+                    return null; // Skip this area
+                }
+
+                // Determine overall severity level
+                const severityLevels = areaReports.map(r => r.severityByUser);
+                const hasCritical = severityLevels.includes('critical');
+                const hasHigh = severityLevels.includes('high');
+                const overallSeverity = hasCritical ? 'Critical' : hasHigh ? 'High' : 'Medium';
+
+                // Determine cleanup effort based on report count
+                const effortMap = {
+                    small: areaReports.length <= 5,
+                    medium: areaReports.length <= 10,
+                    large: areaReports.length > 10,
+                };
+                const effort = Object.keys(effortMap).find(key => effortMap[key as keyof typeof effortMap]) || 'Medium';
+
+                // Use the most common address as the location name, or create a coordinate-based name
+                const addressCounts: { [key: string]: number } = {};
+                areaReports.forEach(report => {
+                    const addr = report.address || 'Unknown Location';
+                    addressCounts[addr] = (addressCounts[addr] || 0) + 1;
+                });
+                
+                const mostCommonAddress = Object.entries(addressCounts)
+                    .sort(([,a], [,b]) => b - a)[0]?.[0] || 'Unknown Location';
+                
+                // Create a more descriptive location name
+                const locationName = mostCommonAddress !== 'Unknown Location' 
+                    ? mostCommonAddress 
+                    : `Area ${avgLat.toFixed(4)}, ${avgLng.toFixed(4)}`;
+
+                // Get unique pollution types for description
+                const pollutionTypes = [...new Set(areaReports.map(r => r.pollutionType))];
+                const pollutionTypesText = pollutionTypes.length > 1 
+                    ? `${pollutionTypes.slice(0, -1).join(', ')} and ${pollutionTypes.slice(-1)}`
+                    : pollutionTypes[0];
+
+                return {
+                    id: index + 1,
+                    location: locationName,
+                    coordinates: { 
+                        lat: avgLat, 
+                        lng: avgLng 
+                    },
+                    reportCount: areaReports.length,
+                    severityLevel: overallSeverity,
+                    lastReported: new Date(latestReport.created_at).toLocaleDateString(),
+                    description: `${areaReports.length} verified reports of ${pollutionTypesText.toLowerCase()}`,
+                    estimatedCleanupEffort: effort.charAt(0).toUpperCase() + effort.slice(1),
+                    priority: hasCritical ? 'critical' : hasHigh ? 'high' : 'medium',
+                    reports: areaReports,
+                };
+            })
+            .filter(area => area !== null) as AreaReport[]; // Remove null areas
+
+        console.log('Processed eligible areas:', areas); // Debug log
         setEligibleAreas(areas);
     };
 
@@ -280,27 +400,97 @@ export const OrganizerPortal = () => {
         }
     };
 
-    const handleCreateEvent = () => {
-        console.log("Creating cleanup event:", newEvent);
-        setShowCreateEvent(false);
-        setNewEvent({
-        title: "",
-        area: "",
-        date: "",
-        time: "",
-        duration: "",
-        maxVolunteers: "",
-        description: "",
-        rewardType: "",
-        rewardPoints: "",
-        rewardCertificate: "",
-        rewardAdditional: "",
-        });
+    const handleCreateEvent = async () => {
+        if (!selectedArea) return;
+
+        // Validate form
+        if (!newEvent.title.trim()) {
+            setEventError("Event title is required");
+            return;
+        }
+        if (!newEvent.date || !newEvent.time) {
+            setEventError("Date and time are required");
+            return;
+        }
+        if (!newEvent.maxVolunteers || parseInt(newEvent.maxVolunteers) < 1) {
+            setEventError("Maximum volunteers must be at least 1");
+            return;
+        }
+
+        setIsCreatingEvent(true);
+        setEventError("");
+
+        try {
+            const eventData = {
+                title: newEvent.title,
+                address: selectedArea.location,
+                latitude: selectedArea.coordinates.lat,
+                longitude: selectedArea.coordinates.lng,
+                date: newEvent.date,
+                time: newEvent.time,
+                duration: newEvent.duration,
+                description: newEvent.description || `Cleanup event for ${selectedArea.location}`,
+                maxVolunteers: parseInt(newEvent.maxVolunteers),
+                points: parseInt(newEvent.rewardPoints) || 50,
+                badge: newEvent.rewardBadge || "Environmental Volunteer",
+                status: 'recruiting',
+                user_id: user.id,
+            }; 
+
+            console.log('Sending event data:', eventData); // Debug log
+
+            const response = await fetch('/api/events', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`,
+                    'Accept': 'application/json',
+                },
+                body: JSON.stringify(eventData),
+            });
+
+            if (response.ok) {
+                const createdEvent = await response.json();
+                console.log("Cleanup event created successfully:", createdEvent);
+                
+                // Reset form and close dialog
+                setNewEvent({
+                    title: "",
+                    date: "",
+                    time: "",
+                    duration: "",
+                    maxVolunteers: "",
+                    description: "",
+                    rewardPoints: "",
+                    rewardBadge: "",
+                    rewardAdditional: "",
+                });
+                setShowCreateEvent(false);
+                setSelectedArea(null);
+
+                // Refresh the events list
+                fetchCreatedEvents();
+                
+                // Show success message
+                alert("Cleanup event created successfully!");
+                
+            } else {
+                const errorData = await response.json();
+                console.error('Event creation error:', errorData);
+                throw new Error(errorData.message || 'Failed to create event');
+            }
+        } catch (error) {
+            console.error('Error creating event:', error);
+            setEventError(error instanceof Error ? error.message : 'Failed to create event. Please try again.');
+        } finally {
+            setIsCreatingEvent(false);
+        }
     };
 
-    const handleViewAllImages = (area: AreaReport) => {
+        // Update the handleViewAreaDetails function
+    const handleViewAreaDetails = (area: AreaReport) => {
         setSelectedArea(area);
-        setShowAllImages(true);
+        setShowAreaDetails(true);
     };
 
     if (isLoading) {
@@ -480,14 +670,21 @@ export const OrganizerPortal = () => {
                                 <DialogHeader>
                                     <DialogTitle>Create Cleanup Event</DialogTitle>
                                     <DialogDescription>
-                                    Organize a cleanup event for{" "}
-                                    {selectedArea?.location}
+                                    Organize a cleanup event for {selectedArea?.location}
                                     </DialogDescription>
                                 </DialogHeader>
 
                                 <div className="space-y-4">
+                                    {/* Error Alert */}
+                                    {eventError && (
+                                    <Alert variant="destructive">
+                                        <AlertCircle className="h-4 w-4" />
+                                        <AlertDescription>{eventError}</AlertDescription>
+                                    </Alert>
+                                    )}
+
                                     <div>
-                                    <Label htmlFor="title">Event Title</Label>
+                                    <Label htmlFor="title">Event Title *</Label>
                                     <Input
                                         id="title"
                                         placeholder="e.g., Manila Bay Restoration Drive"
@@ -498,26 +695,29 @@ export const OrganizerPortal = () => {
                                             title: e.target.value,
                                         })
                                         }
+                                        disabled={isCreatingEvent}
                                     />
                                     </div>
 
                                     <div className="grid grid-cols-2 gap-4">
                                     <div>
-                                        <Label htmlFor="date">Date</Label>
+                                        <Label htmlFor="date">Date *</Label>
                                         <Input
                                         id="date"
                                         type="date"
                                         value={newEvent.date}
+                                        min={new Date().toISOString().split('T')[0]}
                                         onChange={(e) =>
                                             setNewEvent({
                                             ...newEvent,
                                             date: e.target.value,
                                             })
                                         }
+                                        disabled={isCreatingEvent}
                                         />
                                     </div>
                                     <div>
-                                        <Label htmlFor="time">Time</Label>
+                                        <Label htmlFor="time">Time *</Label>
                                         <Input
                                         id="time"
                                         type="time"
@@ -528,6 +728,7 @@ export const OrganizerPortal = () => {
                                             time: e.target.value,
                                             })
                                         }
+                                        disabled={isCreatingEvent}
                                         />
                                     </div>
                                     </div>
@@ -543,37 +744,27 @@ export const OrganizerPortal = () => {
                                             duration: value,
                                             })
                                         }
+                                        disabled={isCreatingEvent}
                                         >
                                         <SelectTrigger>
                                             <SelectValue placeholder="Select duration" />
                                         </SelectTrigger>
                                         <SelectContent>
-                                            <SelectItem value="2 hours">
-                                            2 hours
-                                            </SelectItem>
-                                            <SelectItem value="3 hours">
-                                            3 hours
-                                            </SelectItem>
-                                            <SelectItem value="4 hours">
-                                            4 hours
-                                            </SelectItem>
-                                            <SelectItem value="Half day">
-                                            Half day
-                                            </SelectItem>
-                                            <SelectItem value="Full day">
-                                            Full day
-                                            </SelectItem>
+                                            <SelectItem value="2">2 hours</SelectItem>
+                                            <SelectItem value="3">3 hours</SelectItem>
+                                            <SelectItem value="4">4 hours</SelectItem>
+                                            <SelectItem value="6">Half day</SelectItem>
+                                            <SelectItem value="12">Full day</SelectItem>
                                         </SelectContent>
                                         </Select>
                                     </div>
                                     <div>
-                                        <Label htmlFor="maxVolunteers">
-                                        Max Volunteers
-                                        </Label>
+                                        <Label htmlFor="maxVolunteers">Max Volunteers *</Label>
                                         <Input
                                         id="maxVolunteers"
                                         type="number"
                                         placeholder="50"
+                                        min="1"
                                         value={newEvent.maxVolunteers}
                                         onChange={(e) =>
                                             setNewEvent({
@@ -581,14 +772,13 @@ export const OrganizerPortal = () => {
                                             maxVolunteers: e.target.value,
                                             })
                                         }
+                                        disabled={isCreatingEvent}
                                         />
                                     </div>
                                     </div>
 
                                     <div>
-                                    <Label htmlFor="description">
-                                        Event Description
-                                    </Label>
+                                    <Label htmlFor="description">Event Description</Label>
                                     <Textarea
                                         id="description"
                                         placeholder="Describe the cleanup objectives, what volunteers should bring, meeting point, etc."
@@ -600,10 +790,11 @@ export const OrganizerPortal = () => {
                                         })
                                         }
                                         rows={3}
+                                        disabled={isCreatingEvent}
                                     />
                                     </div>
 
-                                    {/* Rewards Section */}
+                                    {/* Rewards Section - Updated */}
                                     <div className="space-y-4 border-t pt-4">
                                     <h4 className="font-semibold text-waterbase-950 flex items-center">
                                         <Gift className="w-4 h-4 mr-2" />
@@ -616,7 +807,8 @@ export const OrganizerPortal = () => {
                                         <Input
                                             id="rewardPoints"
                                             type="number"
-                                            placeholder="100"
+                                            placeholder="50"
+                                            min="0"
                                             value={newEvent.rewardPoints}
                                             onChange={(e) =>
                                             setNewEvent({
@@ -624,60 +816,28 @@ export const OrganizerPortal = () => {
                                                 rewardPoints: e.target.value,
                                             })
                                             }
+                                            disabled={isCreatingEvent}
                                         />
                                         </div>
                                         <div>
-                                        <Label htmlFor="rewardType">
-                                            Reward Type
-                                        </Label>
-                                        <Select
-                                            value={newEvent.rewardType}
-                                            onValueChange={(value) =>
+                                        <Label htmlFor="rewardBadge">Badge Title</Label>
+                                        <Input
+                                            id="rewardBadge"
+                                            placeholder="e.g., Environmental Champion, River Guardian"
+                                            value={newEvent.rewardBadge}
+                                            onChange={(e) =>
                                             setNewEvent({
                                                 ...newEvent,
-                                                rewardType: value,
+                                                rewardBadge: e.target.value,
                                             })
                                             }
-                                        >
-                                            <SelectTrigger>
-                                            <SelectValue placeholder="Select reward type" />
-                                            </SelectTrigger>
-                                            <SelectContent>
-                                            <SelectItem value="certificate">
-                                                Certificate Only
-                                            </SelectItem>
-                                            <SelectItem value="points">
-                                                Points & Badge
-                                            </SelectItem>
-                                            <SelectItem value="premium">
-                                                Points, Certificate & Perks
-                                            </SelectItem>
-                                            </SelectContent>
-                                        </Select>
+                                            disabled={isCreatingEvent}
+                                        />
                                         </div>
                                     </div>
 
                                     <div>
-                                        <Label htmlFor="rewardCertificate">
-                                        Certificate Title
-                                        </Label>
-                                        <Input
-                                        id="rewardCertificate"
-                                        placeholder="e.g., Environmental Champion, River Guardian"
-                                        value={newEvent.rewardCertificate}
-                                        onChange={(e) =>
-                                            setNewEvent({
-                                            ...newEvent,
-                                            rewardCertificate: e.target.value,
-                                            })
-                                        }
-                                        />
-                                    </div>
-
-                                    <div>
-                                        <Label htmlFor="rewardAdditional">
-                                        Additional Rewards
-                                        </Label>
+                                        <Label htmlFor="rewardAdditional">Additional Rewards</Label>
                                         <Input
                                         id="rewardAdditional"
                                         placeholder="e.g., Meal provided, Transportation allowance, T-shirt"
@@ -688,6 +848,7 @@ export const OrganizerPortal = () => {
                                             rewardAdditional: e.target.value,
                                             })
                                         }
+                                        disabled={isCreatingEvent}
                                         />
                                     </div>
                                     </div>
@@ -695,14 +856,26 @@ export const OrganizerPortal = () => {
                                     <div className="flex space-x-2 pt-4">
                                     <Button
                                         onClick={handleCreateEvent}
+                                        disabled={isCreatingEvent}
                                         className="flex-1 bg-waterbase-500 hover:bg-waterbase-600"
                                     >
-                                        Create Event
+                                        {isCreatingEvent ? (
+                                        <>
+                                            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                                            Creating Event...
+                                        </>
+                                        ) : (
+                                        'Create Event'
+                                        )}
                                     </Button>
                                     <Button
                                         variant="outline"
-                                        onClick={() => setShowCreateEvent(false)}
+                                        onClick={() => {
+                                        setShowCreateEvent(false);
+                                        setEventError("");
+                                        }}
                                         className="flex-1"
+                                        disabled={isCreatingEvent}
                                     >
                                         Cancel
                                     </Button>
@@ -714,10 +887,10 @@ export const OrganizerPortal = () => {
                             <Button
                                 variant="outline"
                                 className="w-full"
-                                onClick={() => handleViewAllImages(area)}
+                                onClick={() => handleViewAreaDetails(area)}
                             >
-                                <Image className="w-4 h-4 mr-2" />
-                                View All Images ({area.reports.length})
+                                <Eye className="w-4 h-4 mr-2" />
+                                View Details ({area.reports.length} reports)
                             </Button>
                             </div>
                         </CardContent>
@@ -731,140 +904,254 @@ export const OrganizerPortal = () => {
             {/* Keep existing Events and Volunteers tabs */}
             <TabsContent value="events">
                 <div className="space-y-6">
-                <div className="flex items-center justify-between">
-                    <h2 className="text-xl font-semibold text-waterbase-950">
-                    Your Cleanup Events
-                    </h2>
-                    <Badge className="bg-enviro-500 text-white">
-                    {existingEvents.length} active events
-                    </Badge>
-                </div>
-
-                <div className="space-y-4">
-                    {existingEvents.map((event) => (
-                    <Card key={event.id} className="border-waterbase-200">
-                        <CardContent className="p-6">
-                        <div className="flex items-start justify-between mb-4">
-                            <div className="flex-1">
-                            <h3 className="text-lg font-semibold text-waterbase-950 mb-2">
-                                {event.title}
-                            </h3>
-                            <div className="flex items-center space-x-4 text-sm text-gray-600 mb-2">
-                                <div className="flex items-center space-x-1">
-                                <MapPin className="w-4 h-4" />
-                                <span>{event.location}</span>
-                                </div>
-                                <div className="flex items-center space-x-1">
-                                <Calendar className="w-4 h-4" />
-                                <span>
-                                    {event.date} at {event.time}
-                                </span>
-                                </div>
-                                <div className="flex items-center space-x-1">
-                                <Clock className="w-4 h-4" />
-                                <span>{event.duration}</span>
-                                </div>
-                            </div>
-                            <p className="text-sm text-gray-700">
-                                {event.description}
-                            </p>
-                            </div>
-                            <div className="flex items-center space-x-2">
-                            <Badge
-                                className={cn(
-                                "text-xs",
-                                getStatusColor(event.status),
-                                )}
-                            >
-                                {event.status}
+                    <div className="flex items-center justify-between">
+                        <h2 className="text-xl font-semibold text-waterbase-950">
+                            Your Cleanup Events
+                        </h2>
+                        <div className="flex items-center space-x-2">
+                            <Badge className="bg-enviro-500 text-white">
+                                {createdEvents.length} total events
                             </Badge>
-                            <Button variant="outline" size="sm">
-                                <Edit className="w-4 h-4" />
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={fetchCreatedEvents}
+                                disabled={isLoadingEvents}
+                            >
+                                <RefreshCw className={cn("w-4 h-4 mr-2", isLoadingEvents && "animate-spin")} />
+                                Refresh
                             </Button>
-                            </div>
                         </div>
+                    </div>
 
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                            {/* Volunteer Progress */}
-                            <Card className="border-gray-200">
-                            <CardContent className="p-4">
-                                <div className="flex items-center justify-between mb-2">
-                                <span className="text-sm font-medium">
-                                    Volunteers
-                                </span>
-                                <Users className="w-4 h-4 text-waterbase-600" />
-                                </div>
-                                <div className="text-2xl font-bold text-waterbase-950 mb-1">
-                                {event.currentVolunteers}/{event.maxVolunteers}
-                                </div>
-                                <div className="w-full bg-gray-200 rounded-full h-2">
-                                <div
-                                    className="bg-waterbase-500 h-2 rounded-full"
-                                    style={{
-                                    width: `${(event.currentVolunteers / event.maxVolunteers) * 100}%`,
-                                    }}
-                                />
-                                </div>
-                            </CardContent>
-                            </Card>
-
-                            {/* Rewards Info */}
-                            <Card className="border-gray-200">
-                            <CardContent className="p-4">
-                                <div className="flex items-center justify-between mb-2">
-                                <span className="text-sm font-medium">
-                                    Rewards
-                                </span>
-                                <Award className="w-4 h-4 text-enviro-600" />
-                                </div>
-                                <div className="text-sm space-y-1">
-                                <div>
-                                    <strong>{event.rewards.points}</strong> points
-                                </div>
-                                <div className="text-xs text-gray-600">
-                                    {event.rewards.certificate}
-                                </div>
-                                <div className="text-xs text-gray-600">
-                                    {event.rewards.additional}
-                                </div>
-                                </div>
-                            </CardContent>
-                            </Card>
-
-                            {/* Quick Actions */}
-                            <Card className="border-gray-200">
-                            <CardContent className="p-4">
-                                <div className="flex items-center justify-between mb-2">
-                                <span className="text-sm font-medium">
-                                    Actions
-                                </span>
-                                <Target className="w-4 h-4 text-gray-600" />
-                                </div>
-                                <div className="space-y-2">
-                                <Button
-                                    variant="outline"
-                                    size="sm"
-                                    className="w-full text-xs"
-                                >
-                                    <MessageSquare className="w-3 h-3 mr-1" />
-                                    Message Volunteers
-                                </Button>
-                                <Button
-                                    variant="outline"
-                                    size="sm"
-                                    className="w-full text-xs"
-                                >
-                                    <Camera className="w-3 h-3 mr-1" />
-                                    Event Updates
-                                </Button>
-                                </div>
-                            </CardContent>
-                            </Card>
+                    {isLoadingEvents ? (
+                        <div className="flex items-center justify-center py-8">
+                            <Loader2 className="w-6 h-6 animate-spin mr-2 text-waterbase-500" />
+                            <span className="text-waterbase-600">Loading your events...</span>
                         </div>
-                        </CardContent>
-                    </Card>
-                    ))}
-                </div>
+                    ) : createdEvents.length === 0 ? (
+                        <Card className="border-waterbase-200">
+                            <CardContent className="p-8 text-center">
+                                <Calendar className="w-12 h-12 mx-auto mb-4 text-gray-400" />
+                                <h3 className="text-lg font-medium text-gray-900 mb-2">
+                                    No Events Created Yet
+                                </h3>
+                                <p className="text-gray-600 mb-4">
+                                    Create your first cleanup event from the eligible areas tab.
+                                </p>
+                                <Button 
+                                    onClick={() => setActiveTab("areas")}
+                                    className="bg-waterbase-500 hover:bg-waterbase-600"
+                                >
+                                    <Plus className="w-4 h-4 mr-2" />
+                                    Browse Eligible Areas
+                                </Button>
+                            </CardContent>
+                        </Card>
+                    ) : (
+                        <div className="space-y-4">
+                            {createdEvents.map((event) => (
+                                <Card key={event.id} className="border-waterbase-200">
+                                    <CardContent className="p-6">
+                                        <div className="flex items-start justify-between mb-4">
+                                            <div className="flex-1">
+                                                <h3 className="text-lg font-semibold text-waterbase-950 mb-2">
+                                                    {event.title}
+                                                </h3>
+                                                <div className="flex items-center space-x-4 text-sm text-gray-600 mb-2">
+                                                    <div className="flex items-center space-x-1">
+                                                        <MapPin className="w-4 h-4" />
+                                                        <span>{event.address}</span>
+                                                    </div>
+                                                    <div className="flex items-center space-x-1">
+                                                        <Calendar className="w-4 h-4" />
+                                                        <span>
+                                                            {new Date(event.date).toLocaleDateString()} at {event.time}
+                                                        </span>
+                                                    </div>
+                                                    <div className="flex items-center space-x-1">
+                                                        <Clock className="w-4 h-4" />
+                                                        <span>{event.duration} hours</span>
+                                                    </div>
+                                                </div>
+                                                <p className="text-sm text-gray-700">
+                                                    {event.description}
+                                                </p>
+                                            </div>
+                                            <div className="flex items-center space-x-2">
+                                                <Badge
+                                                    className={cn(
+                                                        "text-xs",
+                                                        getStatusColor(event.status),
+                                                    )}
+                                                >
+                                                    {event.status.charAt(0).toUpperCase() + event.status.slice(1)}
+                                                </Badge>
+                                            </div>
+                                        </div>
+
+                                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                            {/* Volunteer Progress */}
+                                            <Card className="border-gray-200">
+                                                <CardContent className="p-4">
+                                                    <div className="flex items-center justify-between mb-2">
+                                                        <span className="text-sm font-medium">
+                                                            Volunteers
+                                                        </span>
+                                                        <Users className="w-4 h-4 text-waterbase-600" />
+                                                    </div>
+                                                    <div className="text-2xl font-bold text-waterbase-950 mb-1">
+                                                        {event.currentVolunteers || 0}/{event.maxVolunteers}
+                                                    </div>
+                                                    <div className="w-full bg-gray-200 rounded-full h-2">
+                                                        <div
+                                                            className="bg-waterbase-500 h-2 rounded-full"
+                                                            style={{
+                                                                width: `${((event.currentVolunteers || 0) / event.maxVolunteers) * 100}%`,
+                                                            }}
+                                                        />
+                                                    </div>
+                                                    <div className="text-xs text-gray-500 mt-1">
+                                                        {event.maxVolunteers - (event.currentVolunteers || 0)} spots remaining
+                                                    </div>
+                                                </CardContent>
+                                            </Card>
+
+                                            {/* Rewards Info */}
+                                            <Card className="border-gray-200">
+                                                <CardContent className="p-4">
+                                                    <div className="flex items-center justify-between mb-2">
+                                                        <span className="text-sm font-medium">
+                                                            Rewards
+                                                        </span>
+                                                        <Award className="w-4 h-4 text-enviro-600" />
+                                                    </div>
+                                                    <div className="text-sm space-y-1">
+                                                        <div>
+                                                            <strong>{event.points}</strong> points
+                                                        </div>
+                                                        <div className="text-xs text-gray-600">
+                                                            {event.badge}
+                                                        </div>
+                                                        {event.additional && (
+                                                            <div className="text-xs text-gray-600">
+                                                                {event.additional}
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                </CardContent>
+                                            </Card>
+
+                                            {/* Event Details & Actions */}
+                                            <Card className="border-gray-200">
+                                                <CardContent className="p-4">
+                                                    <div className="flex items-center justify-between mb-2">
+                                                        <span className="text-sm font-medium">
+                                                            Event Details
+                                                        </span>
+                                                        <Target className="w-4 h-4 text-gray-600" />
+                                                    </div>
+                                                    <div className="text-xs text-gray-600 space-y-1 mb-3">
+                                                        <div>📍 {parseFloat(event.latitude || '0').toFixed(4)}, {parseFloat(event.longitude || '0').toFixed(4)}</div>
+                                                        <div>📅 Created: {new Date(event.created_at).toLocaleDateString()}</div>
+                                                        <div>🆔 Event #{event.id}</div>
+                                                    </div>
+                                                    <div className="space-y-2">
+                                                        <Button
+                                                            variant="outline"
+                                                            size="sm"
+                                                            className="w-full text-xs"
+                                                        >
+                                                            <MessageSquare className="w-3 h-3 mr-1" />
+                                                            Message Volunteers
+                                                        </Button>
+                                                        <Button
+                                                            variant="outline"
+                                                            size="sm"
+                                                            className="w-full text-xs"
+                                                        >
+                                                            <Camera className="w-3 h-3 mr-1" />
+                                                            Event Updates
+                                                        </Button>
+                                                    </div>
+                                                </CardContent>
+                                            </Card>
+                                        </div>
+
+                                        {/* Event Actions */}
+                                        <div className="flex items-center justify-between pt-4 border-t mt-4">
+                                            <div className="flex items-center space-x-2 text-sm text-gray-600">
+                                                <span>Status: </span>
+                                                <Badge variant="outline" className={cn("text-xs", getStatusColor(event.status))}>
+                                                    {event.status.charAt(0).toUpperCase() + event.status.slice(1)}
+                                                </Badge>
+                                            </div>
+                                            <div className="flex items-center space-x-2">
+                                                <Button variant="outline" size="sm">
+                                                    <Eye className="w-4 h-4 mr-1" />
+                                                    View Details
+                                                </Button>
+                                                <Button variant="outline" size="sm">
+                                                    <Edit className="w-4 h-4 mr-1" />
+                                                    Edit Event
+                                                </Button>
+                                                {event.status === 'recruiting' && (
+                                                    <Button 
+                                                        variant="outline" 
+                                                        size="sm"
+                                                        className="text-red-600 border-red-200 hover:bg-red-50"
+                                                    >
+                                                        <Trash2 className="w-4 h-4 mr-1" />
+                                                        Cancel
+                                                    </Button>
+                                                )}
+                                            </div>
+                                        </div>
+                                    </CardContent>
+                                </Card>
+                            ))}
+                        </div>
+                    )}
+
+                    {/* Event Statistics */}
+                    {createdEvents.length > 0 && (
+                        <Card className="border-waterbase-200 mt-6">
+                            <CardHeader>
+                                <CardTitle>Event Statistics</CardTitle>
+                                <CardDescription>
+                                    Overview of your cleanup events performance
+                                </CardDescription>
+                            </CardHeader>
+                            <CardContent>
+                                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                                    <div className="text-center p-4 bg-waterbase-50 rounded-lg">
+                                        <div className="text-2xl font-bold text-waterbase-600">
+                                            {createdEvents.length}
+                                        </div>
+                                        <div className="text-sm text-gray-600">Total Events</div>
+                                    </div>
+                                    <div className="text-center p-4 bg-enviro-50 rounded-lg">
+                                        <div className="text-2xl font-bold text-enviro-600">
+                                            {createdEvents.filter(e => e.status === 'active').length}
+                                        </div>
+                                        <div className="text-sm text-gray-600">Active Events</div>
+                                    </div>
+                                    <div className="text-center p-4 bg-green-50 rounded-lg">
+                                        <div className="text-2xl font-bold text-green-600">
+                                            {createdEvents.reduce((sum, event) => sum + (event.currentVolunteers || 0), 0)}
+                                        </div>
+                                        <div className="text-sm text-gray-600">Total Volunteers</div>
+                                    </div>
+                                    <div className="text-center p-4 bg-yellow-50 rounded-lg">
+                                        <div className="text-2xl font-bold text-yellow-600">
+                                            {createdEvents.reduce((sum, event) => sum + event.points, 0)}
+                                        </div>
+                                        <div className="text-sm text-gray-600">Points Offered</div>
+                                    </div>
+                                </div>
+                            </CardContent>
+                        </Card>
+                    )}
                 </div>
             </TabsContent>
 
@@ -928,20 +1215,20 @@ export const OrganizerPortal = () => {
             </TabsContent>
         </Tabs>
 
-        {/* Image Gallery Dialog - Updated to match report submission modal style */}
-        <Dialog open={showAllImages} onOpenChange={setShowAllImages}>
-        <DialogContent className="max-w-6xl max-h-[90vh] overflow-y-auto">
+        {/* Area Details Dialog - Comprehensive view with images */}
+        <Dialog open={showAreaDetails} onOpenChange={setShowAreaDetails}>
+        <DialogContent className="max-w-7xl max-h-[90vh] overflow-y-auto">
             <DialogHeader>
-            <DialogTitle className="text-xl">📸 All Images - {selectedArea?.location}</DialogTitle>
+            <DialogTitle className="text-xl">📍 Area Details - {selectedArea?.location}</DialogTitle>
             <DialogDescription>
-                {selectedArea?.reportCount} photos submitted by users in this area. Click any image to view full size.
+                Comprehensive overview of {selectedArea?.reportCount} reports in this area
             </DialogDescription>
             </DialogHeader>
 
-            {selectedArea?.reports && selectedArea.reports.length > 0 ? (
-            <div className="space-y-4">
-                {/* Summary Stats */}
-                <div className="grid grid-cols-3 gap-4 p-4 bg-gray-50 rounded-lg">
+            {selectedArea && (
+            <div className="space-y-6">
+                {/* Area Overview */}
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4 p-4 bg-gradient-to-r from-waterbase-50 to-enviro-50 rounded-lg">
                 <div className="text-center">
                     <div className="text-2xl font-bold text-waterbase-600">{selectedArea.reportCount}</div>
                     <div className="text-sm text-gray-600">Total Reports</div>
@@ -950,204 +1237,132 @@ export const OrganizerPortal = () => {
                     <div className="text-2xl font-bold text-enviro-600">
                     {selectedArea.reports.filter(r => r.severityByUser === 'critical' || r.severityByUser === 'high').length}
                     </div>
-                    <div className="text-sm text-gray-600">High/Critical</div>
+                    <div className="text-sm text-gray-600">High Priority</div>
                 </div>
                 <div className="text-center">
-                    <div className="text-2xl font-bold text-waterbase-600">
+                    <div className="text-2xl font-bold text-green-600">
                     {selectedArea.reports.filter(r => r.status === 'verified').length}
                     </div>
                     <div className="text-sm text-gray-600">Verified</div>
                 </div>
+                <div className="text-center">
+                    <div className="text-2xl font-bold text-waterbase-600">{selectedArea.estimatedCleanupEffort}</div>
+                    <div className="text-sm text-gray-600">Cleanup Effort</div>
+                </div>
                 </div>
 
-                {/* Image Grid */}
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {selectedArea.reports.map((report, index) => (
-                    <Card key={report.id} className="border-gray-200 hover:shadow-lg transition-shadow cursor-pointer">
-                    <CardContent className="p-0">
-                        {/* Image Container */}
-                        <div className="relative">
-                        <img
-                            src={report.image.startsWith('data:') ? report.image : `data:image/jpeg;base64,${report.image}`}
-                            alt={report.title}
-                            className="w-full h-48 object-cover rounded-t-lg"
-                            onError={(e) => {
-                            console.log('Image load error for report:', report.id);
-                            (e.target as HTMLImageElement).src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHJlY3Qgd2lkdGg9IjI0IiBoZWlnaHQ9IjI0IiBmaWxsPSIjRjNGNEY2Ii8+CjxwYXRoIGQ9Ik0xMiA5VjEzTTEyIDE3SDE2TTggMTdIMTJNOCAxM0gxNk04IDlIMTYiIHN0cm9rZT0iIzlDQTNBRiIgc3Ryb2tlLXdpZHRoPSIyIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiLz4KPC9zdmc+';
-                            }}
-                            onClick={() => {
-                            setSelectedReport(report);
-                            setShowImageDialog(true);
-                            }}
-                        />
-                        
-                        {/* Severity Badge Overlay */}
-                        <div className="absolute top-2 right-2">
-                            <Badge className={cn("text-xs", getSeverityColor(report.severityByUser))}>
-                            {report.severityByUser}
-                            </Badge>
-                        </div>
-                        
-                        {/* Status Badge Overlay */}
-                        <div className="absolute top-2 left-2">
-                            <Badge className={cn("text-xs", getStatusColor(report.status))}>
-                            {report.status}
-                            </Badge>
-                        </div>
-                        </div>
+                {/* Area Information */}
+                <Card className="border-waterbase-200">
+                <CardHeader>
+                    <CardTitle className="flex items-center justify-between">
+                    <span>Area Information</span>
+                    <Badge className={cn("text-sm", getSeverityColor(selectedArea.severityLevel))}>
+                        {selectedArea.severityLevel} Priority
+                    </Badge>
+                    </CardTitle>
+                </CardHeader>
+                <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                    <label className="text-sm font-medium text-gray-600">Location</label>
+                    <p className="text-sm mt-1">{selectedArea.location}</p>
+                    </div>
+                    <div>
+                    <label className="text-sm font-medium text-gray-600">Coordinates</label>
+                    <p className="text-sm mt-1 font-mono">
+                        {selectedArea.coordinates.lat.toFixed(6)}, {selectedArea.coordinates.lng.toFixed(6)}
+                    </p>
+                    </div>
+                    <div>
+                    <label className="text-sm font-medium text-gray-600">Last Reported</label>
+                    <p className="text-sm mt-1">{selectedArea.lastReported}</p>
+                    </div>
+                    <div>
+                    <label className="text-sm font-medium text-gray-600">Description</label>
+                    <p className="text-sm mt-1">{selectedArea.description}</p>
+                    </div>
+                </CardContent>
+                </Card>
 
-                        {/* Report Info */}
-                        <div className="p-3 space-y-2">
-                        <h4 className="font-medium text-sm line-clamp-2">{report.title}</h4>
-                        <p className="text-xs text-gray-600 line-clamp-2">{report.content}</p>
-                        
-                        <div className="flex items-center justify-between text-xs text-gray-500">
-                            <span>#{report.id}</span>
-                            <span>{new Date(report.created_at).toLocaleDateString()}</span>
-                        </div>
-                        
-                        <div className="text-xs text-gray-500">
-                            📍 {report.pollutionType}
-                        </div>
-                        
-                        {report.user && (
-                            <div className="text-xs text-gray-500">
-                            👤 {report.user.firstName} {report.user.lastName}
-                            </div>
-                        )}
-                        </div>
-                    </CardContent>
-                    </Card>
-                ))}
-                </div>
-            </div>
-            ) : (
-            <div className="text-center py-8">
-                <Camera className="w-16 h-16 mx-auto mb-4 text-gray-300" />
-                <p className="text-gray-500">No images found for this area</p>
-            </div>
-            )}
-
-            <div className="flex justify-end pt-4 border-t">
-            <Button 
-                variant="outline" 
-                onClick={() => setShowAllImages(false)}
-            >
-                Close Gallery
-            </Button>
-            </div>
-        </DialogContent>
-        </Dialog>
-
-        {/* Individual Report Image Dialog - Enhanced */}
-        <Dialog open={showImageDialog} onOpenChange={setShowImageDialog}>
-        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
-            <DialogHeader>
-            <DialogTitle className="text-lg">{selectedReport?.title}</DialogTitle>
-            <DialogDescription>
-                Report #{selectedReport?.id} • {selectedReport?.pollutionType} • 
-                Submitted {selectedReport && new Date(selectedReport.created_at).toLocaleDateString()}
-            </DialogDescription>
-            </DialogHeader>
-
-            {selectedReport && (
-            <div className="space-y-6">
-                {/* Large Image Display */}
-                <div className="flex justify-center">
-                <img
-                    src={selectedReport.image.startsWith('data:') ? selectedReport.image : `data:image/jpeg;base64,${selectedReport.image}`}
-                    alt={selectedReport.title}
-                    className="max-w-full max-h-96 object-contain rounded-lg border shadow-lg"
-                    onError={(e) => {
-                    console.log('Image load error for report:', selectedReport.id);
-                    (e.target as HTMLImageElement).src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHJlY3Qgd2lkdGg9IjI0IiBoZWlnaHQ9IjI0IiBmaWxsPSIjRjNGNEY2Ii8+CjxwYXRoIGQ9Ik0xMiA5VjEzTTEyIDE3SDE2TTggMTdIMTJNOCAxM0gxNk04IDlIMTYiIHN0cm9rZT0iIzlDQTNBRiIgc3Ryb2tlLXdpZHRoPSIyIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiLz4KPC9zdmc+';
-                    }}
-                />
-                </div>
-
-                {/* Report Details Grid */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {/* Left Column */}
+                {/* Reports Grid with Images */}
                 <div className="space-y-4">
-                    <Card className="border-gray-200">
-                    <CardHeader className="pb-3">
-                        <CardTitle className="text-base">Report Details</CardTitle>
-                    </CardHeader>
-                    <CardContent className="space-y-3">
-                        <div>
-                        <label className="text-sm font-medium text-gray-600">Description</label>
-                        <p className="text-sm mt-1">{selectedReport.content}</p>
-                        </div>
-                        
-                        <div>
-                        <label className="text-sm font-medium text-gray-600">Pollution Type</label>
-                        <p className="text-sm mt-1">{selectedReport.pollutionType}</p>
-                        </div>
-                        
-                        <div className="grid grid-cols-2 gap-3">
-                        <div>
-                            <label className="text-sm font-medium text-gray-600">Severity</label>
-                            <div className="mt-1">
-                            <Badge className={cn("text-xs", getSeverityColor(selectedReport.severityByUser))}>
-                                {selectedReport.severityByUser}
-                            </Badge>
+                <h3 className="text-lg font-semibold text-waterbase-950">Individual Reports</h3>
+                
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                    {selectedArea.reports.map((report) => (
+                    <Card key={report.id} className="border-gray-200 hover:shadow-md transition-shadow">
+                        <CardContent className="p-4">
+                        <div className="flex gap-4">
+                            {/* Image Container with Hover Zoom */}
+                            <div className="relative w-24 h-24 flex-shrink-0">
+                            <img
+                                src={report.image.startsWith('data:') ? report.image : `data:image/jpeg;base64,${report.image}`}
+                                alt={report.title}
+                                className="w-full h-full object-cover rounded-lg cursor-pointer transition-transform hover:scale-105"
+                                onError={(e) => {
+                                (e.target as HTMLImageElement).src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMjQiIGhlaWdodD0iMjQiIHZpZXdCb3g9IjAgMCAyNCAyNCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHJlY3Qgd2lkdGg9IjI0IiBoZWlnaHQ9IjI0IiBmaWxsPSIjRjNGNEY2Ii8+CjxwYXRoIGQ9Ik0xMiA5VjEzTTEyIDE3SDE2TTggMTdIMTJNOCAxM0gxNk04IDlIMTYiIHN0cm9rZT0iIzlDQTNBRiIgc3Ryb2tlLXdpZHRoPSIyIiBzdHJva2UtbGluZWNhcD0icm91bmQiIHN0cm9rZS1saW5lam9pbj0icm91bmQiLz4KPC9zdmc+';
+                                }}
+                                onClick={() => {
+                                setSelectedReport(report);
+                                setShowImageDialog(true);
+                                }}
+                                onMouseEnter={() => setHoveredImage(report.id.toString())}
+                                onMouseLeave={() => setHoveredImage(null)}
+                            />
+                            
+                            {/* Hover Zoom Modal */}
+                            {hoveredImage === report.id.toString() && (
+                                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-75 pointer-events-none">
+                                <img
+                                    src={report.image.startsWith('data:') ? report.image : `data:image/jpeg;base64,${report.image}`}
+                                    alt={report.title}
+                                    className="max-w-[80vw] max-h-[80vh] object-contain rounded-lg shadow-2xl"
+                                />
+                                </div>
+                            )}
                             </div>
-                        </div>
-                        <div>
-                            <label className="text-sm font-medium text-gray-600">Status</label>
-                            <div className="mt-1">
-                            <Badge className={cn("text-xs", getStatusColor(selectedReport.status))}>
-                                {selectedReport.status}
-                            </Badge>
-                            </div>
-                        </div>
-                        </div>
-                    </CardContent>
-                    </Card>
-                </div>
 
-                {/* Right Column */}
-                <div className="space-y-4">
-                    <Card className="border-gray-200">
-                    <CardHeader className="pb-3">
-                        <CardTitle className="text-base">Location & Reporter</CardTitle>
-                    </CardHeader>
-                    <CardContent className="space-y-3">
-                        <div>
-                        <label className="text-sm font-medium text-gray-600">Address</label>
-                        <p className="text-sm mt-1">{selectedReport.address}</p>
+                            {/* Report Details */}
+                            <div className="flex-1 space-y-2">
+                            <div className="flex items-start justify-between">
+                                <h4 className="font-medium text-sm line-clamp-2">{report.title}</h4>
+                                <div className="flex gap-1">
+                                <Badge className={cn("text-xs", getSeverityColor(report.severityByUser))}>
+                                    {report.severityByUser}
+                                </Badge>
+                                <Badge className={cn("text-xs", getStatusColor(report.status))}>
+                                    {report.status}
+                                </Badge>
+                                </div>
+                            </div>
+                            
+                            <p className="text-xs text-gray-600 line-clamp-2">{report.content}</p>
+                            
+                            <div className="space-y-1 text-xs text-gray-500">
+                                <div>📍 {report.pollutionType}</div>
+                                <div>📅 {new Date(report.created_at).toLocaleDateString()}</div>
+                                {report.user && (
+                                <div>👤 {report.user.firstName} {report.user.lastName}</div>
+                                )}
+                                <div>🆔 #{report.id}</div>
+                            </div>
+
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                className="w-full mt-2"
+                                onClick={() => {
+                                setSelectedReport(report);
+                                setShowImageDialog(true);
+                                }}
+                            >
+                                <Eye className="w-3 h-3 mr-1" />
+                                View Full Details
+                            </Button>
+                            </div>
                         </div>
-                        
-                        <div>
-                        <label className="text-sm font-medium text-gray-600">Coordinates</label>
-                        <p className="text-sm mt-1 font-mono">
-                            {selectedReport.latitude.toFixed(6)}, {selectedReport.longitude.toFixed(6)}
-                        </p>
-                        </div>
-                        
-                        {selectedReport.user && (
-                        <div>
-                            <label className="text-sm font-medium text-gray-600">Reported By</label>
-                            <p className="text-sm mt-1">
-                            {selectedReport.user.firstName} {selectedReport.user.lastName}
-                            </p>
-                            <p className="text-xs text-gray-500">{selectedReport.user.email}</p>
-                        </div>
-                        )}
-                        
-                        <div>
-                        <label className="text-sm font-medium text-gray-600">Report ID</label>
-                        <p className="text-sm mt-1 font-mono">#{selectedReport.id}</p>
-                        </div>
-                        
-                        <div>
-                        <label className="text-sm font-medium text-gray-600">Submitted</label>
-                        <p className="text-sm mt-1">
-                            {new Date(selectedReport.created_at).toLocaleDateString()} at {new Date(selectedReport.created_at).toLocaleTimeString()}
-                        </p>
-                        </div>
-                    </CardContent>
+                        </CardContent>
                     </Card>
+                    ))}
                 </div>
                 </div>
 
@@ -1158,12 +1373,18 @@ export const OrganizerPortal = () => {
                     View on Map
                 </Button>
                 <div className="space-x-2">
-                    <Button variant="outline" onClick={() => setShowImageDialog(false)}>
+                    <Button variant="outline" onClick={() => setShowAreaDetails(false)}>
                     Close
                     </Button>
-                    <Button className="bg-waterbase-500 hover:bg-waterbase-600">
-                    <Eye className="w-4 h-4 mr-2" />
-                    Mark as Reviewed
+                    <Button 
+                    className="bg-waterbase-500 hover:bg-waterbase-600"
+                    onClick={() => {
+                        setShowAreaDetails(false);
+                        setShowCreateEvent(true);
+                    }}
+                    >
+                    <Plus className="w-4 h-4 mr-2" />
+                    Create Cleanup Event
                     </Button>
                 </div>
                 </div>

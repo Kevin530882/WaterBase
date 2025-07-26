@@ -29,7 +29,7 @@ class EventController extends Controller
             'longitude'=> 'required|decimal:1,11',
             'date' => 'required|date',
             'time' => 'required|date_format:H:i',
-            'duration' => 'required|decimal:1,11',
+            'duration' => 'required|integer',
             'description' => 'required|string',
             'maxVolunteers' => 'required|integer|min:1',
             'points' => 'required|integer|min:0',

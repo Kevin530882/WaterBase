@@ -24,7 +24,7 @@ return new class extends Migration
             $table->integer('maxVolunteers');
             $table->integer('points');
             $table->text('badge');
-            $table->enum('status', ['recruiting', 'active', 'closed'])->default('recruiting');
+            $table->enum('status', ['recruiting', 'active', 'completed', 'cancelled'])->default('recruiting');
             $table->foreignId('user_id')->constrained()->onDelete('cascade');;
             $table->timestamps();
         });
