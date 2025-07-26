@@ -24,7 +24,6 @@ class ReportController extends Controller
         }
     }
 
-
     public function store(Request $request)
     {
         $reportsValidated = $request->validate([
@@ -45,7 +44,6 @@ class ReportController extends Controller
 
     }
 
- 
     public function show(string $id)
     {
         try 
@@ -61,7 +59,6 @@ class ReportController extends Controller
 
     }
 
- 
     public function update(Request $request, string $id)
     {
 
@@ -74,11 +71,11 @@ class ReportController extends Controller
                 'address'=> 'required|string',
                 'latitude'=> 'required|decimal:1,11',
                 'longitude'=> 'required|decimal:1,11',
-                'pollutionType'=> 'required|string',//'required|array|min:1',
+                'pollutionType'=> 'required|string',
                 'status'=> ['required', new enum(ReportStatus::class)],
                 'image'=> 'required|string',
-                'severityLevel'=> ['required', new enum(SeverityLevel::class)],
-                'user_id'=> 'required|integer',
+                'severityByUser'=> ['required', new enum(SeverityLevel::class)],
+                'user_id'=> 'required|integer|exists:users,id',
             ]);
 
             $report->update($reportsValidated);

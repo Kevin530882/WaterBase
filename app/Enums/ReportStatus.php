@@ -5,7 +5,7 @@ namespace App\Enums;
 enum ReportStatus: string
 {
     //
-    case Pending = "pending";
-    case Verified = "verified";
-    case Resolved = "resolved";
+    case PENDING = "pending";
+    case VERIFIED = "verified";
+    case RESOLVED = "resolved";
 }
