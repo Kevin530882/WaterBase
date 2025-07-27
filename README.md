@@ -1,3 +1,30 @@
+## Python Setup
+
+on your root folder, create python environment:
+```
+python -m venv python_environment
+```
+please make sure to use the name "python_environment" for the python environment so that will be not included in the repository.
+if you do not have python installed you may refer [here](https://www.python.org/downloads/).
+
+after installing the python environment, run on command prompt terminal (you can run this on your root directory):
+```
+activate
+```
+
+then install dependencies:
+
+```
+pip install -r requirements.txt
+```
+
+then deactivate:
+```
+deactivate
+```
+
+## Laravel
+
 <p align="center"><a href="https://laravel.com" target="_blank"><img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="400" alt="Laravel Logo"></a></p>
 
 <p align="center">
