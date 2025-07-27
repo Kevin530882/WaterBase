@@ -16,11 +16,19 @@ class Event extends Model
         'time',
         'duration',
         'description',
+        'maxVolunteers',
         'points',
         'badge',
-        'maxVolunteers',
         'status',
         'user_id',
+    ];
+
+    protected $casts = [
+        'date' => 'date',
+        'time' => 'datetime:H:i',
+        'latitude' => 'decimal:8',
+        'longitude' => 'decimal:8',
+        'duration' => 'decimal:2',
     ];
 
     public function attendees()

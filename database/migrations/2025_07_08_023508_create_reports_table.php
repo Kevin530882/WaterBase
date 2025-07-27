@@ -20,10 +20,10 @@ return new class extends Migration
             $table->decimal('latitude', 11, 8);
             $table->decimal('longitude', 11, 8);
             $table->string('pollutionType');
-            $table->enum('status', ['pending', 'verified', 'resolved'])->default('pending');
+            $table->enum('status', ['pending', 'verified', 'resolved', 'declined'])->default('pending');
             $table->text('image');
-            $table->enum('severityByUser', ['low', 'medium', 'high', 'critical'])->change();
-            $table->enum('severityByAI', ['low', 'medium', 'high', 'critical'])->change()->default('low');
+            $table->enum('severityByUser', ['low', 'medium', 'high', 'critical']);
+            $table->enum('severityByAI', ['low', 'medium', 'high', 'critical'])->default('low');
             $table->decimal('severityPercentage', 5, 2)->default(0.00);
             $table->foreignId('user_id')->constrained()->onDelete('cascade');
             $table->timestamps();

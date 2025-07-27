@@ -50,6 +50,7 @@ import {
     Loader2,
     AlertCircle,
     RefreshCw,
+    Play,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
@@ -106,52 +107,9 @@ interface CleanupEvent {
     currentVolunteers: number;
 }
 
-// Mock existing cleanup events (keep as mockup)
-const existingEvents = [
-    {
-    id: 1,
-    title: "Manila Bay Restoration Drive",
-    location: "Manila Bay, Manila",
-    date: "2024-02-15",
-    time: "07:00 AM",
-    duration: "4 hours",
-    maxVolunteers: 50,
-    currentVolunteers: 32,
-    status: "active",
-    rewards: {
-        type: "Points & Certificate",
-        points: 100,
-        certificate: "Environmental Champion",
-        additional: "Meal provided",
-    },
-    organizer: "Manila Bay Coalition",
-    description:
-        "Large-scale cleanup focusing on plastic waste removal and water quality improvement.",
-    },
-    {
-    id: 2,
-    title: "Pasig River Community Clean",
-    location: "Pasig River, Metro Manila",
-    date: "2024-02-20",
-    time: "06:30 AM",
-    duration: "3 hours",
-    maxVolunteers: 30,
-    currentVolunteers: 12,
-    status: "recruiting",
-    rewards: {
-        type: "Environmental Badge",
-        points: 75,
-        certificate: "River Guardian",
-        additional: "Transportation allowance",
-    },
-    organizer: "Pasig River Watch",
-    description:
-        "Community-driven initiative to remove industrial waste and restore riverbank vegetation.",
-    },
-];
-
 export const OrganizerPortal = () => {
     const { token, user } = useAuth();
+    // All state declarations first
     const [activeTab, setActiveTab] = useState("areas");
     const [showCreateEvent, setShowCreateEvent] = useState(false);
     const [selectedArea, setSelectedArea] = useState<AreaReport | null>(null);
@@ -167,6 +125,30 @@ export const OrganizerPortal = () => {
     const [hoveredImage, setHoveredImage] = useState<string | null>(null);
     const [createdEvents, setCreatedEvents] = useState<any[]>([]);
     const [isLoadingEvents, setIsLoadingEvents] = useState(false);
+    const [showEditEvent, setShowEditEvent] = useState(false);
+    const [editingEvent, setEditingEvent] = useState<any>(null);
+    const [editEventData, setEditEventData] = useState({
+        title: "",
+        date: "",
+        time: "",
+        duration: "",
+        maxVolunteers: "",
+        description: "",
+        rewardPoints: "",
+        rewardBadge: "",
+        status: "",
+    });
+    const [newEvent, setNewEvent] = useState({
+        title: "",
+        date: "",
+        time: "",
+        duration: "",
+        maxVolunteers: "",
+        description: "",
+        rewardPoints: "",
+        rewardBadge: "",
+        rewardAdditional: "",
+    });
 
     const fetchCreatedEvents = async () => {
         if (!user?.id) return;
@@ -194,31 +176,6 @@ export const OrganizerPortal = () => {
         }
     };
 
-    // Update the useEffect to also fetch events
-    useEffect(() => {
-        fetchReports();
-        if (user?.id) {
-            fetchCreatedEvents();
-        }
-    }, [user?.id]);
-
-    const [newEvent, setNewEvent] = useState({
-        title: "",
-        date: "",
-        time: "",
-        duration: "",
-        maxVolunteers: "",
-        description: "",
-        rewardPoints: "",
-        rewardBadge: "",
-        rewardAdditional: "",
-    });
-
-    // Fetch reports from database
-    useEffect(() => {
-        fetchReports();
-    }, []);
-
     const fetchReports = async () => {
         try {
         setIsLoading(true);
@@ -245,6 +202,56 @@ export const OrganizerPortal = () => {
         setIsLoading(false);
         }
     };
+
+    const isEventActive = (event: any): boolean => {
+        const now = new Date();
+        const eventDateTime = new Date(`${event.date}T${event.time}`);
+        const eventEndTime = new Date(eventDateTime.getTime() + (parseFloat(event.duration) * 60 * 60 * 1000));
+        
+        return now >= eventDateTime && now <= eventEndTime;
+    };
+
+    useEffect(() => {
+        // Initial data fetch
+        fetchReports();
+        
+        // Fetch events if user is available
+        if (user?.id) {
+            fetchCreatedEvents();
+        }
+    }, [user?.id, token]);
+
+    useEffect(() => {
+        const updateEventStatuses = async () => {
+            const eventsToUpdate = createdEvents.filter(event => 
+                event.status === 'recruiting' && isEventActive(event)
+            );
+
+            for (const event of eventsToUpdate) {
+                try {
+                    await fetch(`/api/events/${event.id}/status`, {
+                        method: 'PATCH',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': `Bearer ${token}`,
+                            'Accept': 'application/json',
+                        },
+                        body: JSON.stringify({ status: 'active' }),
+                    });
+                } catch (error) {
+                    console.error('Error auto-updating event status:', error);
+                }
+            }
+
+            if (eventsToUpdate.length > 0) {
+                fetchCreatedEvents(); // Refresh if any updates were made
+            }
+        };
+
+        // Check every minute for status updates
+        const interval = setInterval(updateEventStatuses, 60000);
+        return () => clearInterval(interval);
+    }, [createdEvents, token]);
 
     // Process reports into areas with sufficient report counts
     const processEligibleAreas = (allReports: Report[]) => {
@@ -487,7 +494,7 @@ export const OrganizerPortal = () => {
         }
     };
 
-        // Update the handleViewAreaDetails function
+    // Update the handleViewAreaDetails function
     const handleViewAreaDetails = (area: AreaReport) => {
         setSelectedArea(area);
         setShowAreaDetails(true);
@@ -508,6 +515,203 @@ export const OrganizerPortal = () => {
         </div>
         );
     }
+
+    const handleApproveReport = async (reportId: number) => {
+        try {
+            const response = await fetch(`/api/reports/${reportId}/status`, {
+                method: 'PATCH',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`,
+                    'Accept': 'application/json',
+                },
+                body: JSON.stringify({ status: 'verified' }),
+            });
+
+            if (response.ok) {
+                // Refresh reports to show updated status
+                fetchReports();
+                alert('Report approved successfully!');
+            } else {
+                throw new Error('Failed to approve report');
+            }
+        } catch (error) {
+            console.error('Error approving report:', error);
+            alert('Failed to approve report. Please try again.');
+        }
+    };
+
+    const handleDeclineReport = async (reportId: number) => {
+        if (!confirm('Are you sure you want to decline this report? This action cannot be undone.')) {
+            return;
+        }
+
+        try {
+            const response = await fetch(`/api/reports/${reportId}/status`, {
+                method: 'PATCH',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`,
+                    'Accept': 'application/json',
+                },
+                body: JSON.stringify({ status: 'declined' }),
+            });
+
+            if (response.ok) {
+                // Refresh reports to show updated status
+                fetchReports();
+                alert('Report declined successfully!');
+            } else {
+                throw new Error('Failed to decline report');
+            }
+        } catch (error) {
+            console.error('Error declining report:', error);
+            alert('Failed to decline report. Please try again.');
+        }
+    };
+
+    const handleBulkApproveReports = async (pendingReports: Report[]) => {
+        if (pendingReports.length === 0) return;
+        
+        if (!confirm(`Are you sure you want to approve all ${pendingReports.length} pending reports? This action cannot be undone.`)) {
+            return;
+        }
+
+        try {
+            // Show loading state
+            const reportIds = pendingReports.map(r => r.id);
+            
+            const response = await fetch('/api/reports/bulk-status', {
+                method: 'PATCH',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`,
+                    'Accept': 'application/json',
+                },
+                body: JSON.stringify({ 
+                    report_ids: reportIds,
+                    status: 'verified' 
+                }),
+            });
+
+            if (response.ok) {
+                // Refresh reports to show updated status
+                fetchReports();
+                alert(`Successfully approved ${pendingReports.length} reports!`);
+            } else {
+                const errorData = await response.json();
+                throw new Error(errorData.message || 'Failed to approve reports');
+            }
+        } catch (error) {
+            console.error('Error bulk approving reports:', error);
+            alert('Failed to approve all reports. Please try again.');
+        }
+    };
+
+    const handleBulkDeclineReports = async (pendingReports: Report[]) => {
+        if (pendingReports.length === 0) return;
+        
+        if (!confirm(`Are you sure you want to decline all ${pendingReports.length} pending reports? This action cannot be undone and will mark these reports as suspicious.`)) {
+            return;
+        }
+
+        try {
+            const reportIds = pendingReports.map(r => r.id);
+            
+            const response = await fetch('/api/reports/bulk-status', {
+                method: 'PATCH',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`,
+                    'Accept': 'application/json',
+                },
+                body: JSON.stringify({ 
+                    report_ids: reportIds,
+                    status: 'declined' 
+                }),
+            });
+
+            if (response.ok) {
+                // Refresh reports to show updated status
+                fetchReports();
+                alert(`Successfully declined ${pendingReports.length} reports!`);
+            } else {
+                const errorData = await response.json();
+                throw new Error(errorData.message || 'Failed to decline reports');
+            }
+        } catch (error) {
+            console.error('Error bulk declining reports:', error);
+            alert('Failed to decline all reports. Please try again.');
+        }
+    };
+
+    const handleEditEvent = (event: any) => {
+        setEditingEvent(event);
+        setEditEventData({
+            title: event.title,
+            date: event.date,
+            time: event.time,
+            duration: event.duration.toString(),
+            maxVolunteers: event.maxVolunteers.toString(),
+            description: event.description || "",
+            rewardPoints: event.points.toString(),
+            rewardBadge: event.badge || "",
+            status: event.status,
+        });
+        setShowEditEvent(true);
+    };
+
+    const handleUpdateEvent = async () => {
+        if (!editingEvent) return;
+
+        try {
+            const eventData = {
+                title: editEventData.title,
+                date: editEventData.date,
+                time: editEventData.time,
+                duration: parseFloat(editEventData.duration || "3.0"),
+                maxVolunteers: parseInt(editEventData.maxVolunteers),
+                description: editEventData.description,
+                points: parseInt(editEventData.rewardPoints),
+                badge: editEventData.rewardBadge,
+                status: editEventData.status, // This will update the status too
+            };
+
+            console.log('Updating event with data:', eventData);
+
+            const response = await fetch(`/api/events/${editingEvent.id}`, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`,
+                    'Accept': 'application/json',
+                },
+                body: JSON.stringify(eventData),
+            });
+
+            if (response.ok) {
+                setShowEditEvent(false);
+                setEditingEvent(null);
+                fetchCreatedEvents();
+                alert('Event updated successfully!');
+            } else {
+                const errorData = await response.json();
+                console.error('Update error response:', errorData);
+                
+                if (errorData.errors) {
+                    const errorMessages = Object.entries(errorData.errors)
+                        .map(([field, messages]) => `${field}: ${Array.isArray(messages) ? messages.join(', ') : messages}`)
+                        .join('\n');
+                    alert(`Validation errors:\n${errorMessages}`);
+                } else {
+                    alert(`Error: ${errorData.message || 'Failed to update event'}`);
+                }
+            }
+        } catch (error) {
+            console.error('Error updating event:', error);
+            alert('Failed to update event. Please try again.');
+        }
+    };
 
     return (
         <div className="min-h-screen bg-gradient-to-br from-waterbase-50 to-enviro-50">
@@ -1087,22 +1291,15 @@ export const OrganizerPortal = () => {
                                                 </Badge>
                                             </div>
                                             <div className="flex items-center space-x-2">
-                                                <Button variant="outline" size="sm">
-                                                    <Eye className="w-4 h-4 mr-1" />
-                                                    View Details
-                                                </Button>
-                                                <Button variant="outline" size="sm">
-                                                    <Edit className="w-4 h-4 mr-1" />
-                                                    Edit Event
-                                                </Button>
-                                                {event.status === 'recruiting' && (
+                                                {/* Edit Button - Always available for recruiting and active events */}
+                                                {(event.status === 'recruiting' || event.status === 'active') && (
                                                     <Button 
                                                         variant="outline" 
                                                         size="sm"
-                                                        className="text-red-600 border-red-200 hover:bg-red-50"
+                                                        onClick={() => handleEditEvent(event)}
                                                     >
-                                                        <Trash2 className="w-4 h-4 mr-1" />
-                                                        Cancel
+                                                        <Edit className="w-4 h-4 mr-1" />
+                                                        Edit Event
                                                     </Button>
                                                 )}
                                             </div>
@@ -1323,41 +1520,67 @@ export const OrganizerPortal = () => {
 
                             {/* Report Details */}
                             <div className="flex-1 space-y-2">
-                            <div className="flex items-start justify-between">
-                                <h4 className="font-medium text-sm line-clamp-2">{report.title}</h4>
-                                <div className="flex gap-1">
-                                <Badge className={cn("text-xs", getSeverityColor(report.severityByUser))}>
-                                    {report.severityByUser}
-                                </Badge>
-                                <Badge className={cn("text-xs", getStatusColor(report.status))}>
-                                    {report.status}
-                                </Badge>
+                                <div className="flex items-start justify-between">
+                                    <h4 className="font-medium text-sm line-clamp-2">{report.title}</h4>
+                                    <div className="flex gap-1">
+                                        <Badge className={cn("text-xs", getSeverityColor(report.severityByUser))}>
+                                            {report.severityByUser}
+                                        </Badge>
+                                        <Badge className={cn("text-xs", getStatusColor(report.status))}>
+                                            {report.status}
+                                        </Badge>
+                                    </div>
                                 </div>
-                            </div>
-                            
-                            <p className="text-xs text-gray-600 line-clamp-2">{report.content}</p>
-                            
-                            <div className="space-y-1 text-xs text-gray-500">
-                                <div>📍 {report.pollutionType}</div>
-                                <div>📅 {new Date(report.created_at).toLocaleDateString()}</div>
-                                {report.user && (
-                                <div>👤 {report.user.firstName} {report.user.lastName}</div>
-                                )}
-                                <div>🆔 #{report.id}</div>
-                            </div>
+                                
+                                <p className="text-xs text-gray-600 line-clamp-2">{report.content}</p>
+                                
+                                <div className="space-y-1 text-xs text-gray-500">
+                                    <div>📍 {report.pollutionType}</div>
+                                    <div>📅 {new Date(report.created_at).toLocaleDateString()}</div>
+                                    {report.user && (
+                                        <div>👤 {report.user.firstName} {report.user.lastName}</div>
+                                    )}
+                                    <div>💬 {report.content}</div>
+                                </div>
 
-                            <Button
-                                variant="outline"
-                                size="sm"
-                                className="w-full mt-2"
-                                onClick={() => {
-                                setSelectedReport(report);
-                                setShowImageDialog(true);
-                                }}
-                            >
-                                <Eye className="w-3 h-3 mr-1" />
-                                View Full Details
-                            </Button>
+                                {/* Action Buttons - Updated */}
+                                <div className="flex gap-2 mt-2">
+                                    {report.status === 'pending' ? (
+                                        <>
+                                            <Button
+                                                variant="outline"
+                                                size="sm"
+                                                className="flex-1 text-green-600 border-green-200 hover:bg-green-50"
+                                                onClick={() => handleApproveReport(report.id)}
+                                            >
+                                                <CheckCircle className="w-3 h-3 mr-1" />
+                                                Approve
+                                            </Button>
+                                            <Button
+                                                variant="outline"
+                                                size="sm"
+                                                className="flex-1 text-red-600 border-red-200 hover:bg-red-50"
+                                                onClick={() => handleDeclineReport(report.id)}
+                                            >
+                                                <AlertTriangle className="w-3 h-3 mr-1" />
+                                                Decline
+                                            </Button>
+                                        </>
+                                    ) : (
+                                        <Button
+                                            variant="outline"
+                                            size="sm"
+                                            className="w-full"
+                                            onClick={() => {
+                                                setSelectedReport(report);
+                                                setShowImageDialog(true);
+                                            }}
+                                        >
+                                            <Eye className="w-3 h-3 mr-1" />
+                                            View Details
+                                        </Button>
+                                    )}
+                                </div>
                             </div>
                         </div>
                         </CardContent>
@@ -1368,31 +1591,245 @@ export const OrganizerPortal = () => {
 
                 {/* Action Buttons */}
                 <div className="flex justify-between pt-4 border-t">
-                <Button variant="outline">
-                    <MapPin className="w-4 h-4 mr-2" />
-                    View on Map
-                </Button>
-                <div className="space-x-2">
-                    <Button variant="outline" onClick={() => setShowAreaDetails(false)}>
-                    Close
-                    </Button>
-                    <Button 
-                    className="bg-waterbase-500 hover:bg-waterbase-600"
-                    onClick={() => {
-                        setShowAreaDetails(false);
-                        setShowCreateEvent(true);
-                    }}
-                    >
-                    <Plus className="w-4 h-4 mr-2" />
-                    Create Cleanup Event
-                    </Button>
-                </div>
+                    <div className="flex items-center space-x-2">
+                        <Button variant="outline">
+                            <MapPin className="w-4 h-4 mr-2" />
+                            View on Map
+                        </Button>
+                        
+                        {/* Bulk Actions for Pending Reports */}
+                        {selectedArea.reports.some(r => r.status === 'pending') && (
+                            <>
+                                <Button
+                                    variant="outline"
+                                    className="text-green-600 border-green-200 hover:bg-green-50"
+                                    onClick={() => handleBulkApproveReports(selectedArea.reports.filter(r => r.status === 'pending'))}
+                                >
+                                    <CheckCircle className="w-4 h-4 mr-2" />
+                                    Approve All Pending ({selectedArea.reports.filter(r => r.status === 'pending').length})
+                                </Button>
+                                <Button
+                                    variant="outline"
+                                    className="text-red-600 border-red-200 hover:bg-red-50"
+                                    onClick={() => handleBulkDeclineReports(selectedArea.reports.filter(r => r.status === 'pending'))}
+                                >
+                                    <AlertTriangle className="w-4 h-4 mr-2" />
+                                    Decline All Pending ({selectedArea.reports.filter(r => r.status === 'pending').length})
+                                </Button>
+                            </>
+                        )}
+                    </div>
+                    
+                    <div className="space-x-2">
+                        <Button variant="outline" onClick={() => setShowAreaDetails(false)}>
+                            Close
+                        </Button>
+                        <Button 
+                            className="bg-waterbase-500 hover:bg-waterbase-600"
+                            onClick={() => {
+                                setShowAreaDetails(false);
+                                setShowCreateEvent(true);
+                            }}
+                        >
+                            <Plus className="w-4 h-4 mr-2" />
+                            Create Cleanup Event
+                        </Button>
+                    </div>
                 </div>
             </div>
             )}
         </DialogContent>
         </Dialog>
-      </div>
+        {/* Edit Event Dialog */}
+        <Dialog open={showEditEvent} onOpenChange={setShowEditEvent}>
+            <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+                <DialogHeader>
+                    <DialogTitle>Edit Cleanup Event</DialogTitle>
+                    <DialogDescription>
+                        Update event details for {editingEvent?.title}
+                    </DialogDescription>
+                </DialogHeader>
+
+                <div className="space-y-4">
+                    <div>
+                        <Label htmlFor="edit-title">Event Title *</Label>
+                        <Input
+                            id="edit-title"
+                            value={editEventData.title}
+                            onChange={(e) =>
+                                setEditEventData({
+                                    ...editEventData,
+                                    title: e.target.value,
+                                })
+                            }
+                        />
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                        <div>
+                            <Label htmlFor="edit-date">Date *</Label>
+                            <Input
+                                id="edit-date"
+                                type="date"
+                                value={editEventData.date}
+                                min={new Date().toISOString().split('T')[0]}
+                                onChange={(e) =>
+                                    setEditEventData({
+                                        ...editEventData,
+                                        date: e.target.value,
+                                    })
+                                }
+                            />
+                        </div>
+                        <div>
+                            <Label htmlFor="edit-time">Time *</Label>
+                            <Input
+                                id="edit-time"
+                                type="time"
+                                value={editEventData.time}
+                                onChange={(e) =>
+                                    setEditEventData({
+                                        ...editEventData,
+                                        time: e.target.value,
+                                    })
+                                }
+                            />
+                        </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                        <div>
+                            <Label htmlFor="edit-duration">Duration</Label>
+                            <Select
+                                value={editEventData.duration}
+                                onValueChange={(value) =>
+                                    setEditEventData({
+                                        ...editEventData,
+                                        duration: value,
+                                    })
+                                }
+                            >
+                                <SelectTrigger>
+                                    <SelectValue placeholder="Select duration" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="2">2 hours</SelectItem>
+                                    <SelectItem value="3">3 hours</SelectItem>
+                                    <SelectItem value="4">4 hours</SelectItem>
+                                    <SelectItem value="6">Half day</SelectItem>
+                                    <SelectItem value="12">Full day</SelectItem>
+                                </SelectContent>
+                            </Select>
+                        </div>
+                        <div>
+                            <Label htmlFor="edit-maxVolunteers">Max Volunteers *</Label>
+                            <Input
+                                id="edit-maxVolunteers"
+                                type="number"
+                                min="1"
+                                value={editEventData.maxVolunteers}
+                                onChange={(e) =>
+                                    setEditEventData({
+                                        ...editEventData,
+                                        maxVolunteers: e.target.value,
+                                    })
+                                }
+                            />
+                        </div>
+                    </div>
+
+                    {/* Add Status Field */}
+                    <div>
+                        <Label htmlFor="edit-status">Event Status *</Label>
+                        <Select
+                            value={editEventData.status}
+                            onValueChange={(value) =>
+                                setEditEventData({
+                                    ...editEventData,
+                                    status: value,
+                                })
+                            }
+                        >
+                            <SelectTrigger>
+                                <SelectValue placeholder="Select status" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="recruiting">Recruiting</SelectItem>
+                                <SelectItem value="active">Active</SelectItem>
+                                <SelectItem value="completed">Completed</SelectItem>
+                                <SelectItem value="cancelled">Cancelled</SelectItem>
+                            </SelectContent>
+                        </Select>
+                    </div>
+
+                    <div>
+                        <Label htmlFor="edit-description">Event Description</Label>
+                        <Textarea
+                            id="edit-description"
+                            value={editEventData.description}
+                            onChange={(e) =>
+                                setEditEventData({
+                                    ...editEventData,
+                                    description: e.target.value,
+                                })
+                            }
+                            rows={3}
+                        />
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                        <div>
+                            <Label htmlFor="edit-rewardPoints">Points</Label>
+                            <Input
+                                id="edit-rewardPoints"
+                                type="number"
+                                min="0"
+                                value={editEventData.rewardPoints}
+                                onChange={(e) =>
+                                    setEditEventData({
+                                        ...editEventData,
+                                        rewardPoints: e.target.value,
+                                    })
+                                }
+                            />
+                        </div>
+                        <div>
+                            <Label htmlFor="edit-rewardBadge">Badge Title</Label>
+                            <Input
+                                id="edit-rewardBadge"
+                                value={editEventData.rewardBadge}
+                                onChange={(e) =>
+                                    setEditEventData({
+                                        ...editEventData,
+                                        rewardBadge: e.target.value,
+                                    })
+                                }
+                            />
+                        </div>
+                    </div>
+
+                    <div className="flex space-x-2 pt-4">
+                        <Button
+                            onClick={handleUpdateEvent}
+                            className="flex-1 bg-waterbase-500 hover:bg-waterbase-600"
+                        >
+                            Update Event
+                        </Button>
+                        <Button
+                            variant="outline"
+                            onClick={() => {
+                                setShowEditEvent(false);
+                                setEditingEvent(null);
+                            }}
+                            className="flex-1"
+                        >
+                            Cancel
+                        </Button>
+                    </div>
+                </div>
+            </DialogContent>
+        </Dialog>
+        </div>
     </div>
   );
 };
