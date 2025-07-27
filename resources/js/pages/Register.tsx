@@ -266,10 +266,10 @@ return (
                             </SelectTrigger>
                             <SelectContent>
                                 <SelectItem value="user">Concerned Citizen</SelectItem>
-                                <SelectItem value="ngo">NGO Representative</SelectItem>
-                                <SelectItem value="lgu">LGU Official</SelectItem>
+                                <SelectItem value="ngo">NGO/Organizer</SelectItem>  {/* Changed from 'organizer' to 'ngo' */}
                                 <SelectItem value="researcher">Researcher</SelectItem>
-                                <SelectItem value="student">Student</SelectItem>
+                                <SelectItem value="student">Student</SelectItem>     {/* Changed from 'volunteer' to 'student' */}
+                                <SelectItem value="lgu">Local Government</SelectItem> {/* Added LGU option */}
                             </SelectContent>
                             </Select>
                         </div>
