@@ -221,38 +221,6 @@ export const OrganizerPortal = () => {
         }
     }, [user?.id, token]);
 
-    useEffect(() => {
-        const updateEventStatuses = async () => {
-            const eventsToUpdate = createdEvents.filter(event => 
-                event.status === 'recruiting' && isEventActive(event)
-            );
-
-            for (const event of eventsToUpdate) {
-                try {
-                    await fetch(`/api/events/${event.id}/status`, {
-                        method: 'PATCH',
-                        headers: {
-                            'Content-Type': 'application/json',
-                            'Authorization': `Bearer ${token}`,
-                            'Accept': 'application/json',
-                        },
-                        body: JSON.stringify({ status: 'active' }),
-                    });
-                } catch (error) {
-                    console.error('Error auto-updating event status:', error);
-                }
-            }
-
-            if (eventsToUpdate.length > 0) {
-                fetchCreatedEvents(); // Refresh if any updates were made
-            }
-        };
-
-        // Check every minute for status updates
-        const interval = setInterval(updateEventStatuses, 60000);
-        return () => clearInterval(interval);
-    }, [createdEvents, token]);
-
     // Process reports into areas with sufficient report counts
     const processEligibleAreas = (allReports: Report[]) => {
         // Group reports by coordinates (latitude and longitude)

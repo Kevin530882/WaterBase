@@ -18,7 +18,7 @@ class UserController extends Controller
                 'password' => 'required|string|min:8|confirmed',
                 'phoneNumber' => 'required|string|max:15',
                 'role' => 'required|string|in:user,admin,ngo,lgu,researcher,student',
-                'organization' => 'required|string|max:255',
+                'organization' => 'string|max:255',
             ]);
 
             $user = User::create([
