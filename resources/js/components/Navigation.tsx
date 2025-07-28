@@ -1,12 +1,6 @@
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger, } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
 import { MapPin, Home, Upload, User, Users, BarChart3, Menu, X, LogOut, ChevronDown } from "lucide-react";
 import { useState } from "react";
@@ -29,6 +23,70 @@ const Navigation = () => {
     { href: "/community", label: "Community", icon: Users },
     { href: "/dashboard", label: "Dashboard", icon: BarChart3 },
   ];
+
+  const getNavigationItems = () => {
+    const baseItems = [
+      { href: "/", label: "Home", icon: Home },
+      { href: "/map", label: "Live Map", icon: MapPin },
+      { href: "/report", label: "Report Pollution", icon: Upload },
+    ];
+
+    if (!user) return baseItems;
+
+    // Add role-specific items
+    switch (user.role) {
+      case 'admin':
+        return [
+          { href: "/admin/dashboard", label: "Admin Dashboard", icon: BarChart3 },
+        ];
+      case 'ngo':
+      case 'lgu':
+        return [
+          ...baseItems,
+          { href: "/portal/organizer", label: "Organizer Portal", icon: Users },
+          { href: "/dashboard", label: "Dashboard", icon: BarChart3 },
+        ];
+      case 'volunteer':
+        return [
+          ...baseItems,
+          { href: "/portal/volunteer", label: "Volunteer Portal", icon: Users },
+          { href: "/dashboard", label: "Dashboard", icon: BarChart3 },
+        ];
+      default:
+        return [
+          ...baseItems,
+          { href: "/community", label: "Community", icon: Users },
+          { href: "/dashboard", label: "Dashboard", icon: BarChart3 },
+        ];
+    }
+  };
+
+  // Handle community click with role-based redirect
+  const handleCommunityClick = (e: React.MouseEvent) => {
+    e.preventDefault();
+    
+    if (!user) {
+      navigate('/community');
+      return;
+    }
+
+    switch (user.role) {
+      case 'ngo':
+      case 'lgu':
+        navigate('/portal/organizer');
+        break;
+      case 'volunteer':
+        navigate('/portal/volunteer');
+        break;
+      case 'admin':
+        navigate('/admin/dashboard');
+        break;
+      default:
+        navigate('/community');
+    }
+  };
+
+  const navigationItems = getNavigationItems();
 
   const handleLogout = async () => {
     try {
@@ -60,16 +118,35 @@ const Navigation = () => {
             {/* Show full navigation only if NOT on auth pages */}
             {!isAuthPage && (
               <>
-                {navItems.map((item) => {
+                {navigationItems.map((item) => {
                   const Icon = item.icon;
-                  const isActive = location.pathname === item.href;
+                  
+                  // Special handling for Community link
+                  if (item.label === "Community" && user) {
+                    return (
+                      <button
+                        key={item.label}
+                        onClick={handleCommunityClick}
+                        className={cn(
+                          "flex items-center space-x-2 px-3 py-2 rounded-md text-sm font-medium transition-colors",
+                          location.pathname === item.href
+                            ? "bg-waterbase-500 text-white hover:bg-waterbase-600"
+                            : "text-waterbase-700 hover:text-waterbase-900 hover:bg-waterbase-50",
+                        )}
+                      >
+                        <Icon className="w-4 h-4" />
+                        <span>{item.label}</span>
+                      </button>
+                    );
+                  }
+
                   return (
-                    <Link key={item.href} to={item.href}>
+                    <Link key={item.label} to={item.href}>
                       <Button
-                        variant={isActive ? "default" : "ghost"}
+                        variant={location.pathname === item.href ? "default" : "ghost"}
                         className={cn(
                           "flex items-center space-x-2",
-                          isActive
+                          location.pathname === item.href
                             ? "bg-waterbase-500 text-white hover:bg-waterbase-600"
                             : "text-waterbase-700 hover:text-waterbase-900 hover:bg-waterbase-50",
                         )}
