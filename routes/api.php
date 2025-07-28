@@ -10,7 +10,7 @@ use App\Http\Controllers\DetectPollutionController;
 Route::post('/login', [UserController::class, 'login']);
 Route::post('/register', [UserController::class, 'register']);
 
-//Route::middleware('auth:sanctum')->group(function () {
+Route::middleware('auth:sanctum')->group(function () {
     Route::post('/logout', [UserController::class, 'logout']);
     
     // Event routes
@@ -26,4 +26,4 @@ Route::post('/register', [UserController::class, 'register']);
         return $request->user();
     });
     Route::post('/predict', [DetectPollutionController::class, 'predict']);
-//});
+});
