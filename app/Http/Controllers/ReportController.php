@@ -11,14 +11,35 @@ use App\Enums\SeverityLevel;
 class ReportController extends Controller
 {
 
-    public function index()
+    public function index(Request $request)
     {
-        try {
-            $reports = Report::with('user')->orderBy('created_at', 'desc')->get();
-            return response()->json($reports);
-        } catch (ModelNotFoundException $e) {
-            return response()->json(['message' => 'No reports found'], 404);
-        }
+        $user = $request->user();
+    
+        \Log::info('Reports index called', [
+            'user_id' => $user->id,
+            'user_role' => $user->role,
+            'user_area' => $user->areaOfResponsibility ?? 'none'
+        ]);
+        
+        // For now, let's return ALL reports to debug
+        $reports = Report::with(['user:id,firstName,lastName,email'])
+                        ->orderBy('created_at', 'desc')
+                        ->get();
+        
+        \Log::info('Found reports', [
+            'count' => $reports->count(),
+            'first_few' => $reports->take(3)->map(function($report) {
+                return [
+                    'id' => $report->id,
+                    'address' => $report->address,
+                    'status' => $report->status,
+                    'latitude' => $report->latitude,
+                    'longitude' => $report->longitude
+                ];
+            })->toArray()
+        ]);
+        
+        return response()->json($reports);
     }
 
     public function store(Request $request)
@@ -134,5 +155,27 @@ class ReportController extends Controller
                 'error' => $e->getMessage()
             ], 500);
         }
+    }
+
+    public function getReportsByArea(Request $request, $area = null)
+    {
+        $user = $request->user();
+        
+        $query = Report::with(['user:id,firstName,lastName,email'])
+                    ->where('status', 'verified');
+        
+        // If user has area of responsibility and is not admin, filter by area
+        if ($user->areaOfResponsibility && $user->role !== 'admin') {
+            $userArea = $user->areaOfResponsibility;
+            
+            $query->where(function($q) use ($userArea) {
+                $q->where('address', 'LIKE', "%{$userArea}%")
+                ->orWhere('address', 'LIKE', "%".explode(',', $userArea)[0]."%");
+            });
+        }
+        
+        $reports = $query->orderBy('created_at', 'desc')->get();
+        
+        return response()->json($reports);
     }
 }

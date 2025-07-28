@@ -58,12 +58,14 @@ export const SufficientReportsTab = ({
     eligibleAreas, 
     onCreateEvent, 
     onSelectArea ,
-    onRefresh
+    onRefresh,
+    createdEvents = []
 }: {
     eligibleAreas: any[];
     onCreateEvent: () => void;
     onSelectArea: (area: any) => void;
     onRefresh: () => void;
+    createdEvents?: any[];
 }) => {
     const { token, user } = useAuth();
     const [showCreateEvent, setShowCreateEvent] = useState(false);
@@ -184,17 +186,46 @@ export const SufficientReportsTab = ({
         }
     };
 
+    const hasExistingEvent = (area: AreaReport) => {
+        if (!createdEvents || createdEvents.length === 0) return false;
+        
+        return createdEvents.some(event => {
+            // Check if event location matches area location (flexible matching)
+            const eventLocation = event.address?.toLowerCase() || '';
+            const areaLocation = area.location?.toLowerCase() || '';
+            
+            // Also check coordinates proximity (within ~100m)
+            const latDiff = Math.abs(event.latitude - area.coordinates.lat);
+            const lngDiff = Math.abs(event.longitude - area.coordinates.lng);
+            const isNearby = latDiff < 0.001 && lngDiff < 0.001; // ~100m tolerance
+            
+            return areaLocation.includes(eventLocation) || 
+                eventLocation.includes(areaLocation) || 
+                isNearby;
+        });
+    };
+
     const filteredAreas = useMemo(() => {
-        if (!showUrgentOnly) {
-            return eligibleAreas;
+        let areas = eligibleAreas;
+        
+        // First filter out areas that already have events
+        areas = areas.filter(area => !hasExistingEvent(area));
+        
+        // Then apply urgent filter if enabled
+        if (showUrgentOnly) {
+            areas = areas.filter(area => 
+                area.severityLevel.toLowerCase() === 'high' || 
+                area.severityLevel.toLowerCase() === 'critical'
+            );
         }
         
-        // Filter areas with high or critical severity
-        return eligibleAreas.filter(area => 
-            area.severityLevel.toLowerCase() === 'high' || 
-            area.severityLevel.toLowerCase() === 'critical'
-        );
-    }, [eligibleAreas, showUrgentOnly]);
+        return areas;
+    }, [eligibleAreas, showUrgentOnly, createdEvents]);
+
+    // Add statistics for areas with events
+    const areasWithEvents = useMemo(() => {
+        return eligibleAreas.filter(area => hasExistingEvent(area));
+    }, [eligibleAreas, createdEvents]);
 
     return (
         <div className="space-y-6">
@@ -225,6 +256,17 @@ export const SufficientReportsTab = ({
                 </div>
             </div>
 
+            {/* Areas with Events Info */}
+            {areasWithEvents.length > 0 && (
+                <Alert className="border-green-200 bg-green-50">
+                    <AlertCircle className="h-4 w-4 text-green-600" />
+                    <AlertDescription className="text-green-800">
+                        <strong>{areasWithEvents.length}</strong> area{areasWithEvents.length > 1 ? 's' : ''} already {areasWithEvents.length > 1 ? 'have' : 'has'} cleanup events scheduled and {areasWithEvents.length > 1 ? 'are' : 'is'} hidden from this list.
+                        Check the "My Events" tab to manage existing events.
+                    </AlertDescription>
+                </Alert>
+            )}
+
             {/* Filter Info */}
             {showUrgentOnly && (
                 <Alert className="border-red-200 bg-red-50">
@@ -241,35 +283,41 @@ export const SufficientReportsTab = ({
                     <CardContent className="p-8 text-center">
                         <FileText className="w-12 h-12 mx-auto mb-4 text-gray-400" />
                         <h3 className="text-lg font-medium text-gray-900 mb-2">
-                            {showUrgentOnly ? "No Urgent Areas" : "No Eligible Areas Yet"}
+                            {areasWithEvents.length > 0 && eligibleAreas.length > 0
+                                ? "All Areas Have Events"
+                                : showUrgentOnly 
+                                    ? "No Urgent Areas" 
+                                    : "No Eligible Areas Yet"
+                            }
                         </h3>
                         <p className="text-gray-600">
-                            {showUrgentOnly 
-                                ? "No areas with high or critical severity levels found. Toggle to show all areas." 
-                                : "Areas need at least 3 verified reports to be eligible for cleanup events."
+                            {areasWithEvents.length > 0 && eligibleAreas.length > 0
+                                ? `Great! All ${eligibleAreas.length} eligible areas already have cleanup events scheduled. Check the "My Events" tab to manage them.`
+                                : showUrgentOnly 
+                                    ? "No areas with high or critical severity levels found. Toggle to show all areas." 
+                                    : "Areas need at least 3 verified reports to be eligible for cleanup events."
                             }
                         </p>
-                        {showUrgentOnly && (
-                            <Switch
-                                checked={showUrgentOnly}
-                                onCheckedChange={setShowUrgentOnly}
+                        {showUrgentOnly && filteredAreas.length === 0 && areasWithEvents.length === 0 && (
+                            <Button
+                                variant="outline"
+                                onClick={() => setShowUrgentOnly(false)}
                                 className="mt-4"
-                            />
+                            >
+                                Show All Areas
+                            </Button>
                         )}
                     </CardContent>
                 </Card>
             ) : (
                 <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
                     {filteredAreas.map((area) => (
-                        <Card
-                            key={area.id}
-                            className={cn(
-                                "border-waterbase-200 hover:shadow-lg transition-shadow",
-                                (area.severityLevel.toLowerCase() === 'critical' || 
-                                    area.severityLevel.toLowerCase() === 'high') && 
-                                showUrgentOnly && "ring-2 ring-red-200"
-                            )}
-                        >
+                        <Card key={area.id} className={cn(
+                            "border-waterbase-200 hover:shadow-lg transition-shadow",
+                            (area.severityLevel.toLowerCase() === 'critical' || 
+                                area.severityLevel.toLowerCase() === 'high') && 
+                            showUrgentOnly && "ring-2 ring-red-200"
+                        )}>
                             <CardHeader>
                                 <div className="flex items-start justify-between">
                                     <div className="flex-1">
@@ -583,9 +631,15 @@ export const SufficientReportsTab = ({
                 <div className="border-t pt-4">
                     <div className="flex items-center justify-between text-sm text-gray-600">
                         <div className="flex items-center space-x-4">
-                            <span>Total areas: {eligibleAreas.length}</span>
+                            <span>Total eligible: {eligibleAreas.length}</span>
+                            <span>Available: {filteredAreas.length}</span>
+                            {areasWithEvents.length > 0 && (
+                                <span className="text-green-600">
+                                    With events: {areasWithEvents.length}
+                                </span>
+                            )}
                             <span className="text-red-600">
-                                Urgent areas: {eligibleAreas.filter(area => 
+                                Urgent available: {filteredAreas.filter(area => 
                                     area.severityLevel.toLowerCase() === 'high' || 
                                     area.severityLevel.toLowerCase() === 'critical'
                                 ).length}
@@ -599,7 +653,7 @@ export const SufficientReportsTab = ({
                                 className="text-waterbase-600 hover:text-waterbase-800"
                             >
                                 <Filter className="w-4 h-4 mr-1" />
-                                View all {eligibleAreas.length} areas
+                                View all {filteredAreas.length} available areas
                             </Button>
                         )}
                     </div>

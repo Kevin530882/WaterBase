@@ -17,8 +17,9 @@ class UserController extends Controller
                 'email' => 'required|email|unique:users,email',
                 'password' => 'required|string|min:8|confirmed',
                 'phoneNumber' => 'required|string|max:15',
-                'role' => 'required|string|in:user,admin,ngo,lgu,researcher,student',
+                'role' => 'required|string|in:user,admin,ngo,lgu,researcher',
                 'organization' => 'nullable|string|max:255',
+                'areaOfResponsibility' => 'nullable|string|max:255',
             ]);
 
             $user = User::create([
@@ -29,6 +30,7 @@ class UserController extends Controller
                 'phoneNumber' => $request->phoneNumber,
                 'role' => $request->role,
                 'organization' => $request->organization,
+                'areaOfResponsibility' => $request->areaOfResponsibility,
             ]);
 
             return response()->json([

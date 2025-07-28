@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { formatDistanceToNow } from "date-fns";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -98,30 +99,103 @@ export const OrganizerPortal = () => {
     };
 
     const fetchReports = async () => {
+        if (!token) {
+            console.log('No token available');
+            return;
+        }
+        
         try {
-        setIsLoading(true);
-        setError("");
+            setIsLoading(true);
+            setError("");
+            
+            console.log('Fetching reports...');
+            console.log('Token:', token ? 'Present' : 'Missing');
+            console.log('User:', user);
+            
+            // First, let's get ALL reports to see what we have
+            const response = await fetch('/api/reports', {
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Accept': 'application/json',
+                },
+            });
 
-        const response = await fetch('/api/reports', {
-            headers: {
-            'Authorization': `Bearer ${token}`,
-            'Accept': 'application/json',
-            },
-        });
+            console.log('Response status:', response.status);
+            console.log('Response ok:', response.ok);
 
-        if (response.ok) {
-            const data = await response.json();
-            setReports(data);
-            processEligibleAreas(data);
-        } else {
-            throw new Error('Failed to fetch reports');
-        }
+            if (response.ok) {
+                const allReports = await response.json();
+                console.log('ALL REPORTS RAW:', allReports);
+                console.log('ALL REPORTS COUNT:', allReports.length);
+                console.log('ALL REPORTS TYPE:', typeof allReports);
+                
+                // Log each report to see what we have
+                if (Array.isArray(allReports)) {
+                    allReports.forEach((report, index) => {
+                        console.log(`Report ${index}:`, {
+                            id: report.id,
+                            title: report.title,
+                            address: report.address,
+                            status: report.status,
+                            latitude: report.latitude,
+                            longitude: report.longitude
+                        });
+                    });
+                } else {
+                    console.log('Reports is not an array:', allReports);
+                }
+                
+                // Filter manually for now to debug
+                const filteredReports = user?.areaOfResponsibility 
+                    ? allReports.filter(report => {
+                        const matches = report.address && 
+                            report.address.toLowerCase().includes(user.areaOfResponsibility.toLowerCase());
+                        console.log(`Report ${report.id} (${report.address}) matches area ${user.areaOfResponsibility}: ${matches}`);
+                        return matches;
+                    })
+                    : allReports;
+                
+                console.log('FILTERED REPORTS:', filteredReports);
+                console.log('FILTERED REPORTS COUNT:', filteredReports.length);
+                
+                setReports(filteredReports);
+                processEligibleAreas(filteredReports);
+            } else {
+                const errorText = await response.text();
+                console.error('API Error:', errorText);
+                throw new Error(`Failed to fetch reports: ${response.status}`);
+            }
         } catch (error) {
-        console.error('Error fetching reports:', error);
-        setError('Failed to load reports. Please try again.');
+            console.error('Error fetching reports:', error);
+            setError('Failed to load reports. Please try again.');
         } finally {
-        setIsLoading(false);
+            setIsLoading(false);
         }
+    };
+
+    const calculateSeverityLevel = (reports: Report[]): string => {
+        const severityLevels = reports.map(r => r.severityByUser?.toLowerCase() || 'low');
+        
+        if (severityLevels.includes('critical')) return 'Critical';
+        if (severityLevels.includes('high')) return 'High';
+        if (severityLevels.includes('medium')) return 'Medium';
+        return 'Low';
+    };
+
+    const estimateCleanupEffort = (reports: Report[]): string => {
+        const count = reports.length;
+        if (count >= 10) return 'High effort required';
+        if (count >= 5) return 'Medium effort required';
+        return 'Low effort required';
+    };
+
+    const calculatePriority = (reports: Report[]): string => {
+        const severityLevel = calculateSeverityLevel(reports);
+        const count = reports.length;
+        
+        if (severityLevel === 'Critical' || count >= 10) return 'High';
+        if (severityLevel === 'High' || count >= 5) return 'Medium';
+        return 'Low';
     };
 
     useEffect(() => {
@@ -135,122 +209,93 @@ export const OrganizerPortal = () => {
     }, [user?.id, token]);
 
     // Process reports into areas with sufficient report counts
-    const processEligibleAreas = (allReports: Report[]) => {
-        // Group reports by coordinates (latitude and longitude)
-        // Using a tolerance of ~0.01 degrees (approximately 1km) to group nearby reports
-        const COORDINATE_TOLERANCE = 0.01;
-        const locationGroups: { [key: string]: Report[] } = {};
+    const processEligibleAreas = (reports: Report[]) => {
+        console.log('Processing eligible areas with reports:', reports);
         
-        allReports.forEach(report => {
-            // Validate coordinates before processing
-            const lat = parseFloat(report.latitude?.toString() || '0');
-            const lng = parseFloat(report.longitude?.toString() || '0');
-            
-            // Skip reports with invalid coordinates
-            if (isNaN(lat) || isNaN(lng) || lat === 0 || lng === 0) {
-                console.warn('Skipping report with invalid coordinates:', report.id, { lat: report.latitude, lng: report.longitude });
+        if (!reports || reports.length === 0) {
+            console.log('No reports to process');
+            setEligibleAreas([]);
+            return;
+        }
+
+        // Group reports by location (using latitude/longitude proximity)
+        const locationGroups: { [key: string]: Report[] } = {};
+        const DISTANCE_THRESHOLD = 0.01; // Approximately 1km
+
+        reports.forEach((report) => {
+            console.log('Processing report:', {
+                id: report.id,
+                address: report.address,
+                lat: report.latitude,
+                lng: report.longitude,
+                status: report.status
+            });
+
+            if (!report.latitude || !report.longitude) {
+                console.log('Report missing coordinates, skipping:', report.id);
                 return;
             }
+
+            let foundGroup = false;
             
-            // Round coordinates to create location groups within tolerance
-            const roundedLat = Math.round(lat / COORDINATE_TOLERANCE) * COORDINATE_TOLERANCE;
-            const roundedLng = Math.round(lng / COORDINATE_TOLERANCE) * COORDINATE_TOLERANCE;
-            const locationKey = `${roundedLat.toFixed(3)},${roundedLng.toFixed(3)}`;
+            // Check if this report belongs to an existing group
+            Object.keys(locationGroups).forEach((groupKey) => {
+                if (foundGroup) return;
+                
+                const [groupLat, groupLng] = groupKey.split(',').map(Number);
+                const distance = Math.sqrt(
+                    Math.pow(report.latitude - groupLat, 2) + 
+                    Math.pow(report.longitude - groupLng, 2)
+                );
+                
+                if (distance <= DISTANCE_THRESHOLD) {
+                    locationGroups[groupKey].push(report);
+                    foundGroup = true;
+                    console.log(`Added report ${report.id} to existing group at ${groupKey}`);
+                }
+            });
             
-            if (!locationGroups[locationKey]) {
-                locationGroups[locationKey] = [];
+            // If no group found, create a new one
+            if (!foundGroup) {
+                const newGroupKey = `${report.latitude},${report.longitude}`;
+                locationGroups[newGroupKey] = [report];
+                console.log(`Created new group for report ${report.id} at ${newGroupKey}`);
             }
-            locationGroups[locationKey].push(report);
         });
 
-        // Convert to eligible areas (minimum 1 reports per area)
+        console.log('Location groups:', locationGroups);
+
+        // Convert groups to eligible areas (only groups with 3+ reports)
         const areas: AreaReport[] = Object.entries(locationGroups)
-            .filter(([_, reports]) => reports.length >= 1)
-            .map(([locationKey, areaReports], index) => {
-                const latestReport = areaReports.sort((a, b) => 
+            .filter(([_, groupReports]) => {
+                const hasEnoughReports = groupReports.length >= 1;
+                console.log(`Group with ${groupReports.length} reports: ${hasEnoughReports ? 'ELIGIBLE' : 'NOT ELIGIBLE'}`);
+                return hasEnoughReports;
+            })
+            .map(([locationKey, groupReports], index) => {
+                const [lat, lng] = locationKey.split(',').map(Number);
+                const mostRecentReport = groupReports.sort((a, b) => 
                     new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
                 )[0];
 
-                // Calculate average coordinates for the area center with validation
-                const validReports = areaReports.filter(report => {
-                    const lat = parseFloat(report.latitude?.toString() || '0');
-                    const lng = parseFloat(report.longitude?.toString() || '0');
-                    return !isNaN(lat) && !isNaN(lng) && lat !== 0 && lng !== 0;
-                });
-
-                if (validReports.length === 0) {
-                    console.warn('No valid coordinates found for location group:', locationKey);
-                    return null; // Skip this area
-                }
-
-                const avgLat = validReports.reduce((sum, report) => {
-                    return sum + parseFloat(report.latitude?.toString() || '0');
-                }, 0) / validReports.length;
-
-                const avgLng = validReports.reduce((sum, report) => {
-                    return sum + parseFloat(report.longitude?.toString() || '0');
-                }, 0) / validReports.length;
-
-                // Double-check the calculated averages
-                if (isNaN(avgLat) || isNaN(avgLng)) {
-                    console.error('Calculated NaN coordinates for area:', locationKey, { avgLat, avgLng, validReports });
-                    return null; // Skip this area
-                }
-
-                // Determine overall severity level
-                const severityLevels = areaReports.map(r => r.severityByUser);
-                const hasCritical = severityLevels.includes('critical');
-                const hasHigh = severityLevels.includes('high');
-                const overallSeverity = hasCritical ? 'Critical' : hasHigh ? 'High' : 'Medium';
-
-                // Determine cleanup effort based on report count
-                const effortMap = {
-                    small: areaReports.length <= 5,
-                    medium: areaReports.length <= 10,
-                    large: areaReports.length > 10,
-                };
-                const effort = Object.keys(effortMap).find(key => effortMap[key as keyof typeof effortMap]) || 'Medium';
-
-                // Use the most common address as the location name, or create a coordinate-based name
-                const addressCounts: { [key: string]: number } = {};
-                areaReports.forEach(report => {
-                    const addr = report.address || 'Unknown Location';
-                    addressCounts[addr] = (addressCounts[addr] || 0) + 1;
-                });
-                
-                const mostCommonAddress = Object.entries(addressCounts)
-                    .sort(([,a], [,b]) => b - a)[0]?.[0] || 'Unknown Location';
-                
-                // Create a more descriptive location name
-                const locationName = mostCommonAddress !== 'Unknown Location' 
-                    ? mostCommonAddress 
-                    : `Area ${avgLat.toFixed(4)}, ${avgLng.toFixed(4)}`;
-
-                // Get unique pollution types for description
-                const pollutionTypes = [...new Set(areaReports.map(r => r.pollutionType))];
-                const pollutionTypesText = pollutionTypes.length > 1 
-                    ? `${pollutionTypes.slice(0, -1).join(', ')} and ${pollutionTypes.slice(-1)}`
-                    : pollutionTypes[0];
-
-                return {
+                const area = {
                     id: index + 1,
-                    location: locationName,
-                    coordinates: { 
-                        lat: avgLat, 
-                        lng: avgLng 
-                    },
-                    reportCount: areaReports.length,
-                    severityLevel: overallSeverity,
-                    lastReported: new Date(latestReport.created_at).toLocaleDateString(),
-                    description: `${areaReports.length} verified reports of ${pollutionTypesText.toLowerCase()}`,
-                    estimatedCleanupEffort: effort.charAt(0).toUpperCase() + effort.slice(1),
-                    priority: hasCritical ? 'critical' : hasHigh ? 'high' : 'medium',
-                    reports: areaReports,
+                    location: mostRecentReport.address || `Location ${lat.toFixed(4)}, ${lng.toFixed(4)}`,
+                    coordinates: { lat, lng },
+                    reportCount: groupReports.length,
+                    severityLevel: calculateSeverityLevel(groupReports),
+                    lastReported: formatDistanceToNow(new Date(mostRecentReport.created_at), { addSuffix: true }),
+                    description: `Water pollution area with ${groupReports.length} verified reports`,
+                    estimatedCleanupEffort: estimateCleanupEffort(groupReports),
+                    priority: calculatePriority(groupReports),
+                    reports: groupReports,
                 };
-            })
-            .filter(area => area !== null) as AreaReport[]; // Remove null areas
 
-        console.log('Processed eligible areas:', areas); // Debug log
+                console.log('Created eligible area:', area);
+                return area;
+            });
+
+        console.log('Final eligible areas:', areas);
         setEligibleAreas(areas);
     };
 
@@ -415,27 +460,35 @@ export const OrganizerPortal = () => {
                         Organizer Portal
                     </h1>
                     <p className="text-waterbase-700 mb-4">
-                        Manage cleanup events and coordinate with volunteers for water
-                        pollution areas
+                        Manage cleanup events and coordinate with volunteers for water pollution areas
+                        {user?.areaOfResponsibility && (
+                            <span className="block text-sm mt-1">
+                                📍 Showing reports for: <strong>{user.areaOfResponsibility}</strong>
+                            </span>
+                        )}
                     </p>
                     <div className="flex items-center space-x-4">
                         <Badge variant="outline" className="bg-enviro-50 text-enviro-700">
-                            LGU/NGO Access
+                            {user?.role?.toUpperCase()} Access
                         </Badge>
-                        <Badge
-                            variant="outline"
-                            className="bg-waterbase-50 text-waterbase-700"
-                        >
-                            Manila Bay Coalition
-                        </Badge>
+                        {user?.organization && (
+                            <Badge variant="outline" className="bg-waterbase-50 text-waterbase-700">
+                                {user.organization}
+                            </Badge>
+                        )}
+                        {user?.areaOfResponsibility && (
+                            <Badge variant="outline" className="bg-yellow-50 text-yellow-700">
+                                Area: {user.areaOfResponsibility}
+                            </Badge>
+                        )}
                         <Button
                             variant="outline"
                             size="sm"
                             onClick={fetchReports}
                             disabled={isLoading}
-                            >
+                        >
                             <RefreshCw className={cn("w-4 h-4 mr-2", isLoading && "animate-spin")} />
-                                Refresh Data
+                            Refresh Data
                         </Button>
                     </div>
                 </div>
@@ -473,7 +526,11 @@ export const OrganizerPortal = () => {
                                 setSelectedArea(area);
                                 setShowAreaDetails(true);
                             }}
-                            onRefresh={fetchCreatedEvents} // Add this prop
+                            onRefresh={() => {
+                                fetchReports();
+                                fetchCreatedEvents();
+                            }}
+                            createdEvents={createdEvents}
                         />
                     </TabsContent>
 

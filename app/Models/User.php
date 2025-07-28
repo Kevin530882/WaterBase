@@ -20,6 +20,7 @@ class User extends Authenticatable
         'phoneNumber',
         'role',
         'organization',
+        'areaOfResponsibility',
     ];
 
     public function reports()

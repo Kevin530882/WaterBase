@@ -32,9 +32,14 @@ export const Register = () => {
     confirmPassword: "",
     phoneNumber: "",
     organization: "",
+    areaOfResponsibility: "",
     role: "",
     agreeToTerms: false,
     });
+
+    const shouldShowOrganizationFields = (role: string) => {
+        return ['ngo', 'lgu', 'researcher'].includes(role);
+    };
 
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState("");
@@ -62,6 +67,16 @@ export const Register = () => {
     if (!formData.role) {
         setError("Please select a user type");
         return false;
+    }
+    if (shouldShowOrganizationFields(formData.role)) {
+        if (!formData.organization.trim()) {
+            setError("Organization is required for your role");
+            return false;
+        }
+        if (!formData.areaOfResponsibility) {
+            setError("Area of responsibility is required for your role");
+            return false;
+        }
     }
     if (formData.password.length < 8) {
         setError("Password must be at least 8 characters long");
@@ -104,7 +119,10 @@ export const Register = () => {
                 password_confirmation: formData.confirmPassword,
                 phoneNumber: formData.phoneNumber,
                 role: formData.role,
+                ...(shouldShowOrganizationFields(formData.role) && {
                 organization: formData.organization,
+                areaOfResponsibility: formData.areaOfResponsibility,
+            }),
             }),
         });
 
@@ -122,6 +140,7 @@ export const Register = () => {
                 confirmPassword: "",
                 phoneNumber: "",
                 organization: "",
+                areaOfResponsibility: "",
                 role: "",
                 agreeToTerms: false,
             });
@@ -251,41 +270,94 @@ export const Register = () => {
                             <div>
                                 <Label htmlFor="role">User Type</Label>
                                 <Select
-                                value={formData.role}
-                                onValueChange={(value) =>
-                                    setFormData({ ...formData, role: value })
-                                }
-                                disabled={isLoading}
+                                    value={formData.role}
+                                    onValueChange={(value) =>
+                                        setFormData({ ...formData, role: value })
+                                    }
+                                    disabled={isLoading}
                                 >
-                                <SelectTrigger>
-                                    <SelectValue placeholder="Select your role" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem value="user">Concerned Citizen</SelectItem>
-                                    <SelectItem value="ngo">NGO</SelectItem>
-                                    <SelectItem value="lgu">Local Government Unit</SelectItem>
-                                    <SelectItem value="researcher">Researcher</SelectItem>
-                                    <SelectItem value="student">Student</SelectItem>
-                                </SelectContent>
+                                    <SelectTrigger>
+                                        <SelectValue placeholder="Select your role" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="user">Concerned Citizen</SelectItem>
+                                        <SelectItem value="ngo">NGO</SelectItem>
+                                        <SelectItem value="lgu">Local Government Unit</SelectItem>
+                                        <SelectItem value="researcher">Researcher</SelectItem>
+                                    </SelectContent>
                                 </Select>
                             </div>
 
-                            <div>
-                                <Label htmlFor="organization">Organization</Label>
-                                <div className="relative">
-                                <MapPin className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
-                                <Input
-                                    id="organization"
-                                    placeholder="Environmental Watch PH"
-                                    className="pl-10"
-                                    value={formData.organization}
-                                    onChange={(e) =>
-                                    setFormData({ ...formData, organization: e.target.value })
-                                    }
-                                    disabled={isLoading}
-                                />
+                            {/* Conditionally show organization field */}
+                            {shouldShowOrganizationFields(formData.role) && (
+                                <div>
+                                    <Label htmlFor="organization">Organization *</Label>
+                                    <div className="relative">
+                                        <MapPin className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
+                                        <Input
+                                            id="organization"
+                                            placeholder="Environmental Watch PH"
+                                            className="pl-10"
+                                            value={formData.organization}
+                                            onChange={(e) =>
+                                                setFormData({ ...formData, organization: e.target.value })
+                                            }
+                                            required
+                                            disabled={isLoading}
+                                        />
+                                    </div>
                                 </div>
-                            </div>
+                            )}
+
+                            {/* Add Area of Responsibility field */}
+                            {shouldShowOrganizationFields(formData.role) && (
+                                <div>
+                                    <Label htmlFor="areaOfResponsibility">Area of Responsibility *</Label>
+                                    <Select
+                                        value={formData.areaOfResponsibility}
+                                        onValueChange={(value) =>
+                                            setFormData({ ...formData, areaOfResponsibility: value })
+                                        }
+                                        disabled={isLoading}
+                                    >
+                                        <SelectTrigger>
+                                            <SelectValue placeholder="Select your area of responsibility" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            {/* Barangay Level */}
+                                            <SelectItem value="Barangay Poblacion, Manila">Barangay Poblacion, Manila</SelectItem>
+                                            <SelectItem value="Barangay San Miguel, Manila">Barangay San Miguel, Manila</SelectItem>
+                                            <SelectItem value="Barangay Ermita, Manila">Barangay Ermita, Manila</SelectItem>
+                                            <SelectItem value="Barangay Malate, Manila">Barangay Malate, Manila</SelectItem>
+                                            
+                                            {/* City Level */}
+                                            <SelectItem value="Manila City">Manila City</SelectItem>
+                                            <SelectItem value="Quezon City">Quezon City</SelectItem>
+                                            <SelectItem value="Makati City">Makati City</SelectItem>
+                                            <SelectItem value="Pasig City">Pasig City</SelectItem>
+                                            <SelectItem value="Taguig City">Taguig City</SelectItem>
+                                            <SelectItem value="Marikina City">Marikina City</SelectItem>
+                                            <SelectItem value="Cebu City">Cebu City</SelectItem>
+                                            
+                                            {/* Province Level */}
+                                            <SelectItem value="Metro Manila">Metro Manila</SelectItem>
+                                            <SelectItem value="Laguna Province">Laguna Province</SelectItem>
+                                            <SelectItem value="Cavite Province">Cavite Province</SelectItem>
+                                            <SelectItem value="Rizal Province">Rizal Province</SelectItem>
+                                            <SelectItem value="Cebu Province">Cebu Province</SelectItem>
+                                            
+                                            {/* Regional Level */}
+                                            <SelectItem value="National Capital Region (NCR)">National Capital Region (NCR)</SelectItem>
+                                            <SelectItem value="CALABARZON Region">CALABARZON Region</SelectItem>
+                                            
+                                            {/* Special Areas */}
+                                            <SelectItem value="Manila Bay Area">Manila Bay Area</SelectItem>
+                                            <SelectItem value="Pasig River System">Pasig River System</SelectItem>
+                                            <SelectItem value="Laguna Lake Basin">Laguna Lake Basin</SelectItem>
+                                        </SelectContent>
+                                    </Select>
+                                </div>
+                            )}
 
                             <div>
                                 <Label htmlFor="password">Password</Label>
