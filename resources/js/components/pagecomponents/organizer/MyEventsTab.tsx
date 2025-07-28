@@ -115,7 +115,7 @@ export const MyEventsTab = ({
                                 Create your first cleanup event from the eligible areas tab.
                             </p>
                             <Button 
-                                onClick={() => setActiveTab("areas")} // This should be passed as a prop from parent
+                                onClick={() => setActiveTab("areas")}
                                 className="bg-waterbase-500 hover:bg-waterbase-600"
                             >
                                 <Plus className="w-4 h-4 mr-2" />
