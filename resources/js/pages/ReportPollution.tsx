@@ -29,6 +29,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Camera, MapPin, Upload, Smartphone } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
+import { SearchableSelect } from "@/components/pagecomponents/searchable-select";
 
 export const ReportPollution = () => {
   const { user, isAuthenticated } = useAuth();
@@ -40,13 +41,13 @@ export const ReportPollution = () => {
   // Form state
   const [newReport, setNewReport] = useState({
     title: "",
-    content: "", // Changed from description to match backend
+    content: "",
     address: "",
     latitude: "",
     longitude: "",
-    pollutionType: "", // Changed from type to match backend
-    severityByUser: "", // Added severity field
-    image: null as File | null, // Added image field
+    pollutionType: "",
+    severityByUser: "",
+    image: null as File | null,
   });
 
   const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -356,17 +357,20 @@ export const ReportPollution = () => {
                       <label className="text-sm font-medium mb-1 block">
                         Address *
                       </label>
-                      <Input
-                        placeholder="Full address of the location"
+                      <SearchableSelect
                         value={newReport.address}
-                        onChange={(e) =>
+                        onValueChange={(value) =>
                           setNewReport({
                             ...newReport,
-                            address: e.target.value,
+                            address: value,
                           })
                         }
+                        placeholder="Search for region, province, city, or barangay..."
                         disabled={isSubmitting}
                       />
+                      <p className="text-xs text-gray-500 mt-1">
+                        Search for the specific location where pollution was observed
+                      </p>
                     </div>
 
                     <div className="grid grid-cols-2 gap-2">
