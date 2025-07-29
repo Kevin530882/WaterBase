@@ -22,6 +22,7 @@ return new class extends Migration
             $table->decimal('duration', 3, 1);
             $table->text('description');
             $table->integer('maxVolunteers');
+            $table->integer('currentVolunteers')->default(0);
             $table->integer('points');
             $table->text('badge');
             $table->enum('status', ['recruiting', 'active', 'completed', 'cancelled'])->default('recruiting');

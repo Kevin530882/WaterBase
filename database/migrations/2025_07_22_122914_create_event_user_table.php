@@ -14,6 +14,7 @@ return new class extends Migration
         Schema::create('event_user', function (Blueprint $table) {
             $table->foreignId('user_id')->constrained()->onDelete('cascade');
             $table->foreignId('event_id')->constrained()->onDelete('cascade');
+            $table->time('joined_at')->nullable();
             $table->primary(['user_id','event_id']);
             $table->timestamps();
         });

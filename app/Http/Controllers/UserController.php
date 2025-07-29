@@ -17,7 +17,7 @@ class UserController extends Controller
                 'email' => 'required|email|unique:users,email',
                 'password' => 'required|string|min:8|confirmed',
                 'phoneNumber' => 'required|string|max:15',
-                'role' => 'required|string|in:user,admin,ngo,lgu,researcher',
+                'role' => 'required|string|in:user,admin,ngo,lgu,researcher,volunteer',
                 'organization' => 'nullable|string|max:255',
                 'areaOfResponsibility' => 'nullable|string|max:255',
             ]);

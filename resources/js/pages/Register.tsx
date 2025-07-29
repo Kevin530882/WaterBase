@@ -280,9 +280,11 @@ export const Register = () => {
                                     </SelectTrigger>
                                     <SelectContent>
                                         <SelectItem value="user">Concerned Citizen</SelectItem>
+                                        <SelectItem value="volunteer">Volunteer</SelectItem>
                                         <SelectItem value="ngo">NGO</SelectItem>
                                         <SelectItem value="lgu">Local Government Unit</SelectItem>
                                         <SelectItem value="researcher">Researcher</SelectItem>
+                                        <SelectItem value="admin">Admin</SelectItem>
                                     </SelectContent>
                                 </Select>
                             </div>
