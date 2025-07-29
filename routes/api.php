@@ -25,8 +25,8 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::patch('/reports/bulk-status', [ReportController::class, 'bulkUpdateStatus']);
     Route::get('/reports/area/{area}', [ReportController::class, 'getReportsByArea']);
 
-    Route::get('/user', function (Request $request) {
-        return $request->user();
-    });
+    Route::put('/user/profile', [UserController::class, 'updateProfile']);
+    Route::get('/user/stats', [UserController::class, 'getStats']);
+    
     Route::post('/predict', [DetectPollutionController::class, 'predict']);
 });

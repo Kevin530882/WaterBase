@@ -31,9 +31,18 @@ class Event extends Model
         'duration' => 'decimal:2',
     ];
 
+    public function getCurrentVolunteersAttribute()
+    {
+        return $this->attendees()->count();
+    }
+
+    protected $appends = ['currentVolunteers'];
+
     public function attendees()
     {
-        return $this->belongsToMany(User::class);
+        return $this->belongsToMany(User::class, 'event_user')
+                    ->withPivot(['joined_at'])
+                    ->withTimestamps();
     }
 
     public function creator()
