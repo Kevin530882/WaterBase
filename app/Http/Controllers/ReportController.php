@@ -2,12 +2,16 @@
 
 namespace App\Http\Controllers;
 
-use Illuminate\Http\Request;
-use Illuminate\Database\Eloquent\ModelNotFoundException;
-use Illuminate\Validation\Rules\Enum;
+use finfo;
 use App\Models\Report;
 use App\Enums\ReportStatus;
 use App\Enums\SeverityLevel;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Validation\Rules\Enum;
+use Illuminate\Support\Facades\Storage;
+use Illuminate\Database\Eloquent\ModelNotFoundException;
+
 class ReportController extends Controller
 {
 
@@ -41,7 +45,7 @@ class ReportController extends Controller
         
         return response()->json($reports);
     }
-
+    
     public function store(Request $request)
     {
         $reportsValidated = $request->validate([
@@ -56,9 +60,11 @@ class ReportController extends Controller
             'severityByUser'=> ['required', new enum(SeverityLevel::class)],
             'user_id'=> 'required|integer',
         ]);
+            
+        $imageValidated = $this->verifyImage($request->image);
 
-            Report::create($reportsValidated);
-            return response()->json(['success'=> 'Report Created Successfully'], 200);
+        Report::create(array_merge($reportsValidated, ['severityByAI' => $request->severityByAI, 'severityPercentage' => $request->severityPercentage, 'ai_confidence' => $request->ai_confidence]));
+        return response()->json(['success'=> 'Report Created Successfully', 'status' => 'success', 'imagething' => $imageValidated], 200);
     }
 
     public function show(string $id)
@@ -177,5 +183,44 @@ class ReportController extends Controller
         $reports = $query->orderBy('created_at', 'desc')->get();
         
         return response()->json($reports);
+    }
+    private function verifyImage(string $imageString){
+                // Store the uploaded image
+        if (strpos($imageString, 'data:image/') === 0) {
+            $base64_string = substr($imageString, strpos($imageString, ',') + 1);
+        }
+        $decoded_image_data = base64_decode($base64_string);
+
+        $fileName = uniqid() . '.jpeg';
+
+        //$imagePath = Storage::disk("public")->putFileAs("uploads", $decoded_image_data, $fileName);
+        Storage::disk('public')->put("uploads/{$fileName}", $decoded_image_data);
+
+        $imageFullPath = Storage::disk('public')->path("uploads/{$fileName}");
+        $python = base_path('python_environment/Scripts/python.exe'); // Windows venv
+        $script = base_path('scripts/check_location.py');
+        $cmd = "\"$python\" \"$script\" \"$imageFullPath\"";
+        $output = shell_exec($cmd);
+        Log::info('Python output: ' . $output);
+
+        if (!$output) {
+            return ['error' => 'Error processing image. No output from Python script.'];
+        }
+
+        // Extract the last line of the output (should be the JSON)
+        $lines = explode("\n", trim($output));
+        $json_line = end($lines);
+        Log::info('Extracted JSON line: ' . $json_line); // Log this for debugging
+
+        // Decode the JSON response from the Python script
+        $location = json_decode($json_line, true);
+
+        // Check if JSON decoding failed
+        if ($location === null) {
+            return ['error' => 'Invalid JSON output from Python script.', 'output' => $json_line];
+        }
+
+        return $location;
+
     }
 }

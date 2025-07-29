@@ -4,12 +4,28 @@ import cv2
 import numpy as np
 import os
 from ultralytics import YOLO
+from PIL import Image
 
 def preprocess_image(image_path, target_size=640):
     """Preprocess the image by resizing to target_size while maintaining aspect ratio."""
-    img = cv2.imread(image_path)
-    if img is None:
-        raise ValueError(f"Failed to load image: {image_path}")
+    # Check file extension
+    _, ext = os.path.splitext(image_path.lower())
+    
+    # If WEBP or JFIF, use Pillow to load and convert
+    if ext in ['.webp', '.jfif']:
+        try:
+            with Image.open(image_path) as img_pil:
+                # Convert to RGB (OpenCV uses BGR, but we'll convert later)
+                img = np.array(img_pil.convert('RGB'))
+                # Convert RGB to BGR for OpenCV
+                img = cv2.cvtColor(img, cv2.COLOR_RGB2BGR)
+        except Exception as e:
+            raise ValueError(f"Failed to load {ext} image with Pillow: {str(e)}")
+    else:
+        # Use OpenCV for other formats
+        img = cv2.imread(image_path)
+        if img is None:
+            raise ValueError(f"Failed to load image with OpenCV: {image_path}")
     
     # Resize while maintaining aspect ratio
     h, w = img.shape[:2]
@@ -19,7 +35,7 @@ def preprocess_image(image_path, target_size=640):
     
     # Save the resized image with the same extension
     base, ext = os.path.splitext(image_path)
-    temp_path = f"{base}_resized{ext}"
+    temp_path = f"{base}_resized.jpg"
     cv2.imwrite(temp_path, img_resized)
     return temp_path, (new_h, new_w), img_resized
 
@@ -82,6 +98,38 @@ def visualize_masks(image, results_list, model_names, class_colors, class_labels
             cv2.putText(overlay, text, (cx, cy), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1, cv2.LINE_AA)
     
     return overlay
+def calculate_overall_confidence(water_predictions, trash_predictions, pollution_predictions):
+    """Calculate the weighted average confidence of all masks."""
+    total_weighted_confidence = 0.0
+    total_area = 0.0
+    
+    # Process water predictions
+    for pred in water_predictions:
+        area = pred["mask_area"]
+        confidence = pred["confidence"]
+        total_weighted_confidence += area * confidence
+        total_area += area
+    
+    # Process trash predictions
+    for pred in trash_predictions:
+        area = pred["mask_area"]
+        confidence = pred["confidence"]
+        total_weighted_confidence += area * confidence
+        total_area += area
+    
+    # Process pollution predictions
+    for pred in pollution_predictions:
+        area = pred["mask_area"]
+        confidence = pred["confidence"]
+        total_weighted_confidence += area * confidence
+        total_area += area
+    
+    # Calculate overall confidence (avoid division by zero)
+    if total_area > 0:
+        overall_confidence = (total_weighted_confidence / total_area) * 100  # Convert to percentage
+        return round(overall_confidence, 2)
+    return 0.0
+
 
 def main(image_path):
     try:
@@ -220,7 +268,11 @@ def main(image_path):
             severity_level = "high"
         elif rounded_pollution_percentage >= 76:
             severity_level = "critical"
+        
+        #get model confidence
+        model_confidence = calculate_overall_confidence(water_predictions, trash_predictions, pollution_predictions)
         # Prepare output
+
         output = {
             "water_predictions": water_predictions,
             "trash_predictions": trash_predictions,
@@ -229,7 +281,8 @@ def main(image_path):
             "total_water_area": total_water_area,
             "pollution_percentage": rounded_pollution_percentage,
             "severity_level": severity_level,
-            "annotated_image_path": annotated_path
+            "annotated_image_path": annotated_path,
+            "overall_confidence": model_confidence
         }
         
         # Output as JSON

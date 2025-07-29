@@ -1,8 +1,9 @@
 <?php
 
-use Illuminate\Database\Migrations\Migration;
-use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Database\Migrations\Migration;
 
 return new class extends Migration
 {
@@ -24,10 +25,12 @@ return new class extends Migration
             $table->text('image');
             $table->enum('severityByUser', ['low', 'medium', 'high', 'critical']);
             $table->enum('severityByAI', ['low', 'medium', 'high', 'critical'])->default('low');
+            $table->decimal('ai_confidence', 5, 2)->default(0.00);
             $table->decimal('severityPercentage', 5, 2)->default(0.00);
             $table->foreignId('user_id')->constrained()->onDelete('cascade');
             $table->timestamps();
         });
+        DB::statement('ALTER TABLE reports MODIFY COLUMN image LONGBLOB');
     }
 
     /**

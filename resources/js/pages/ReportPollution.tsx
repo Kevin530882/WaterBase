@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import Navigation from "@/components/Navigation";
 import { Button } from "@/components/ui/button";
 import {
@@ -24,21 +24,27 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Zap, AlertCircle, CheckCircle, Upload as UploadIcon } from "lucide-react";
+import { Zap, AlertCircle, CheckCircle } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Camera, MapPin, Upload, Smartphone } from "lucide-react";
+import { Camera, MapPin, Upload } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { SearchableSelect } from "@/components/pagecomponents/searchable-select";
+import piexif from "piexifjs";
 
 export const ReportPollution = () => {
   const { user, isAuthenticated } = useAuth();
   const [showReportForm, setShowReportForm] = useState(false);
+  const [showCameraModal, setShowCameraModal] = useState(false);
+  const [showSubmitModal, setShowSubmitModal] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [submitStatus, setSubmitStatus] = useState<'idle' | 'success' | 'error'>('idle');
+  const [submitStatus, setSubmitStatus] = useState('idle');
   const [errorMessage, setErrorMessage] = useState('');
-  
-  // Form state
+  const [cameraError, setCameraError] = useState('');
+  const [stream, setStream] = useState(null);
+  const videoRef = useRef(null);
+  const canvasRef = useRef(null);
+
   const [newReport, setNewReport] = useState({
     title: "",
     content: "",
@@ -47,36 +53,91 @@ export const ReportPollution = () => {
     longitude: "",
     pollutionType: "",
     severityByUser: "",
-    image: null as File | null,
+    image: null,
   });
 
-  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      // Validate file type
-      const allowedTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif'];
-      if (!allowedTypes.includes(file.type)) {
-        setErrorMessage('Please select a valid image file (JPEG, PNG, or GIF)');
-        return;
+  useEffect(() => {
+    if (showCameraModal && !stream) {
+      startCamera();
+    }
+    return () => {
+      if (stream) {
+        stopCamera();
       }
-      
-      // Validate file size (max 5MB)
-      if (file.size > 5 * 1024 * 1024) {
-        setErrorMessage('Image file size must be less than 5MB');
-        return;
+    };
+  }, [showCameraModal]);
+
+  const startCamera = async () => {
+    try {
+      const mediaStream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: "environment" },
+      });
+      setStream(mediaStream);
+      if (videoRef.current) {
+        videoRef.current.srcObject = mediaStream;
       }
-      
-      setNewReport({ ...newReport, image: file });
-      setErrorMessage('');
+      setCameraError('');
+    } catch (err) {
+      setCameraError('Unable to access camera. Please ensure permissions are granted.');
+      setShowCameraModal(false);
     }
   };
 
-  const convertImageToBase64 = (file: File): Promise<string> => {
+  const stopCamera = () => {
+    if (stream) {
+      stream.getTracks().forEach((track) => track.stop());
+      setStream(null);
+    }
+  };
+
+  const takePhoto = () => {
+    if (videoRef.current && canvasRef.current) {
+      const video = videoRef.current;
+      const canvas = canvasRef.current;
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      const ctx = canvas.getContext('2d');
+      if (ctx) {
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        navigator.geolocation.getCurrentPosition(
+          (position) => {
+            const latitude = position.coords.latitude;
+            const longitude = position.coords.longitude;
+            const imageData = canvas.toDataURL('image/jpeg');
+            const exifObj = {
+              'GPS': {
+                [piexif.GPSIFD.GPSLatitudeRef]: latitude >= 0 ? 'N' : 'S',
+                [piexif.GPSIFD.GPSLatitude]: piexif.GPSHelper.degToDmsRational(Math.abs(latitude)),
+                [piexif.GPSIFD.GPSLongitudeRef]: longitude >= 0 ? 'E' : 'W',
+                [piexif.GPSIFD.GPSLongitude]: piexif.GPSHelper.degToDmsRational(Math.abs(longitude)),
+              },
+            };
+            const exifBinary = piexif.dump(exifObj);
+            const modifiedImage = piexif.insert(exifBinary, imageData);
+            fetch(modifiedImage)
+              .then((res) => res.blob())
+              .then((blob) => {
+                const file = new File([blob], "pollution-photo.jpg", { type: "image/jpeg" });
+                setNewReport({ ...newReport, image: file });
+                stopCamera();
+                setShowCameraModal(false);
+              });
+          },
+          (error) => {
+            setErrorMessage('Unable to get location. Please ensure location services are enabled.');
+            setShowCameraModal(false);
+          }
+        );
+      }
+    }
+  };
+
+  const convertImageToBase64 = (file) => {
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
       reader.onload = () => {
         if (reader.result) {
-          resolve(reader.result as string);
+          resolve(reader.result);
         } else {
           reject(new Error('Failed to convert image'));
         }
@@ -116,7 +177,6 @@ export const ReportPollution = () => {
       return false;
     }
     
-    // Validate coordinates are numbers
     const lat = parseFloat(newReport.latitude);
     const lng = parseFloat(newReport.longitude);
     if (isNaN(lat) || isNaN(lng)) {
@@ -124,7 +184,6 @@ export const ReportPollution = () => {
       return false;
     }
     
-    // Validate coordinate ranges
     if (lat < -90 || lat > 90 || lng < -180 || lng > 180) {
       setErrorMessage('Please enter valid coordinate values');
       return false;
@@ -139,12 +198,12 @@ export const ReportPollution = () => {
     }
 
     setIsSubmitting(true);
+    setShowSubmitModal(true);
     setErrorMessage('');
     setSubmitStatus('idle');
 
     try {
-      // Convert image to base64
-      const imageBase64 = await convertImageToBase64(newReport.image!);
+      const imageBase64 = await convertImageToBase64(newReport.image);
 
       const reportData = {
         title: newReport.title,
@@ -153,10 +212,10 @@ export const ReportPollution = () => {
         latitude: parseFloat(newReport.latitude),
         longitude: parseFloat(newReport.longitude),
         pollutionType: newReport.pollutionType,
-        status: 'pending', // Default status
+        status: 'pending',
         image: imageBase64,
         severityByUser: newReport.severityByUser,
-        user_id: user?.id || 1, // Use authenticated user ID
+        user_id: user?.id || 1,
       };
 
       const response = await fetch('/api/reports', {
@@ -170,11 +229,8 @@ export const ReportPollution = () => {
       });
 
       const data = await response.json();
-
-      if (response.ok) {
+      if (response.ok && data.status === 'success') {
         setSubmitStatus('success');
-        
-        // Reset form
         setNewReport({
           title: "",
           content: "",
@@ -185,12 +241,11 @@ export const ReportPollution = () => {
           severityByUser: "",
           image: null,
         });
-
-        // Close dialog after 2 seconds
         setTimeout(() => {
           setShowReportForm(false);
+          setShowSubmitModal(false);
           setSubmitStatus('idle');
-        }, 2000);
+        }, 5000);
       } else {
         throw new Error(data.message || 'Failed to submit report');
       }
@@ -203,12 +258,6 @@ export const ReportPollution = () => {
     }
   };
 
-  const handleAIGenerate = () => {
-    // Non-functional for now as requested
-    console.log("AI Generate Report - Coming Soon");
-  };
-
-  // Auto-detect location (optional enhancement)
   const handleGetCurrentLocation = () => {
     if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
@@ -255,289 +304,339 @@ export const ReportPollution = () => {
                 Quick Photo Report
               </CardTitle>
               <CardDescription className="text-waterbase-600">
-                Capture and submit photos of water pollution with automatic
-                location tagging.
+                Capture photos of water pollution directly with your camera.
               </CardDescription>
             </CardHeader>
             <CardContent>
               <Button 
                 className="w-full bg-waterbase-500 hover:bg-waterbase-600"
-                disabled
+                onClick={() => setShowCameraModal(true)}
               >
                 <Camera className="w-4 h-4 mr-2" />
-                Take Photo Report (Coming Soon)
+                Take Photo Report
               </Button>
-            </CardContent>
-          </Card>
-
-          <Card className="border-waterbase-200">
-            <CardHeader>
-              <div className="w-12 h-12 bg-enviro-100 rounded-lg flex items-center justify-center mb-4">
-                <Upload className="w-6 h-6 text-enviro-600" />
-              </div>
-              <CardTitle className="text-waterbase-950">
-                Detailed Report
-              </CardTitle>
-              <CardDescription className="text-waterbase-600">
-                Submit a comprehensive report with photos and detailed
-                information.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <Dialog open={showReportForm} onOpenChange={setShowReportForm}>
-                <DialogTrigger asChild>
-                  <Button
-                    variant="outline"
-                    className="w-full border-enviro-300 text-enviro-700 hover:bg-enviro-50"
-                    disabled={!isAuthenticated}
-                  >
-                    <Upload className="w-4 h-4 mr-2" />
-                    Create Detailed Report
-                  </Button>
-                </DialogTrigger>
-                <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-                  <DialogHeader>
-                    <DialogTitle>Report Water Pollution</DialogTitle>
-                    <DialogDescription>
-                      Submit a detailed pollution report for your area
-                    </DialogDescription>
-                  </DialogHeader>
-
-                  <div className="space-y-4">
-                    {/* Status Messages */}
-                    {submitStatus === 'success' && (
-                      <Alert className="border-green-200 bg-green-50">
-                        <CheckCircle className="h-4 w-4 text-green-600" />
-                        <AlertDescription className="text-green-700">
-                          Report submitted successfully! Thank you for helping protect our waterways.
-                        </AlertDescription>
-                      </Alert>
-                    )}
-
-                    {(submitStatus === 'error' || errorMessage) && (
-                      <Alert variant="destructive">
-                        <AlertCircle className="h-4 w-4" />
-                        <AlertDescription>{errorMessage}</AlertDescription>
-                      </Alert>
-                    )}
-
-                    <div>
-                      <label className="text-sm font-medium mb-1 block">
-                        Title *
-                      </label>
-                      <Input
-                        placeholder="Brief description of the pollution"
-                        value={newReport.title}
-                        onChange={(e) =>
-                          setNewReport({ ...newReport, title: e.target.value })
-                        }
-                        disabled={isSubmitting}
-                      />
-                    </div>
-
-                    <div>
-                      <label className="text-sm font-medium mb-1 block">
-                        Content *
-                      </label>
-                      <Textarea
-                        placeholder="Detailed description of what you observed..."
-                        value={newReport.content}
-                        onChange={(e) =>
-                          setNewReport({
-                            ...newReport,
-                            content: e.target.value,
-                          })
-                        }
-                        rows={3}
-                        disabled={isSubmitting}
-                      />
-                    </div>
-
-                    <div>
-                      <label className="text-sm font-medium mb-1 block">
-                        Address *
-                      </label>
-                      <SearchableSelect
-                        value={newReport.address}
-                        onValueChange={(value) =>
-                          setNewReport({
-                            ...newReport,
-                            address: value,
-                          })
-                        }
-                        placeholder="Search for region, province, city, or barangay..."
-                        disabled={isSubmitting}
-                      />
-                      <p className="text-xs text-gray-500 mt-1">
-                        Search for the specific location where pollution was observed
-                      </p>
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-2">
-                      <div>
-                        <label className="text-sm font-medium mb-1 block">
-                          Latitude *
-                        </label>
-                        <Input
-                          placeholder="14.5995"
-                          value={newReport.latitude}
-                          onChange={(e) =>
-                            setNewReport({
-                              ...newReport,
-                              latitude: e.target.value,
-                            })
-                          }
-                          disabled={isSubmitting}
-                        />
-                      </div>
-                      <div>
-                        <label className="text-sm font-medium mb-1 block">
-                          Longitude *
-                        </label>
-                        <Input
-                          placeholder="121.0008"
-                          value={newReport.longitude}
-                          onChange={(e) =>
-                            setNewReport({
-                              ...newReport,
-                              longitude: e.target.value,
-                            })
-                          }
-                          disabled={isSubmitting}
-                        />
-                      </div>
-                    </div>
-
-                    <div className="text-center">
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={handleGetCurrentLocation}
-                        disabled={isSubmitting}
-                      >
-                        <MapPin className="w-4 h-4 mr-2" />
-                        Use Current Location
-                      </Button>
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <label className="text-sm font-medium mb-1 block">
-                          Pollution Type *
-                        </label>
-                        <Select
-                          value={newReport.pollutionType}
-                          onValueChange={(value) =>
-                            setNewReport({ ...newReport, pollutionType: value })
-                          }
-                          disabled={isSubmitting}
-                        >
-                          <SelectTrigger>
-                            <SelectValue placeholder="Select pollution type" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="Industrial Waste">Industrial Waste</SelectItem>
-                            <SelectItem value="Plastic Pollution">Plastic Pollution</SelectItem>
-                            <SelectItem value="Sewage Discharge">Sewage Discharge</SelectItem>
-                            <SelectItem value="Chemical Pollution">Chemical Pollution</SelectItem>
-                            <SelectItem value="Oil Spill">Oil Spill</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-
-                      <div>
-                        <label className="text-sm font-medium mb-1 block">
-                          Severity Level *
-                        </label>
-                        <Select
-                          value={newReport.severityByUser}
-                          onValueChange={(value) =>
-                            setNewReport({ ...newReport, severityByUser: value })
-                          }
-                          disabled={isSubmitting}
-                        >
-                          <SelectTrigger>
-                            <SelectValue placeholder="Select severity" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="low">Low</SelectItem>
-                            <SelectItem value="medium">Medium</SelectItem>
-                            <SelectItem value="high">High</SelectItem>
-                            <SelectItem value="critical">Critical</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-                    </div>
-
-                    <div>
-                      <label className="text-sm font-medium mb-1 block">
-                        Upload Image *
-                      </label>
-                      <div className="border-2 border-dashed border-gray-300 rounded-lg p-4 text-center">
-                        <input
-                          type="file"
-                          accept="image/*"
-                          onChange={handleImageChange}
-                          className="hidden"
-                          id="image-upload"
-                          disabled={isSubmitting}
-                        />
-                        <label
-                          htmlFor="image-upload"
-                          className="cursor-pointer flex flex-col items-center"
-                        >
-                          <UploadIcon className="w-8 h-8 text-gray-400 mb-2" />
-                          <span className="text-sm text-gray-600">
-                            {newReport.image 
-                              ? `Selected: ${newReport.image.name}`
-                              : 'Click to upload image or drag and drop'
-                            }
-                          </span>
-                          <span className="text-xs text-gray-500 mt-1">
-                            JPEG, PNG, GIF up to 5MB
-                          </span>
-                        </label>
-                      </div>
-                    </div>
-
-                    <div className="flex space-x-2 pt-4">
-                      <Button
-                        onClick={handleSubmitReport}
-                        disabled={isSubmitting || submitStatus === 'success'}
-                        className="flex-1 bg-waterbase-500 hover:bg-waterbase-600"
-                      >
-                        {isSubmitting ? (
-                          <>
-                            <div className="w-4 h-4 mr-2 animate-spin rounded-full border-2 border-white border-t-transparent" />
-                            Submitting...
-                          </>
-                        ) : (
-                          'Submit Report'
-                        )}
-                      </Button>
-                      <Button
-                        variant="outline"
-                        onClick={handleAIGenerate}
-                        disabled={isSubmitting}
-                        className="flex-1 border-enviro-300 text-enviro-700 hover:bg-enviro-50"
-                      >
-                        <Zap className="w-4 h-4 mr-1" />
-                        AI Generate (Soon)
-                      </Button>
-                    </div>
-                  </div>
-                </DialogContent>
-              </Dialog>
-
-              {!isAuthenticated && (
-                <p className="text-xs text-gray-500 mt-2 text-center">
-                  Please log in to submit a report
-                </p>
+              {newReport.image && (
+                <div className="mt-4">
+                  <img
+                    src={URL.createObjectURL(newReport.image)}
+                    alt="Preview"
+                    className="max-w-full h-auto rounded-lg"
+                  />
+                </div>
               )}
             </CardContent>
           </Card>
+          <div>
+            <Card className="border-waterbase-200">
+              <CardHeader>
+                <div className="w-12 h-12 bg-enviro-100 rounded-lg flex items-center justify-center mb-4">
+                  <Upload className="w-6 h-6 text-enviro-600" />
+                </div>
+                <CardTitle className="text-waterbase-950">
+                  Detailed Report
+                </CardTitle>
+                <CardDescription className="text-waterbase-600">
+                  Submit a comprehensive report with detailed information.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <Dialog open={showReportForm} onOpenChange={setShowReportForm}>
+                  <DialogTrigger asChild>
+                    <Button
+                      variant="outline"
+                      className="w-full border-enviro-300 text-enviro-700 hover:bg-enviro-50"
+                      disabled={!isAuthenticated}
+                    >
+                      <Upload className="w-4 h-4 mr-2" />
+                      Create Detailed Report
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+                    <DialogHeader>
+                      <DialogTitle>Report Water Pollution</DialogTitle>
+                      <DialogDescription>
+                        Submit a detailed pollution report for your area
+                      </DialogDescription>
+                    </DialogHeader>
+
+                    <div className="space-y-4">
+                      {submitStatus === 'success' && (
+                        <Alert className="border-green-200 bg-green-50">
+                          <CheckCircle className="h-4 w-4 text-green-600" />
+                          <AlertDescription className="text-green-700">
+                            Report submitted successfully! Thank you for helping protect our waterways.
+                          </AlertDescription>
+                        </Alert>
+                      )}
+
+                      {(submitStatus === 'error' || errorMessage) && (
+                        <Alert variant="destructive">
+                          <AlertCircle className="h-4 w-4" />
+                          <AlertDescription>{errorMessage}</AlertDescription>
+                        </Alert>
+                      )}
+
+                      <div>
+                        <label className="text-sm font-medium mb-1 block">
+                          Title *
+                        </label>
+                        <Input
+                          placeholder="Brief description of the pollution"
+                          value={newReport.title}
+                          onChange={(e) =>
+                            setNewReport({ ...newReport, title: e.target.value })
+                          }
+                          disabled={isSubmitting}
+                        />
+                      </div>
+
+                      <div>
+                        <label className="text-sm font-medium mb-1 block">
+                          Content *
+                        </label>
+                        <Textarea
+                          placeholder="Detailed description of what you observed..."
+                          value={newReport.content}
+                          onChange={(e) =>
+                            setNewReport({
+                              ...newReport,
+                              content: e.target.value,
+                            })
+                          }
+                          rows={3}
+                          disabled={isSubmitting}
+                        />
+                      </div>
+
+                      <div>
+                        <label className="text-sm font-medium mb-1 block">
+                          Address *
+                        </label>
+                        <SearchableSelect
+                          value={newReport.address}
+                          onValueChange={(value) =>
+                            setNewReport({
+                              ...newReport,
+                              address: value,
+                            })
+                          }
+                          placeholder="Search for region, province, city, or barangay..."
+                          disabled={isSubmitting}
+                        />
+                        <p className="text-xs text-gray-500 mt-1">
+                          Search for the specific location where pollution was observed
+                        </p>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-2">
+                        <div>
+                          <label className="text-sm font-medium mb-1 block">
+                            Latitude *
+                          </label>
+                          <Input
+                            placeholder="14.5995"
+                            value={newReport.latitude}
+                            onChange={(e) =>
+                              setNewReport({
+                                ...newReport,
+                                latitude: e.target.value,
+                              })
+                            }
+                            disabled={isSubmitting}
+                          />
+                        </div>
+                        <div>
+                          <label className="text-sm font-medium mb-1 block">
+                            Longitude *
+                          </label>
+                          <Input
+                            placeholder="121.0008"
+                            value={newReport.longitude}
+                            onChange={(e) =>
+                              setNewReport({
+                                ...newReport,
+                                longitude: e.target.value,
+                              })
+                            }
+                            disabled={isSubmitting}
+                          />
+                        </div>
+                      </div>
+
+                      <div className="text-center">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={handleGetCurrentLocation}
+                          disabled={isSubmitting}
+                        >
+                          <MapPin className="w-4 h-4 mr-2" />
+                          Use Current Location
+                        </Button>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-4">
+                        <div>
+                          <label className="text-sm font-medium mb-1 block">
+                            Pollution Type *
+                          </label>
+                          <Select
+                            value={newReport.pollutionType}
+                            onValueChange={(value) =>
+                              setNewReport({ ...newReport, pollutionType: value })
+                            }
+                            disabled={isSubmitting}
+                          >
+                            <SelectTrigger>
+                              <SelectValue placeholder="Select pollution type" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="Industrial Waste">Industrial Waste</SelectItem>
+                              <SelectItem value="Plastic Pollution">Plastic Pollution</SelectItem>
+                              <SelectItem value="Sewage Discharge">Sewage Discharge</SelectItem>
+                              <SelectItem value="Chemical Pollution">Chemical Pollution</SelectItem>
+                              <SelectItem value="Oil Spill">Oil Spill</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+
+                        <div>
+                          <label className="text-sm font-medium mb-1 block">
+                            Severity Level *
+                          </label>
+                          <Select
+                            value={newReport.severityByUser}
+                            onValueChange={(value) =>
+                              setNewReport({ ...newReport, severityByUser: value })
+                            }
+                            disabled={isSubmitting}
+                          >
+                            <SelectTrigger>
+                              <SelectValue placeholder="Select severity" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="low">Low</SelectItem>
+                              <SelectItem value="medium">Medium</SelectItem>
+                              <SelectItem value="high">High</SelectItem>
+                              <SelectItem value="critical">Critical</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </div>
+                    </div>
+                  </DialogContent>
+                </Dialog>
+
+                {!isAuthenticated && (
+                  <p className="text-xs text-gray-500 mt-2 text-center">
+                    Please log in to submit a report
+                  </p>
+                )}
+              </CardContent>
+            </Card>
+          </div>
         </div>
+
+        <div className="mt-8">
+          <Card className="border-waterbase-200">
+            <CardHeader>
+              <CardTitle className="text-waterbase-950">Submit Report</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <Button
+                onClick={handleSubmitReport}
+                disabled={!newReport.image || isSubmitting}
+                className="w-full bg-waterbase-500 hover:bg-waterbase-600"
+              >
+                {isSubmitting ? (
+                  <>
+                    <div className="w-4 h-4 mr-2 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                    Submitting...
+                  </>
+                ) : (
+                  'Submit Report'
+                )}
+              </Button>
+            </CardContent>
+          </Card>
+        </div>
+
+        {(submitStatus === 'error' || errorMessage) && !showReportForm && (
+          <div className="mt-4">
+            <Alert variant="destructive">
+              <AlertCircle className="h-4 w-4" />
+              <AlertDescription>{errorMessage}</AlertDescription>
+            </Alert>
+          </div>
+        )}
+
+        <Dialog open={showCameraModal} onOpenChange={(open) => {
+          setShowCameraModal(open);
+          if (!open) stopCamera();
+        }}>
+          <DialogContent className="max-w-4xl w-full">
+            <DialogHeader>
+              <DialogTitle>Take a Photo</DialogTitle>
+              <DialogDescription>
+                Use your camera to capture a photo of the pollution.
+              </DialogDescription>
+            </DialogHeader>
+            {cameraError ? (
+              <Alert variant="destructive">
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription>{cameraError}</AlertDescription>
+              </Alert>
+            ) : (
+              <div className="space-y-4">
+                <video ref={videoRef} autoPlay playsInline className="w-full rounded-lg" />
+                <canvas ref={canvasRef} className="hidden" />
+                <Button
+                  onClick={takePhoto}
+                  className="w-full bg-waterbase-500 hover:bg-waterbase-600"
+                >
+                  <Camera className="w-4 h-4 mr-2" />
+                  Capture Photo
+                </Button>
+              </div>
+            )}
+          </DialogContent>
+        </Dialog>
+
+        <Dialog open={showSubmitModal} onOpenChange={(open) => {
+          if (!isSubmitting) setShowSubmitModal(open);
+        }}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>
+                {submitStatus === 'success' ? 'Submission Successful' : 'Submitting Report'}
+              </DialogTitle>
+              <DialogDescription>
+                {submitStatus === 'success'
+                  ? 'Your report has been successfully submitted and verified.'
+                  : 'Please wait while we process and verify your report...'}
+              </DialogDescription>
+            </DialogHeader>
+            {isSubmitting ? (
+              <div className="text-center">
+                <div className="w-8 h-8 mx-auto animate-spin rounded-full border-4 border-waterbase-500 border-t-transparent" />
+                <p className="mt-2 text-waterbase-600">Processing...</p>
+              </div>
+            ) : submitStatus === 'success' ? (
+              <Alert className="border-green-200 bg-green-50">
+                <CheckCircle className="h-4 w-4 text-green-600" />
+                <AlertDescription className="text-green-700">
+                  Report submitted successfully! Thank you for helping protect our waterways.
+                </AlertDescription>
+              </Alert>
+            ) : (
+              <Alert variant="destructive">
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription>{errorMessage}</AlertDescription>
+              </Alert>
+            )}
+          </DialogContent>
+        </Dialog>
 
         <div className="mt-12 bg-white rounded-lg shadow-sm border border-waterbase-200 p-8">
           <h2 className="text-2xl font-bold text-waterbase-950 mb-6 text-center">
@@ -547,13 +646,13 @@ export const ReportPollution = () => {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
             <div className="text-center">
               <div className="w-16 h-16 bg-waterbase-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                <Smartphone className="w-8 h-8 text-waterbase-600" />
+                <Camera className="w-8 h-8 text-waterbase-600" />
               </div>
               <h3 className="font-semibold text-waterbase-950 mb-2">
                 1. Capture
               </h3>
               <p className="text-waterbase-600 text-sm">
-                Take photos of pollution and gather location details
+                Take photos of pollution using your device's camera
               </p>
             </div>
 
