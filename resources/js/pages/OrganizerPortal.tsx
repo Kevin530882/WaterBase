@@ -5,14 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import Navigation from "@/components/Navigation";
-import {
-    Calendar,
-    MapPin,
-    Users,
-    Loader2,
-    AlertCircle,
-    RefreshCw,
-} from "lucide-react";
+import { Calendar, MapPin, Users, Loader2, AlertCircle, RefreshCw, } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
 import { SufficientReportsTab } from "@/components/pagecomponents/organizer/SufficientReportsTab";
@@ -220,7 +213,7 @@ export const OrganizerPortal = () => {
 
         // Group reports by location (using latitude/longitude proximity)
         const locationGroups: { [key: string]: Report[] } = {};
-        const DISTANCE_THRESHOLD = 0.01; // Approximately 1km
+        const DISTANCE_THRESHOLD = 0.001; // Changed from 0.01 to 0.001 (approximately 1m instead of 1km)
 
         reports.forEach((report) => {
             console.log('Processing report:', {
@@ -228,7 +221,8 @@ export const OrganizerPortal = () => {
                 address: report.address,
                 lat: report.latitude,
                 lng: report.longitude,
-                status: report.status
+                status: report.status,
+                pollutionType: report.pollutionType
             });
 
             if (!report.latitude || !report.longitude) {
@@ -249,9 +243,17 @@ export const OrganizerPortal = () => {
                 );
                 
                 if (distance <= DISTANCE_THRESHOLD) {
-                    locationGroups[groupKey].push(report);
-                    foundGroup = true;
-                    console.log(`Added report ${report.id} to existing group at ${groupKey}`);
+                    // Additional check: only group if they're really the same incident
+                    const existingReports = locationGroups[groupKey];
+                    const shouldGroup = canGroupReports(report, existingReports[0]);
+                    
+                    if (shouldGroup) {
+                        locationGroups[groupKey].push(report);
+                        foundGroup = true;
+                        console.log(`Added report ${report.id} to existing group at ${groupKey} (distance: ${distance.toFixed(6)})`);
+                    } else {
+                        console.log(`Report ${report.id} too different from group at ${groupKey}, creating separate group`);
+                    }
                 }
             });
             
@@ -265,7 +267,7 @@ export const OrganizerPortal = () => {
 
         console.log('Location groups:', locationGroups);
 
-        // Convert groups to eligible areas (only groups with 3+ reports)
+        // Convert groups to eligible areas (only groups with 1+ reports, but show count)
         const areas: AreaReport[] = Object.entries(locationGroups)
             .filter(([_, groupReports]) => {
                 const hasEnoughReports = groupReports.length >= 1;
@@ -278,6 +280,12 @@ export const OrganizerPortal = () => {
                     new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
                 )[0];
 
+                // Create a more detailed description
+                const pollutionTypes = [...new Set(groupReports.map(r => r.pollutionType))];
+                const description = groupReports.length === 1 
+                    ? `${pollutionTypes[0]} pollution reported`
+                    : `Multiple pollution types: ${pollutionTypes.join(', ')} (${groupReports.length} reports)`;
+
                 const area = {
                     id: index + 1,
                     location: mostRecentReport.address || `Location ${lat.toFixed(4)}, ${lng.toFixed(4)}`,
@@ -285,7 +293,7 @@ export const OrganizerPortal = () => {
                     reportCount: groupReports.length,
                     severityLevel: calculateSeverityLevel(groupReports),
                     lastReported: formatDistanceToNow(new Date(mostRecentReport.created_at), { addSuffix: true }),
-                    description: `Water pollution area with ${groupReports.length} verified reports`,
+                    description,
                     estimatedCleanupEffort: estimateCleanupEffort(groupReports),
                     priority: calculatePriority(groupReports),
                     reports: groupReports,
@@ -297,6 +305,63 @@ export const OrganizerPortal = () => {
 
         console.log('Final eligible areas:', areas);
         setEligibleAreas(areas);
+    };
+
+    // Add this helper function to determine if reports should be grouped
+    const canGroupReports = (newReport: Report, existingReport: Report): boolean => {
+        console.log('Checking if reports should group:', {
+            newReport: {
+                id: newReport.id,
+                lat: newReport.latitude,
+                lng: newReport.longitude,
+                type: newReport.pollutionType,
+                date: newReport.created_at
+            },
+            existingReport: {
+                id: existingReport.id,
+                lat: existingReport.latitude,
+                lng: existingReport.longitude,
+                type: existingReport.pollutionType,
+                date: existingReport.created_at
+            }
+        });
+
+        // Calculate actual distance between coordinates
+        const latDiff = Math.abs(newReport.latitude - existingReport.latitude);
+        const lngDiff = Math.abs(newReport.longitude - existingReport.longitude);
+        const distance = Math.sqrt(latDiff * latDiff + lngDiff * lngDiff);
+        
+        console.log(`Distance between reports: ${distance.toFixed(6)} degrees`);
+        console.log(`Lat diff: ${latDiff.toFixed(6)}, Lng diff: ${lngDiff.toFixed(6)}`);
+        
+        // If coordinates are more than 0.001 degrees apart (~100m), DON'T group
+        // This prevents reports that are kilometers apart from being grouped
+        if (distance > 0.001) {
+            console.log('Reports too far apart - NOT grouping');
+            return false;
+        }
+        
+        // Same exact coordinates = definitely same location
+        if (newReport.latitude === existingReport.latitude && 
+            newReport.longitude === existingReport.longitude) {
+            console.log('Exact same coordinates - grouping');
+            return true;
+        }
+        
+        // For very close coordinates (within 100m), check other factors
+        const sameType = newReport.pollutionType === existingReport.pollutionType;
+        const timeDiff = Math.abs(
+            new Date(newReport.created_at).getTime() - new Date(existingReport.created_at).getTime()
+        );
+        const daysDiff = timeDiff / (1000 * 60 * 60 * 24);
+        
+        console.log(`Same type: ${sameType}, Days apart: ${daysDiff.toFixed(1)}`);
+        
+        // Only group if same pollution type AND within 7 days
+        const shouldGroup = sameType && daysDiff <= 7;
+        console.log(`Should group: ${shouldGroup}`);
+        
+        return shouldGroup;
     };
 
     if (isLoading) {
