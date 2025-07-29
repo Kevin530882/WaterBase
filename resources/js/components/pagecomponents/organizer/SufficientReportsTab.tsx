@@ -30,6 +30,7 @@ import {
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
     Plus,
+    Calendar,
     Gift,
     Eye,
     FileText,
@@ -186,32 +187,48 @@ export const SufficientReportsTab = ({
         }
     };
 
+    const areLocationsMatching = (
+        coord1: { lat: number; lng: number }, 
+        coord2: { lat: number; lng: number }
+    ): boolean => {
+        // Same exact coordinates
+        if (coord1.lat === coord2.lat && coord1.lng === coord2.lng) {
+            return true;
+        }
+        
+        // Very close proximity (50m tolerance)
+        const latDiff = Math.abs(coord1.lat - coord2.lat);
+        const lngDiff = Math.abs(coord1.lng - coord2.lng);
+        const distance = Math.sqrt(latDiff * latDiff + lngDiff * lngDiff);
+
+        return distance <= 0.0005; // 1m threshold
+    };
+
+    // Then replace hasExistingEvent with:
     const hasExistingEvent = (area: AreaReport) => {
         if (!createdEvents || createdEvents.length === 0) return false;
         
         return createdEvents.some(event => {
-            // Check if event location matches area location (flexible matching)
-            const eventLocation = event.address?.toLowerCase() || '';
-            const areaLocation = area.location?.toLowerCase() || '';
+            const eventCoords = { lat: event.latitude, lng: event.longitude };
+            const areaCoords = area.coordinates;
             
-            // Also check coordinates proximity (within ~100m)
-            const latDiff = Math.abs(event.latitude - area.coordinates.lat);
-            const lngDiff = Math.abs(event.longitude - area.coordinates.lng);
-            const isNearby = latDiff < 0.001 && lngDiff < 0.001; // ~100m tolerance
+            const isMatch = areLocationsMatching(eventCoords, areaCoords);
             
-            return areaLocation.includes(eventLocation) || 
-                eventLocation.includes(areaLocation) || 
-                isNearby;
+            console.log(`Event ${event.id} vs Area ${area.id}:`, {
+                eventCoords,
+                areaCoords, 
+                isMatch
+            });
+            
+            return isMatch;
         });
     };
 
     const filteredAreas = useMemo(() => {
         let areas = eligibleAreas;
         
-        // First filter out areas that already have events
-        areas = areas.filter(area => !hasExistingEvent(area));
-        
-        // Then apply urgent filter if enabled
+        // Don't filter out areas with events - show them all
+        // Just apply urgent filter if enabled
         if (showUrgentOnly) {
             areas = areas.filter(area => 
                 area.severityLevel.toLowerCase() === 'high' || 
@@ -220,11 +237,15 @@ export const SufficientReportsTab = ({
         }
         
         return areas;
-    }, [eligibleAreas, showUrgentOnly, createdEvents]);
+    }, [eligibleAreas, showUrgentOnly]);
 
     // Add statistics for areas with events
     const areasWithEvents = useMemo(() => {
         return eligibleAreas.filter(area => hasExistingEvent(area));
+    }, [eligibleAreas, createdEvents]);
+
+    const areasWithoutEvents = useMemo(() => {
+        return eligibleAreas.filter(area => !hasExistingEvent(area));
     }, [eligibleAreas, createdEvents]);
 
     return (
@@ -258,407 +279,224 @@ export const SufficientReportsTab = ({
 
             {/* Areas with Events Info */}
             {areasWithEvents.length > 0 && (
-                <Alert className="border-green-200 bg-green-50">
-                    <AlertCircle className="h-4 w-4 text-green-600" />
-                    <AlertDescription className="text-green-800">
-                        <strong>{areasWithEvents.length}</strong> area{areasWithEvents.length > 1 ? 's' : ''} already {areasWithEvents.length > 1 ? 'have' : 'has'} cleanup events scheduled and {areasWithEvents.length > 1 ? 'are' : 'is'} hidden from this list.
-                        Check the "My Events" tab to manage existing events.
-                    </AlertDescription>
-                </Alert>
-            )}
+    <Alert className="border-blue-200 bg-blue-50">
+        <AlertCircle className="h-4 w-4 text-blue-600" />
+        <AlertDescription className="text-blue-800">
+            <strong>{areasWithEvents.length}</strong> area{areasWithEvents.length > 1 ? 's' : ''} already {areasWithEvents.length > 1 ? 'have' : 'has'} cleanup events scheduled.
+            You can manage existing events in the "My Events" tab.
+        </AlertDescription>
+    </Alert>
+)}
 
-            {/* Filter Info */}
+{/* Filter Info */}
+{showUrgentOnly && (
+    <Alert className="border-red-200 bg-red-50">
+        <AlertTriangle className="h-4 w-4 text-red-600" />
+        <AlertDescription className="text-red-800">
+            Showing only areas with <strong>high</strong> or <strong>critical</strong> severity levels that require immediate attention.
+            {filteredAreas.length === 0 && " No urgent areas found."}
+        </AlertDescription>
+    </Alert>
+)}
+
+{filteredAreas.length === 0 ? (
+    <Card className="border-waterbase-200">
+        <CardContent className="p-8 text-center">
+            <FileText className="w-12 h-12 mx-auto mb-4 text-gray-400" />
+            <h3 className="text-lg font-medium text-gray-900 mb-2">
+                {showUrgentOnly ? "No Urgent Areas" : "No Eligible Areas Yet"}
+            </h3>
+            <p className="text-gray-600">
+                {showUrgentOnly 
+                    ? "No areas with high or critical severity levels found. Toggle to show all areas." 
+                    : "Areas need at least 1 verified report to be eligible for cleanup events."
+                }
+            </p>
             {showUrgentOnly && (
-                <Alert className="border-red-200 bg-red-50">
-                    <AlertTriangle className="h-4 w-4 text-red-600" />
-                    <AlertDescription className="text-red-800">
-                        Showing only areas with <strong>high</strong> or <strong>critical</strong> severity levels that require immediate attention.
-                        {filteredAreas.length === 0 && " No urgent areas found."}
-                    </AlertDescription>
-                </Alert>
+                <Button
+                    variant="outline"
+                    onClick={() => setShowUrgentOnly(false)}
+                    className="mt-4"
+                >
+                    Show All Areas
+                </Button>
             )}
+        </CardContent>
+    </Card>
+) : (
+    <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
+        {filteredAreas.map((area) => {
+            const hasEvent = hasExistingEvent(area);
+            
+            return (
+                <Card key={area.id} className={cn(
+                    "border-waterbase-200 hover:shadow-lg transition-shadow",
+                    hasEvent && "ring-2 ring-green-200 bg-green-50/50",
+                    (area.severityLevel.toLowerCase() === 'critical' || 
+                        area.severityLevel.toLowerCase() === 'high') && 
+                    showUrgentOnly && "ring-2 ring-red-200"
+                )}>
+                    <CardHeader>
+                        <div className="flex items-start justify-between">
+                            <div className="flex-1">
+                                <CardTitle className="text-lg text-waterbase-950">
+                                    {area.location}
+                                </CardTitle>
+                                <CardDescription className="mt-2">
+                                    {area.description}
+                                </CardDescription>
+                            </div>
+                            <div className="flex flex-col items-end space-y-1">
+                                <Badge
+                                    className={cn(
+                                        "text-xs",
+                                        getSeverityColor(area.severityLevel),
+                                    )}
+                                >
+                                    {area.severityLevel}
+                                </Badge>
+                                {hasEvent && (
+                                    <Badge className="bg-green-500 text-white text-xs">
+                                        Event Scheduled
+                                    </Badge>
+                                )}
+                                {(area.severityLevel.toLowerCase() === 'critical' || 
+                                    area.severityLevel.toLowerCase() === 'high') && (
+                                    <Badge variant="destructive" className="text-xs">
+                                        <AlertTriangle className="w-3 h-3 mr-1" />
+                                        Urgent
+                                    </Badge>
+                                )}
+                            </div>
+                        </div>
+                    </CardHeader>
 
-            {filteredAreas.length === 0 ? (
-                <Card className="border-waterbase-200">
-                    <CardContent className="p-8 text-center">
-                        <FileText className="w-12 h-12 mx-auto mb-4 text-gray-400" />
-                        <h3 className="text-lg font-medium text-gray-900 mb-2">
-                            {areasWithEvents.length > 0 && eligibleAreas.length > 0
-                                ? "All Areas Have Events"
-                                : showUrgentOnly 
-                                    ? "No Urgent Areas" 
-                                    : "No Eligible Areas Yet"
-                            }
-                        </h3>
-                        <p className="text-gray-600">
-                            {areasWithEvents.length > 0 && eligibleAreas.length > 0
-                                ? `Great! All ${eligibleAreas.length} eligible areas already have cleanup events scheduled. Check the "My Events" tab to manage them.`
-                                : showUrgentOnly 
-                                    ? "No areas with high or critical severity levels found. Toggle to show all areas." 
-                                    : "Areas need at least 3 verified reports to be eligible for cleanup events."
-                            }
-                        </p>
-                        {showUrgentOnly && filteredAreas.length === 0 && areasWithEvents.length === 0 && (
+                    <CardContent className="space-y-4">
+                        <div className="grid grid-cols-2 gap-4 text-sm">
+                            <div>
+                                <span className="text-gray-600">Reports:</span>
+                                <div className="font-semibold text-waterbase-950">
+                                    {area.reportCount} verified
+                                </div>
+                            </div>
+                            <div>
+                                <span className="text-gray-600">Effort:</span>
+                                <div className="font-semibold text-waterbase-950">
+                                    {area.estimatedCleanupEffort}
+                                </div>
+                            </div>
+                            <div>
+                                <span className="text-gray-600">Last Report:</span>
+                                <div className="font-semibold text-waterbase-950">
+                                    {area.lastReported}
+                                </div>
+                            </div>
+                            <div>
+                                <span className="text-gray-600">Priority:</span>
+                                <div className="font-semibold capitalize text-waterbase-950">
+                                    {area.priority}
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Action Buttons */}
+                        <div className="space-y-2">
+                            {/* Create Event Button - Different states based on existing event */}
+                            {hasEvent ? (
+                                <Button
+                                    className="w-full bg-gray-400 cursor-not-allowed"
+                                    disabled={true}
+                                >
+                                    <Calendar className="w-4 h-4 mr-2" />
+                                    Event Already Scheduled
+                                </Button>
+                            ) : (
+                                <Dialog
+                                    open={showCreateEvent && selectedArea?.id === area.id}
+                                    onOpenChange={(open) => {
+                                        setShowCreateEvent(open);
+                                        if (!open) {
+                                            setSelectedArea(null);
+                                            setEventError("");
+                                        }
+                                    }}
+                                >
+                                    <DialogTrigger asChild>
+                                        <Button
+                                            className={cn(
+                                                "w-full",
+                                                (area.severityLevel.toLowerCase() === 'critical' || 
+                                                    area.severityLevel.toLowerCase() === 'high')
+                                                    ? "bg-red-500 hover:bg-red-600 text-white"
+                                                    : "bg-waterbase-500 hover:bg-waterbase-600"
+                                            )}
+                                            onClick={() => {
+                                                setSelectedArea(area);
+                                                setShowCreateEvent(true);
+                                            }}
+                                        >
+                                            <Plus className="w-4 h-4 mr-2" />
+                                            {(area.severityLevel.toLowerCase() === 'critical' || 
+                                                area.severityLevel.toLowerCase() === 'high')
+                                                ? "Create Urgent Event"
+                                                : "Create Cleanup Event"
+                                            }
+                                        </Button>
+                                    </DialogTrigger>
+
+                                    {/* Keep your existing Dialog Content here */}
+                                    <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+                                        {/* ... existing dialog content ... */}
+                                    </DialogContent>
+                                </Dialog>
+                            )}
+
+                            {/* View Details Button */}
                             <Button
                                 variant="outline"
-                                onClick={() => setShowUrgentOnly(false)}
-                                className="mt-4"
+                                className="w-full"
+                                onClick={() => onSelectArea(area)}
                             >
-                                Show All Areas
+                                <Eye className="w-4 h-4 mr-2" />
+                                View Details ({area.reports?.length || 0} reports)
                             </Button>
-                        )}
+                        </div>
                     </CardContent>
                 </Card>
-            ) : (
-                <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
-                    {filteredAreas.map((area) => (
-                        <Card key={area.id} className={cn(
-                            "border-waterbase-200 hover:shadow-lg transition-shadow",
-                            (area.severityLevel.toLowerCase() === 'critical' || 
-                                area.severityLevel.toLowerCase() === 'high') && 
-                            showUrgentOnly && "ring-2 ring-red-200"
-                        )}>
-                            <CardHeader>
-                                <div className="flex items-start justify-between">
-                                    <div className="flex-1">
-                                        <CardTitle className="text-lg text-waterbase-950">
-                                            {area.location}
-                                        </CardTitle>
-                                        <CardDescription className="mt-2">
-                                            {area.description}
-                                        </CardDescription>
-                                    </div>
-                                    <div className="flex flex-col items-end space-y-1">
-                                        <Badge
-                                            className={cn(
-                                                "text-xs",
-                                                getSeverityColor(area.severityLevel),
-                                            )}
-                                        >
-                                            {area.severityLevel}
-                                        </Badge>
-                                        {(area.severityLevel.toLowerCase() === 'critical' || 
-                                            area.severityLevel.toLowerCase() === 'high') && (
-                                            <Badge variant="destructive" className="text-xs">
-                                                <AlertTriangle className="w-3 h-3 mr-1" />
-                                                Urgent
-                                            </Badge>
-                                        )}
-                                    </div>
-                                </div>
-                            </CardHeader>
+            );
+        })}
+    </div>
+)}
 
-                            <CardContent className="space-y-4">
-                                <div className="grid grid-cols-2 gap-4 text-sm">
-                                    <div>
-                                        <span className="text-gray-600">Reports:</span>
-                                        <div className="font-semibold text-waterbase-950">
-                                            {area.reportCount} verified
-                                        </div>
-                                    </div>
-                                    <div>
-                                        <span className="text-gray-600">Effort:</span>
-                                        <div className="font-semibold text-waterbase-950">
-                                            {area.estimatedCleanupEffort}
-                                        </div>
-                                    </div>
-                                    <div>
-                                        <span className="text-gray-600">Last Report:</span>
-                                        <div className="font-semibold text-waterbase-950">
-                                            {area.lastReported}
-                                        </div>
-                                    </div>
-                                    <div>
-                                        <span className="text-gray-600">Priority:</span>
-                                        <div className="font-semibold capitalize text-waterbase-950">
-                                            {area.priority}
-                                        </div>
-                                    </div>
-                                </div>
-
-                                {/* Action Buttons */}
-                                <div className="space-y-2">
-                                    {/* Create Event Button with Complete Dialog */}
-                                    <Dialog
-                                        open={showCreateEvent && selectedArea?.id === area.id}
-                                        onOpenChange={(open) => {
-                                            setShowCreateEvent(open);
-                                            if (!open) {
-                                                setSelectedArea(null);
-                                                setEventError("");
-                                            }
-                                        }}
-                                    >
-                                        <DialogTrigger asChild>
-                                            <Button
-                                                className={cn(
-                                                    "w-full",
-                                                    (area.severityLevel.toLowerCase() === 'critical' || 
-                                                        area.severityLevel.toLowerCase() === 'high')
-                                                        ? "bg-red-500 hover:bg-red-600 text-white"
-                                                        : "bg-waterbase-500 hover:bg-waterbase-600"
-                                                )}
-                                                onClick={() => {
-                                                    setSelectedArea(area);
-                                                    setShowCreateEvent(true);
-                                                }}
-                                            >
-                                                <Plus className="w-4 h-4 mr-2" />
-                                                {(area.severityLevel.toLowerCase() === 'critical' || 
-                                                    area.severityLevel.toLowerCase() === 'high')
-                                                    ? "Create Urgent Event"
-                                                    : "Create Cleanup Event"
-                                                }
-                                            </Button>
-                                        </DialogTrigger>
-
-                                        {/* Complete Dialog Content */}
-                                        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
-                                            <DialogHeader>
-                                                <DialogTitle>Create Cleanup Event</DialogTitle>
-                                                <DialogDescription>
-                                                    Create a new cleanup event for {selectedArea?.location}
-                                                </DialogDescription>
-                                            </DialogHeader>
-
-                                            <div className="space-y-4">
-                                                {eventError && (
-                                                    <Alert variant="destructive">
-                                                        <AlertCircle className="h-4 w-4" />
-                                                        <AlertDescription>{eventError}</AlertDescription>
-                                                    </Alert>
-                                                )}
-
-                                                <div>
-                                                    <Label htmlFor="title">Event Title *</Label>
-                                                    <Input
-                                                        id="title"
-                                                        value={newEvent.title}
-                                                        onChange={(e) =>
-                                                            setNewEvent({
-                                                                ...newEvent,
-                                                                title: e.target.value,
-                                                            })
-                                                        }
-                                                        placeholder="e.g., Manila Bay Cleanup Drive"
-                                                        disabled={isCreatingEvent}
-                                                    />
-                                                </div>
-
-                                                <div className="grid grid-cols-2 gap-4">
-                                                    <div>
-                                                        <Label htmlFor="date">Date *</Label>
-                                                        <Input
-                                                            id="date"
-                                                            type="date"
-                                                            value={newEvent.date}
-                                                            min={new Date().toISOString().split('T')[0]}
-                                                            onChange={(e) =>
-                                                                setNewEvent({
-                                                                    ...newEvent,
-                                                                    date: e.target.value,
-                                                                })
-                                                            }
-                                                            disabled={isCreatingEvent}
-                                                        />
-                                                    </div>
-                                                    <div>
-                                                        <Label htmlFor="time">Time *</Label>
-                                                        <Input
-                                                            id="time"
-                                                            type="time"
-                                                            value={newEvent.time}
-                                                            onChange={(e) =>
-                                                                setNewEvent({
-                                                                    ...newEvent,
-                                                                    time: e.target.value,
-                                                                })
-                                                            }
-                                                            disabled={isCreatingEvent}
-                                                        />
-                                                    </div>
-                                                </div>
-
-                                                <div className="grid grid-cols-2 gap-4">
-                                                    <div>
-                                                        <Label htmlFor="duration">Duration</Label>
-                                                        <Select
-                                                            value={newEvent.duration}
-                                                            onValueChange={(value) =>
-                                                                setNewEvent({
-                                                                    ...newEvent,
-                                                                    duration: value,
-                                                                })
-                                                            }
-                                                            disabled={isCreatingEvent}
-                                                        >
-                                                            <SelectTrigger>
-                                                                <SelectValue placeholder="Select duration" />
-                                                            </SelectTrigger>
-                                                            <SelectContent>
-                                                                <SelectItem value="2">2 hours</SelectItem>
-                                                                <SelectItem value="3">3 hours</SelectItem>
-                                                                <SelectItem value="4">4 hours</SelectItem>
-                                                                <SelectItem value="6">Half day</SelectItem>
-                                                                <SelectItem value="12">Full day</SelectItem>
-                                                            </SelectContent>
-                                                        </Select>
-                                                    </div>
-                                                    <div>
-                                                        <Label htmlFor="maxVolunteers">Max Volunteers *</Label>
-                                                        <Input
-                                                            id="maxVolunteers"
-                                                            type="number"
-                                                            min="1"
-                                                            value={newEvent.maxVolunteers}
-                                                            onChange={(e) =>
-                                                                setNewEvent({
-                                                                    ...newEvent,
-                                                                    maxVolunteers: e.target.value,
-                                                                })
-                                                            }
-                                                            placeholder="e.g., 20"
-                                                            disabled={isCreatingEvent}
-                                                        />
-                                                    </div>
-                                                </div>
-
-                                                <div>
-                                                    <Label htmlFor="description">Event Description</Label>
-                                                    <Textarea
-                                                        id="description"
-                                                        value={newEvent.description}
-                                                        onChange={(e) =>
-                                                            setNewEvent({
-                                                                ...newEvent,
-                                                                description: e.target.value,
-                                                            })
-                                                        }
-                                                        placeholder="Describe the cleanup event..."
-                                                        rows={3}
-                                                        disabled={isCreatingEvent}
-                                                    />
-                                                </div>
-
-                                                <div className="grid grid-cols-2 gap-4">
-                                                    <div>
-                                                        <Label htmlFor="rewardPoints">Points Reward</Label>
-                                                        <Input
-                                                            id="rewardPoints"
-                                                            type="number"
-                                                            min="0"
-                                                            value={newEvent.rewardPoints}
-                                                            onChange={(e) =>
-                                                                setNewEvent({
-                                                                    ...newEvent,
-                                                                    rewardPoints: e.target.value,
-                                                                })
-                                                            }
-                                                            placeholder="50"
-                                                            disabled={isCreatingEvent}
-                                                        />
-                                                    </div>
-                                                    <div>
-                                                        <Label htmlFor="rewardBadge">Badge Title</Label>
-                                                        <Input
-                                                            id="rewardBadge"
-                                                            value={newEvent.rewardBadge}
-                                                            onChange={(e) =>
-                                                                setNewEvent({
-                                                                    ...newEvent,
-                                                                    rewardBadge: e.target.value,
-                                                                })
-                                                            }
-                                                            placeholder="Environmental Volunteer"
-                                                            disabled={isCreatingEvent}
-                                                        />
-                                                    </div>
-                                                </div>
-
-                                                <div className="flex space-x-2 pt-4">
-                                                    <Button
-                                                        onClick={handleCreateEvent}
-                                                        className="flex-1 bg-waterbase-500 hover:bg-waterbase-600"
-                                                        disabled={isCreatingEvent}
-                                                    >
-                                                        {isCreatingEvent ? (
-                                                            <>
-                                                                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                                                                Creating...
-                                                            </>
-                                                        ) : (
-                                                            <>
-                                                                <Plus className="w-4 h-4 mr-2" />
-                                                                Create Event
-                                                            </>
-                                                        )}
-                                                    </Button>
-                                                    <Button
-                                                        variant="outline"
-                                                        onClick={() => {
-                                                            setShowCreateEvent(false);
-                                                            setSelectedArea(null);
-                                                            setEventError("");
-                                                        }}
-                                                        className="flex-1"
-                                                        disabled={isCreatingEvent}
-                                                    >
-                                                        Cancel
-                                                    </Button>
-                                                </div>
-                                            </div>
-                                        </DialogContent>
-                                    </Dialog>
-
-                                    {/* View Details Button */}
-                                    <Button
-                                        variant="outline"
-                                        className="w-full"
-                                        onClick={() => onSelectArea(area)}
-                                    >
-                                        <Eye className="w-4 h-4 mr-2" />
-                                        View Details ({area.reports?.length || 0} reports)
-                                    </Button>
-                                </div>
-                            </CardContent>
-                        </Card>
-                    ))}
-                </div>
+{/* Updated Summary Stats */}
+{eligibleAreas.length > 0 && (
+    <div className="border-t pt-4">
+        <div className="flex items-center justify-between text-sm text-gray-600">
+            <div className="flex items-center space-x-4">
+                <span>Total areas: {eligibleAreas.length}</span>
+                <span>Available for events: {areasWithoutEvents.length}</span>
+                <span className="text-green-600">With events: {areasWithEvents.length}</span>
+                <span className="text-red-600">
+                    Urgent: {filteredAreas.filter(area => 
+                        area.severityLevel.toLowerCase() === 'high' || 
+                        area.severityLevel.toLowerCase() === 'critical'
+                    ).length}
+                </span>
+            </div>
+            {showUrgentOnly && (
+                <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setShowUrgentOnly(false)}
+                    className="text-waterbase-600 hover:text-waterbase-800"
+                >
+                    <Filter className="w-4 h-4 mr-1" />
+                    View all areas
+                </Button>
             )}
-
-            {/* Summary Stats */}
-            {eligibleAreas.length > 0 && (
-                <div className="border-t pt-4">
-                    <div className="flex items-center justify-between text-sm text-gray-600">
-                        <div className="flex items-center space-x-4">
-                            <span>Total eligible: {eligibleAreas.length}</span>
-                            <span>Available: {filteredAreas.length}</span>
-                            {areasWithEvents.length > 0 && (
-                                <span className="text-green-600">
-                                    With events: {areasWithEvents.length}
-                                </span>
-                            )}
-                            <span className="text-red-600">
-                                Urgent available: {filteredAreas.filter(area => 
-                                    area.severityLevel.toLowerCase() === 'high' || 
-                                    area.severityLevel.toLowerCase() === 'critical'
-                                ).length}
-                            </span>
-                        </div>
-                        {showUrgentOnly && (
-                            <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => setShowUrgentOnly(false)}
-                                className="text-waterbase-600 hover:text-waterbase-800"
-                            >
-                                <Filter className="w-4 h-4 mr-1" />
-                                View all {filteredAreas.length} available areas
-                            </Button>
-                        )}
-                    </div>
-                </div>
-            )}
+        </div>
+    </div>
+)}
         </div>
     )
 }

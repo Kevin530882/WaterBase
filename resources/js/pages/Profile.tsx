@@ -1,381 +1,346 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
-import {
-Card,
-CardContent,
-CardDescription,
-CardHeader,
-CardTitle,
-} from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import Navigation from "@/components/Navigation";
-import {
-User,
-Settings,
-Camera,
-MapPin,
-Award,
-BarChart3,
-Bell,
-Shield,
-Edit,
-} from "lucide-react";
+import { User, Camera, MapPin, Award, FileText, Calendar, Users, BarChart3, Star } from "lucide-react";
+import { RecentActivity } from "@/components/pagecomponents/RecentActivity";
+import { Setting } from "@/components/pagecomponents/Setting";
+import { Notification } from "@/components/pagecomponents/Notification";
+import { useAuth } from "@/contexts/AuthContext";
+
+interface UserStats {
+    reportsSubmitted?: number;
+    reportsVerified?: number;
+    eventsJoined?: number;
+    eventsCreated?: number;
+    eventsCompleted?: number;
+    badgesEarned?: number;
+    volunteersManaged?: number;
+    dataAnalyzed?: number;
+    researchPublished?: number;
+    communityPoints?: number;
+    accuracyRate?: number;
+    badges?: string[];
+}
 
 export const Profile = () => {
-const [isEditing, setIsEditing] = useState(false);
-const [profileData, setProfileData] = useState({
-    firstName: "Maria",
-    lastName: "Santos",
-    email: "maria.santos@example.com",
-    phone: "+63 912 345 6789",
-    organization: "Environmental Watch PH",
-    bio: "Environmental advocate passionate about protecting Philippine waterways.",
-    location: "Quezon City, Metro Manila",
-});
+    const { user, token } = useAuth();
+    const [profileData, setProfileData] = useState({
+        firstName: user?.firstName || "",
+        lastName: user?.lastName || "",
+        email: user?.email || "",
+        phoneNumber: user?.phoneNumber || "",
+        organization: user?.organization || "",
+        areaOfResponsibility: user?.areaOfResponsibility || "",
+    });
 
-const userStats = {
-    reportsSubmitted: 23,
-    reportsVerified: 21,
-    communityRank: "Environmental Champion",
-    joinDate: "January 2024",
-};
+    const [userStats, setUserStats] = useState<UserStats>({});
+    const [isLoading, setIsLoading] = useState(true);
 
-const recentActivity = [
-    {
-    type: "report",
-    description: "Submitted pollution report for Pasig River",
-    date: "2 days ago",
-    status: "verified",
-    },
-    {
-    type: "cleanup",
-    description: "Participated in Manila Bay cleanup event",
-    date: "1 week ago",
-    status: "completed",
-    },
-    {
-    type: "achievement",
-    description: "Earned 'Water Guardian' badge",
-    date: "2 weeks ago",
-    status: "achieved",
-    },
-];
+    useEffect(() => {
+        if (user && token) {
+            fetchUserStats();
+        }
+    }, [user, token]);
 
-return (
-    <div className="min-h-screen bg-gradient-to-br from-waterbase-50 to-enviro-50">
-    <Navigation />
+    const fetchUserStats = async () => {
+        try {
+            setIsLoading(true);
+            
+            // Use single endpoint for all roles
+            const response = await fetch('/api/user/stats', {
+                headers: { Authorization: `Bearer ${token}` }
+            });
+            
+            if (response.ok) {
+                const stats = await response.json();
+                setUserStats(stats);
+            } else {
+                console.error('Failed to fetch stats');
+            }
+        } catch (error) {
+            console.error('Error fetching user stats:', error);
+        } finally {
+            setIsLoading(false);
+        }
+    };
 
-    <div className="max-w-4xl mx-auto py-8 px-4 sm:px-6 lg:px-8">
-        {/* Profile Header */}
-        <Card className="border-waterbase-200 mb-6">
-        <CardContent className="p-6">
-            <div className="flex items-start space-x-6">
-            <div className="relative">
-                <Avatar className="w-24 h-24">
-                <AvatarImage src="/placeholder-avatar.jpg" />
-                <AvatarFallback className="bg-waterbase-100 text-waterbase-700 text-xl">
-                    {profileData.firstName[0]}
-                    {profileData.lastName[0]}
-                </AvatarFallback>
-                </Avatar>
-                <Button
-                size="icon"
-                variant="outline"
-                className="absolute -bottom-2 -right-2 h-8 w-8 rounded-full"
-                >
-                <Camera className="w-4 h-4" />
-                </Button>
-            </div>
+    const handleProfileUpdate = (updatedData: any) => {
+        setProfileData(updatedData);
+    };
 
-            <div className="flex-1">
-                <div className="flex items-center justify-between mb-2">
-                <h1 className="text-2xl font-bold text-waterbase-950">
-                    {profileData.firstName} {profileData.lastName}
-                </h1>
-                <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setIsEditing(!isEditing)}
-                >
-                    <Edit className="w-4 h-4 mr-2" />
-                    {isEditing ? "Cancel" : "Edit Profile"}
-                </Button>
-                </div>
+    const getBadgeIcon = (badgeName: string) => {
+        const name = badgeName?.toLowerCase() || '';
+        
+        if (name.includes('water') || name.includes('clean')) {
+            return '💧';
+        } else if (name.includes('eco') || name.includes('green')) {
+            return '🌱';
+        } else if (name.includes('champion') || name.includes('hero')) {
+            return '🏆';
+        } else if (name.includes('guardian') || name.includes('protector')) {
+            return '🛡️';
+        } else if (name.includes('volunteer') || name.includes('helper')) {
+            return '🤝';
+        } else if (name.includes('leader') || name.includes('captain')) {
+            return '⭐';
+        }
+        return '🏅'; // Default badge icon
+    };
 
-                <div className="flex items-center space-x-4 text-sm text-waterbase-600 mb-3">
-                <div className="flex items-center space-x-1">
-                    <MapPin className="w-4 h-4" />
-                    <span>{profileData.location}</span>
-                </div>
-                <div className="flex items-center space-x-1">
-                    <User className="w-4 h-4" />
-                    <span>{profileData.organization}</span>
-                </div>
-                </div>
+    const renderStatsCards = () => {
+        const role = user?.role?.toLowerCase() || 'volunteer';
+        const showCommunityPoints = !['lgu', 'ngo', 'researcher'].includes(role);
 
-                <p className="text-waterbase-700 mb-4">{profileData.bio}</p>
-
-                <div className="flex items-center space-x-3">
-                <Badge className="bg-enviro-100 text-enviro-800">
-                    <Award className="w-3 h-3 mr-1" />
-                    {userStats.communityRank}
-                </Badge>
-                <Badge variant="outline">
-                    Member since {userStats.joinDate}
-                </Badge>
-                </div>
-            </div>
-            </div>
-        </CardContent>
-        </Card>
-
-        {/* Stats Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-        <Card className="border-waterbase-200">
-            <CardContent className="p-4 text-center">
-            <div className="text-2xl font-bold text-waterbase-950">
-                {userStats.reportsSubmitted}
-            </div>
-            <div className="text-sm text-waterbase-600">
-                Reports Submitted
-            </div>
-            </CardContent>
-        </Card>
-
-        <Card className="border-waterbase-200">
-            <CardContent className="p-4 text-center">
-            <div className="text-2xl font-bold text-enviro-700">
-                {userStats.reportsVerified}
-            </div>
-            <div className="text-sm text-waterbase-600">Reports Verified</div>
-            </CardContent>
-        </Card>
-
-        <Card className="border-waterbase-200">
-            <CardContent className="p-4 text-center">
-            <div className="text-2xl font-bold text-waterbase-950">91%</div>
-            <div className="text-sm text-waterbase-600">Accuracy Rate</div>
-            </CardContent>
-        </Card>
-
-        <Card className="border-waterbase-200">
-            <CardContent className="p-4 text-center">
-            <div className="text-2xl font-bold text-enviro-700">156</div>
-            <div className="text-sm text-waterbase-600">Community Points</div>
-            </CardContent>
-        </Card>
-        </div>
-
-        {/* Tabbed Content */}
-        <Tabs defaultValue="activity" className="space-y-4">
-        <TabsList className="grid w-full grid-cols-4">
-            <TabsTrigger value="activity">Recent Activity</TabsTrigger>
-            <TabsTrigger value="settings">Account Settings</TabsTrigger>
-            <TabsTrigger value="notifications">Notifications</TabsTrigger>
-            <TabsTrigger value="privacy">Privacy & Security</TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="activity">
-            <Card className="border-waterbase-200">
-            <CardHeader>
-                <CardTitle className="text-waterbase-950">
-                Recent Activity
-                </CardTitle>
-                <CardDescription className="text-waterbase-600">
-                Your latest contributions to the WaterBase community
-                </CardDescription>
-            </CardHeader>
-            <CardContent>
-                <div className="space-y-4">
-                {recentActivity.map((activity, index) => (
-                    <div
-                    key={index}
-                    className="flex items-center space-x-4 p-3 bg-waterbase-50 rounded-lg"
-                    >
-                    <div className="w-10 h-10 bg-waterbase-100 rounded-full flex items-center justify-center">
-                        {activity.type === "report" && (
-                        <Camera className="w-5 h-5 text-waterbase-600" />
-                        )}
-                        {activity.type === "cleanup" && (
-                        <MapPin className="w-5 h-5 text-enviro-600" />
-                        )}
-                        {activity.type === "achievement" && (
-                        <Award className="w-5 h-5 text-yellow-600" />
-                        )}
-                    </div>
-                    <div className="flex-1">
-                        <p className="text-sm font-medium text-waterbase-950">
-                        {activity.description}
-                        </p>
-                        <p className="text-xs text-waterbase-600">
-                        {activity.date}
-                        </p>
-                    </div>
-                    <Badge
-                        variant={
-                        activity.status === "verified" ||
-                        activity.status === "completed" ||
-                        activity.status === "achieved"
-                            ? "default"
-                            : "secondary"
+        const getStatsConfig = () => {
+            switch (role) {
+                case 'volunteer':
+                    return [
+                        {
+                            icon: <FileText className="w-6 h-6 text-waterbase-600" />,
+                            value: userStats.reportsSubmitted || 0,
+                            label: "Reports Submitted"
+                        },
+                        {
+                            icon: <Calendar className="w-6 h-6 text-enviro-600" />,
+                            value: userStats.eventsJoined || 0,
+                            label: "Events Joined"
+                        },
+                        {
+                            icon: <Star className="w-6 h-6 text-yellow-600" />,
+                            value: userStats.badgesEarned || 0,
+                            label: "Badges Earned"
+                        },
+                        {
+                            icon: <Award className="w-6 h-6 text-purple-600" />,
+                            value: userStats.communityPoints || 0,
+                            label: "Community Points"
                         }
-                        className="text-xs"
-                    >
-                        {activity.status}
-                    </Badge>
+                    ];
+                
+                case 'ngo':
+                case 'lgu':
+                    return [
+                        {
+                            icon: <Calendar className="w-6 h-6 text-waterbase-600" />,
+                            value: userStats.eventsCreated || 0,
+                            label: "Events Created"
+                        },
+                        {
+                            icon: <Award className="w-6 h-6 text-enviro-600" />,
+                            value: userStats.eventsCompleted || 0,
+                            label: "Events Completed"
+                        },
+                        {
+                            icon: <Users className="w-6 h-6 text-purple-600" />,
+                            value: userStats.volunteersManaged || 0,
+                            label: "Volunteers Managed"
+                        },
+                        {
+                            icon: <BarChart3 className="w-6 h-6 text-blue-600" />,
+                            value: `${userStats.accuracyRate || 0}%`,
+                            label: "Success Rate"
+                        }
+                    ];
+                
+                case 'researcher':
+                    return [
+                        {
+                            icon: <BarChart3 className="w-6 h-6 text-waterbase-600" />,
+                            value: userStats.dataAnalyzed || 0,
+                            label: "Data Sets Analyzed"
+                        },
+                        {
+                            icon: <FileText className="w-6 h-6 text-enviro-600" />,
+                            value: userStats.researchPublished || 0,
+                            label: "Research Published"
+                        },
+                        {
+                            icon: <Award className="w-6 h-6 text-yellow-600" />,
+                            value: userStats.reportsSubmitted || 0,
+                            label: "Reports Submitted"
+                        },
+                        {
+                            icon: <BarChart3 className="w-6 h-6 text-blue-600" />,
+                            value: `${userStats.accuracyRate || 0}%`,
+                            label: "Accuracy Rate"
+                        }
+                    ];
+                
+                default:
+                    return [
+                        {
+                            icon: <FileText className="w-6 h-6 text-waterbase-600" />,
+                            value: userStats.reportsSubmitted || 0,
+                            label: "Reports Submitted"
+                        },
+                        {
+                            icon: <Award className="w-6 h-6 text-purple-600" />,
+                            value: userStats.communityPoints || 0,
+                            label: "Community Points"
+                        }
+                    ];
+            }
+        };
+
+        return getStatsConfig().map((stat, index) => (
+            <Card key={index} className="border-waterbase-200">
+                <CardContent className="p-4 text-center">
+                    <div className="flex items-center justify-center mb-2">
+                        {stat.icon}
                     </div>
-                ))}
-                </div>
-            </CardContent>
+                    <div className="text-2xl font-bold text-waterbase-950">
+                        {stat.value}
+                    </div>
+                    <div className="text-sm text-waterbase-600">
+                        {stat.label}
+                    </div>
+                </CardContent>
             </Card>
-        </TabsContent>
+        ));
+    };
 
-        <TabsContent value="settings">
-            <Card className="border-waterbase-200">
-            <CardHeader>
-                <CardTitle className="text-waterbase-950">
-                Account Settings
-                </CardTitle>
-                <CardDescription className="text-waterbase-600">
-                Update your profile information and preferences
-                </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-                <div className="grid grid-cols-2 gap-4">
-                <div>
-                    <Label htmlFor="firstName">First Name</Label>
-                    <Input
-                    id="firstName"
-                    value={profileData.firstName}
-                    disabled={!isEditing}
-                    onChange={(e) =>
-                        setProfileData({
-                        ...profileData,
-                        firstName: e.target.value,
-                        })
-                    }
-                    />
-                </div>
-                <div>
-                    <Label htmlFor="lastName">Last Name</Label>
-                    <Input
-                    id="lastName"
-                    value={profileData.lastName}
-                    disabled={!isEditing}
-                    onChange={(e) =>
-                        setProfileData({
-                        ...profileData,
-                        lastName: e.target.value,
-                        })
-                    }
-                    />
-                </div>
+    return (
+        <div className="min-h-screen bg-gradient-to-br from-waterbase-50 to-enviro-50">
+            <Navigation />
+
+            <div className="max-w-4xl mx-auto py-8 px-4 sm:px-6 lg:px-8">
+                {/* Profile Header */}
+                <Card className="border-waterbase-200 mb-6">
+                    <CardContent className="p-6">
+                        <div className="flex items-start space-x-6">
+                            <div className="relative">
+                                <Avatar className="w-24 h-24">
+                                    <AvatarImage src="/placeholder-avatar.jpg" />
+                                    <AvatarFallback className="bg-waterbase-100 text-waterbase-700 text-xl">
+                                        {profileData.firstName[0] || 'U'}
+                                        {profileData.lastName[0] || 'U'}
+                                    </AvatarFallback>
+                                </Avatar>
+                                <Button
+                                    size="icon"
+                                    variant="outline"
+                                    className="absolute -bottom-2 -right-2 h-8 w-8 rounded-full"
+                                >
+                                    <Camera className="w-4 h-4" />
+                                </Button>
+                            </div>
+
+                            <div className="flex-1">
+                                <h1 className="text-2xl font-bold text-waterbase-950">
+                                    {profileData.firstName} {profileData.lastName}
+                                </h1>
+                                <div className="flex items-center space-x-4 text-sm text-waterbase-600 mb-3">
+                                    {profileData.areaOfResponsibility && (
+                                        <div className="flex items-center space-x-1">
+                                            <MapPin className="w-4 h-4" />
+                                            <span>{profileData.areaOfResponsibility}</span>
+                                        </div>
+                                    )}
+                                    {profileData.organization && (
+                                        <div className="flex items-center space-x-1">
+                                            <User className="w-4 h-4" />
+                                            <span>{profileData.organization}</span>
+                                        </div>
+                                    )}
+                                </div>
+
+                                <div className="flex items-center space-x-3 mb-3">
+                                    <Badge variant="outline">
+                                        {user?.role?.toUpperCase() || 'VOLUNTEER'} Role
+                                    </Badge>
+                                    <Badge variant="outline">
+                                        Member since {new Date(user?.created_at || Date.now()).toLocaleDateString('en-US', { 
+                                            year: 'numeric', 
+                                            month: 'long' 
+                                        })}
+                                    </Badge>
+                                </div>
+
+                                {/* Badges Display */}
+                                {userStats.badges && userStats.badges.length > 0 && (
+                                    <div className="flex items-center space-x-2">
+                                        <span className="text-sm font-medium text-waterbase-700">Badges:</span>
+                                        <div className="flex space-x-1">
+                                            {userStats.badges.slice(0, 5).map((badge, index) => (
+                                                <Tooltip key={index}>
+                                                    <TooltipTrigger>
+                                                        <div className="flex items-center justify-center w-8 h-8 bg-gradient-to-br from-yellow-100 to-yellow-200 rounded-full border-2 border-yellow-300 text-lg hover:scale-110 transition-transform cursor-pointer">
+                                                            {getBadgeIcon(badge)}
+                                                        </div>
+                                                    </TooltipTrigger>
+                                                    <TooltipContent>
+                                                        <p className="font-medium">{badge}</p>
+                                                    </TooltipContent>
+                                                </Tooltip>
+                                            ))}
+                                            {userStats.badges.length > 5 && (
+                                                <Tooltip>
+                                                    <TooltipTrigger>
+                                                        <div className="flex items-center justify-center w-8 h-8 bg-gradient-to-br from-gray-100 to-gray-200 rounded-full border-2 border-gray-300 text-xs font-bold text-gray-600 hover:scale-110 transition-transform cursor-pointer">
+                                                            +{userStats.badges.length - 5}
+                                                        </div>
+                                                    </TooltipTrigger>
+                                                    <TooltipContent>
+                                                        <div className="max-w-xs">
+                                                            <p className="font-medium mb-2">All Badges:</p>
+                                                            <div className="grid grid-cols-2 gap-1 text-sm">
+                                                                {userStats.badges.map((badge, index) => (
+                                                                    <div key={index} className="flex items-center space-x-1">
+                                                                        <span>{getBadgeIcon(badge)}</span>
+                                                                        <span>{badge}</span>
+                                                                    </div>
+                                                                ))}
+                                                            </div>
+                                                        </div>
+                                                    </TooltipContent>
+                                                </Tooltip>
+                                            )}
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    </CardContent>
+                </Card>
+
+                {/* Stats Cards */}
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+                    {isLoading ? (
+                        // Loading skeleton
+                        Array.from({ length: 4 }).map((_, i) => (
+                            <Card key={i} className="border-waterbase-200">
+                                <CardContent className="p-4 text-center">
+                                    <div className="animate-pulse">
+                                        <div className="w-6 h-6 bg-gray-300 rounded mx-auto mb-2"></div>
+                                        <div className="w-8 h-6 bg-gray-300 rounded mx-auto mb-2"></div>
+                                        <div className="w-16 h-4 bg-gray-300 rounded mx-auto"></div>
+                                    </div>
+                                </CardContent>
+                            </Card>
+                        ))
+                    ) : (
+                        renderStatsCards()
+                    )}
                 </div>
 
-                <div>
-                <Label htmlFor="email">Email Address</Label>
-                <Input
-                    id="email"
-                    type="email"
-                    value={profileData.email}
-                    disabled={!isEditing}
-                    onChange={(e) =>
-                    setProfileData({ ...profileData, email: e.target.value })
-                    }
-                />
-                </div>
+                {/* Tabbed Content */}
+                <Tabs defaultValue="activity" className="space-y-3">
+                    <TabsList className="grid w-full grid-cols-3">
+                        <TabsTrigger value="activity">Recent Activity</TabsTrigger>
+                        <TabsTrigger value="notifications">Notifications</TabsTrigger>
+                        <TabsTrigger value="settings">Settings</TabsTrigger>
+                    </TabsList>
 
-                <div>
-                <Label htmlFor="bio">Bio</Label>
-                <Textarea
-                    id="bio"
-                    value={profileData.bio}
-                    disabled={!isEditing}
-                    onChange={(e) =>
-                    setProfileData({ ...profileData, bio: e.target.value })
-                    }
-                />
-                </div>
-
-                {isEditing && (
-                <div className="flex space-x-2">
-                    <Button className="bg-waterbase-500 hover:bg-waterbase-600">
-                    Save Changes
-                    </Button>
-                    <Button
-                    variant="outline"
-                    onClick={() => setIsEditing(false)}
-                    >
-                    Cancel
-                    </Button>
-                </div>
-                )}
-            </CardContent>
-            </Card>
-        </TabsContent>
-
-        <TabsContent value="notifications">
-            <Card className="border-waterbase-200">
-            <CardHeader>
-                <CardTitle className="text-waterbase-950">
-                Notification Settings
-                </CardTitle>
-                <CardDescription className="text-waterbase-600">
-                Manage how you receive updates and alerts
-                </CardDescription>
-            </CardHeader>
-            <CardContent>
-                <div className="space-y-4">
-                <div className="p-4 bg-waterbase-50 rounded-lg">
-                    <Bell className="w-6 h-6 text-waterbase-600 mb-2" />
-                    <h4 className="font-medium text-waterbase-950 mb-2">
-                    Notification preferences coming soon
-                    </h4>
-                    <p className="text-sm text-waterbase-600">
-                    You'll be able to customize email alerts, push
-                    notifications, and SMS updates for report status changes,
-                    community events, and cleanup initiatives.
-                    </p>
-                </div>
-                </div>
-            </CardContent>
-            </Card>
-        </TabsContent>
-
-        <TabsContent value="privacy">
-            <Card className="border-waterbase-200">
-            <CardHeader>
-                <CardTitle className="text-waterbase-950">
-                Privacy & Security
-                </CardTitle>
-                <CardDescription className="text-waterbase-600">
-                Control your data and account security
-                </CardDescription>
-            </CardHeader>
-            <CardContent>
-                <div className="space-y-4">
-                <div className="p-4 bg-waterbase-50 rounded-lg">
-                    <Shield className="w-6 h-6 text-waterbase-600 mb-2" />
-                    <h4 className="font-medium text-waterbase-950 mb-2">
-                    Privacy controls coming soon
-                    </h4>
-                    <p className="text-sm text-waterbase-600">
-                    Advanced privacy settings including data export, account
-                    deletion, visibility controls, and two-factor
-                    authentication will be available here.
-                    </p>
-                </div>
-                </div>
-            </CardContent>
-            </Card>
-        </TabsContent>
-        </Tabs>
-    </div>
-    </div>
-);
+                    <RecentActivity />
+                    <Notification />
+                    <Setting onProfileUpdate={handleProfileUpdate} />
+                </Tabs>
+            </div>
+        </div>
+    );
 };
