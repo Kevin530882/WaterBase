@@ -25,12 +25,21 @@ class Report extends Model
         'barangay_name',
         'report_group_id',
         'geocoded_at',
+        'verification_status',
+        'verification_confidence',
+        'verification_notes',
+        'geocoded_address',
+        'address_similarity',
+        'coordinate_distance',
+        'verification_at',
     ];
 
     protected $casts = [
         'latitude' => 'decimal:8',
         'longitude' => 'decimal:8',
+        'address_similarity' => 'decimal:3',
         'geocoded_at' => 'datetime',
+        'verification_at' => 'datetime',
     ];
 
     public function user(): BelongsTo

@@ -7,6 +7,7 @@ use App\Http\Controllers\EventController;
 use App\Http\Controllers\ReportController;
 use App\Http\Controllers\DetectPollutionController;
 use App\Http\Controllers\ReportLocationController;
+use App\Http\Controllers\AddressVerificationController;
 
 Route::post('/login', [UserController::class, 'login']);
 Route::post('/register', [UserController::class, 'register']);
@@ -24,6 +25,11 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::patch('/reports/{report}/status', [ReportController::class, 'updateStatus']);
     Route::patch('/reports/bulk-status', [ReportController::class, 'bulkUpdateStatus']);
     Route::get('/reports/area/{area}', [ReportController::class, 'getReportsByArea']);
+
+    // Address verification test routes
+    Route::post('/address/verify', [AddressVerificationController::class, 'testVerification']);
+    Route::post('/address/reverse-geocode', [AddressVerificationController::class, 'testReverseGeocode']);
+    Route::post('/address/forward-geocode', [AddressVerificationController::class, 'testForwardGeocode']);
 
     Route::get('/user', function (Request $request) {
         return $request->user();

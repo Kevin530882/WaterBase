@@ -29,7 +29,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Camera, MapPin, Upload } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
-import { SearchableSelect } from "@/components/pagecomponents/searchable-select";
+import { OpenStreetMapSearchableSelect } from "@/components/pagecomponents/openstreetmap-searchable-select";
 import piexif from "piexifjs";
 
 export const ReportPollution = () => {
@@ -134,13 +134,60 @@ export const ReportPollution = () => {
 
   const convertImageToBase64 = (file) => {
     return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => {
-        if (reader.result) {
-          resolve(reader.result);
+      // Check file size first (limit to 10MB)
+      if (file.size > 10 * 1024 * 1024) {
+        reject(new Error('Image file too large. Please select an image smaller than 10MB.'));
+        return;
+      }
+
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+      const img = new Image();
+
+      img.onload = () => {
+        // Calculate new dimensions (max 1024x768)
+        const MAX_WIDTH = 1024;
+        const MAX_HEIGHT = 768;
+        let { width, height } = img;
+
+        if (width > height) {
+          if (width > MAX_WIDTH) {
+            height = (height * MAX_WIDTH) / width;
+            width = MAX_WIDTH;
+          }
         } else {
-          reject(new Error('Failed to convert image'));
+          if (height > MAX_HEIGHT) {
+            width = (width * MAX_HEIGHT) / height;
+            height = MAX_HEIGHT;
+          }
         }
+
+        // Set canvas dimensions
+        canvas.width = width;
+        canvas.height = height;
+
+        // Draw and compress image
+        ctx.drawImage(img, 0, 0, width, height);
+
+        // Convert to base64 with compression (0.6 quality = 60%)
+        const compressedBase64 = canvas.toDataURL('image/jpeg', 0.6);
+
+        // Check if compressed size is still too large
+        const compressedSize = compressedBase64.length * 0.75; // Estimate binary size
+        if (compressedSize > 5 * 1024 * 1024) { // 5MB limit after compression
+          reject(new Error('Image is too large even after compression. Please use a smaller image.'));
+          return;
+        }
+
+        resolve(compressedBase64);
+      };
+
+      img.onerror = () => reject(new Error('Failed to load image'));
+
+      // Read file as data URL to load into image element
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        img.src = e.target?.result as string;
       };
       reader.onerror = () => reject(new Error('Failed to read file'));
       reader.readAsDataURL(file);
@@ -176,19 +223,19 @@ export const ReportPollution = () => {
       setErrorMessage('Image is required');
       return false;
     }
-    
+
     const lat = parseFloat(newReport.latitude);
     const lng = parseFloat(newReport.longitude);
     if (isNaN(lat) || isNaN(lng)) {
       setErrorMessage('Please enter valid latitude and longitude values');
       return false;
     }
-    
+
     if (lat < -90 || lat > 90 || lng < -180 || lng > 180) {
       setErrorMessage('Please enter valid coordinate values');
       return false;
     }
-    
+
     return true;
   };
 
@@ -308,7 +355,7 @@ export const ReportPollution = () => {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <Button 
+              <Button
                 className="w-full bg-waterbase-500 hover:bg-waterbase-600"
                 onClick={() => setShowCameraModal(true)}
               >
@@ -412,29 +459,31 @@ export const ReportPollution = () => {
                         <label className="text-sm font-medium mb-1 block">
                           Address *
                         </label>
-                        <SearchableSelect
+                        <OpenStreetMapSearchableSelect
                           value={newReport.address}
-                          onValueChange={(value) =>
+                          onValueChange={(address: string, coordinates?: { lat: number; lng: number }) => {
                             setNewReport({
                               ...newReport,
-                              address: value,
-                            })
-                          }
-                          placeholder="Search for region, province, city, or barangay..."
+                              address,
+                              latitude: coordinates?.lat.toString() || newReport.latitude,
+                              longitude: coordinates?.lng.toString() || newReport.longitude,
+                            });
+                          }}
+                          placeholder="Search for barangay, city, or province in Philippines..."
                           disabled={isSubmitting}
                         />
                         <p className="text-xs text-gray-500 mt-1">
-                          Search for the specific location where pollution was observed
+                          Search for the specific location where pollution was observed. Coordinates will be auto-filled.
                         </p>
                       </div>
 
                       <div className="grid grid-cols-2 gap-2">
                         <div>
                           <label className="text-sm font-medium mb-1 block">
-                            Latitude *
+                            Latitude * {newReport.latitude && <span className="text-green-600 text-xs">(Auto-filled)</span>}
                           </label>
                           <Input
-                            placeholder="14.5995"
+                            placeholder="14.5995 (will auto-fill from address)"
                             value={newReport.latitude}
                             onChange={(e) =>
                               setNewReport({
@@ -447,10 +496,10 @@ export const ReportPollution = () => {
                         </div>
                         <div>
                           <label className="text-sm font-medium mb-1 block">
-                            Longitude *
+                            Longitude * {newReport.longitude && <span className="text-green-600 text-xs">(Auto-filled)</span>}
                           </label>
                           <Input
-                            placeholder="121.0008"
+                            placeholder="121.0008 (will auto-fill from address)"
                             value={newReport.longitude}
                             onChange={(e) =>
                               setNewReport({
