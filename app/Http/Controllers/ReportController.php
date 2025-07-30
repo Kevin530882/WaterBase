@@ -14,21 +14,21 @@ class ReportController extends Controller
     public function index(Request $request)
     {
         $user = $request->user();
-    
+
         \Log::info('Reports index called', [
             'user_id' => $user->id,
             'user_role' => $user->role,
             'user_area' => $user->areaOfResponsibility ?? 'none'
         ]);
-        
+
         // For now, let's return ALL reports to debug
         $reports = Report::with(['user:id,firstName,lastName,email'])
-                        ->orderBy('created_at', 'desc')
-                        ->get();
-        
+            ->orderBy('created_at', 'desc')
+            ->get();
+
         \Log::info('Found reports', [
             'count' => $reports->count(),
-            'first_few' => $reports->take(3)->map(function($report) {
+            'first_few' => $reports->take(3)->map(function ($report) {
                 return [
                     'id' => $report->id,
                     'address' => $report->address,
@@ -38,27 +38,27 @@ class ReportController extends Controller
                 ];
             })->toArray()
         ]);
-        
+
         return response()->json($reports);
     }
 
     public function store(Request $request)
     {
         $reportsValidated = $request->validate([
-            'title'=> 'required|string|max:255|min:1',
-            'content'=> 'required|string',
-            'address'=> 'required|string',
-            'latitude'=> 'required|numeric',
-            'longitude'=> 'required|numeric',
-            'pollutionType'=> 'required|string',
-            'status'=> ['required', new enum(ReportStatus::class)],
-            'image'=> 'required|string',
-            'severityByUser'=> ['required', new enum(SeverityLevel::class)],
-            'user_id'=> 'required|integer',
+            'title' => 'required|string|max:255|min:1',
+            'content' => 'required|string',
+            'address' => 'required|string',
+            'latitude' => 'required|numeric',
+            'longitude' => 'required|numeric',
+            'pollutionType' => 'required|string',
+            'status' => ['required', new enum(ReportStatus::class)],
+            'image' => 'required|string',
+            'severityByUser' => ['required', new enum(SeverityLevel::class)],
+            'user_id' => 'required|integer',
         ]);
 
-            Report::create($reportsValidated);
-            return response()->json(['success'=> 'Report Created Successfully'], 200);
+        Report::create($reportsValidated);
+        return response()->json(['success' => 'Report Created Successfully'], 200);
     }
 
     public function show(string $id)
@@ -76,20 +76,20 @@ class ReportController extends Controller
         try {
             $report = Report::findOrFail($id);
             $reportsValidated = $request->validate([
-                'title'=> 'required|string|max:255|min:1',
-                'content'=> 'required|string',
-                'address'=> 'required|string',
-                'latitude'=> 'required|numeric',
-                'longitude'=> 'required|numeric',
-                'pollutionType'=> 'required|string',
-                'status'=> ['required', new Enum(ReportStatus::class)],
-                'image'=> 'required|string',
-                'severityByUser'=> ['required', new Enum(SeverityLevel::class)],
-                'user_id'=> 'required|integer|exists:users,id',
+                'title' => 'required|string|max:255|min:1',
+                'content' => 'required|string',
+                'address' => 'required|string',
+                'latitude' => 'required|numeric',
+                'longitude' => 'required|numeric',
+                'pollutionType' => 'required|string',
+                'status' => ['required', new Enum(ReportStatus::class)],
+                'image' => 'required|string',
+                'severityByUser' => ['required', new Enum(SeverityLevel::class)],
+                'user_id' => 'required|integer|exists:users,id',
             ]);
 
             $report->update($reportsValidated);
-            return response()->json(['success'=> 'Report Updated Successfully'], status: 200);
+            return response()->json(['success' => 'Report Updated Successfully'], status: 200);
 
         } catch (ModelNotFoundException $e) {
             return response()->json(['message' => 'Report not found'], 404);
@@ -98,16 +98,13 @@ class ReportController extends Controller
 
     public function destroy(string $id)
     {
-        try 
-        {
+        try {
             $report = Report::findOrFail($id);
             $report->delete();
             return response()->json(['success' => 'Report Deleted Successfully'], 200);
-        } 
-        catch (ModelNotFoundException $e) 
-        {
+        } catch (ModelNotFoundException $e) {
             return response()->json(['message' => 'Report not found'], 404);
-        }        
+        }
     }
 
     // Add this new method for updating report status
@@ -122,7 +119,7 @@ class ReportController extends Controller
 
             $report->status = $validated['status'];
             $report->save();
-            
+
             return response()->json([
                 'success' => 'Report status updated successfully',
                 'report' => $report
@@ -142,9 +139,9 @@ class ReportController extends Controller
         ]);
 
         try {
-            $updated = Report::whereIn('id', $validated['report_id'])
+            $updated = Report::whereIn('id', $validated['report_ids'])
                 ->update(['status' => $validated['status']]);
-            
+
             return response()->json([
                 'success' => "Successfully updated {$updated} reports",
                 'updated_count' => $updated
@@ -160,22 +157,22 @@ class ReportController extends Controller
     public function getReportsByArea(Request $request, $area = null)
     {
         $user = $request->user();
-        
+
         $query = Report::with(['user:id,firstName,lastName,email'])
-                    ->where('status', 'verified');
-        
+            ->where('status', 'verified');
+
         // If user has area of responsibility and is not admin, filter by area
         if ($user->areaOfResponsibility && $user->role !== 'admin') {
             $userArea = $user->areaOfResponsibility;
-            
-            $query->where(function($q) use ($userArea) {
+
+            $query->where(function ($q) use ($userArea) {
                 $q->where('address', 'LIKE', "%{$userArea}%")
-                ->orWhere('address', 'LIKE', "%".explode(',', $userArea)[0]."%");
+                    ->orWhere('address', 'LIKE', "%" . explode(',', $userArea)[0] . "%");
             });
         }
-        
+
         $reports = $query->orderBy('created_at', 'desc')->get();
-        
+
         return response()->json($reports);
     }
 }

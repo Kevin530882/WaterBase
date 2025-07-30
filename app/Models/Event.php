@@ -21,6 +21,7 @@ class Event extends Model
         'badge',
         'status',
         'user_id',
+        'report_group_id',
     ];
 
     protected $casts = [
@@ -41,12 +42,17 @@ class Event extends Model
     public function attendees()
     {
         return $this->belongsToMany(User::class, 'event_user')
-                    ->withPivot(['joined_at'])
-                    ->withTimestamps();
+            ->withPivot(['joined_at'])
+            ->withTimestamps();
     }
 
     public function creator()
     {
         return $this->belongsTo(User::class, 'user_id');
+    }
+
+    public function reportGroup()
+    {
+        return $this->belongsTo(ReportGroup::class);
     }
 }

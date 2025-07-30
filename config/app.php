@@ -123,4 +123,17 @@ return [
         'store' => env('APP_MAINTENANCE_STORE', 'database'),
     ],
 
+    /*
+    |--------------------------------------------------------------------------
+    | Report Grouping Configuration
+    |--------------------------------------------------------------------------
+    |
+    | These settings control how reports are grouped together geographically
+    | and temporally for cleanup event management.
+    |
+    */
+
+    'report_grouping_radius' => env('REPORT_GROUPING_RADIUS', 50.0), // meters
+    'report_grouping_days' => env('REPORT_GROUPING_DAYS', 7), // days
+
 ];

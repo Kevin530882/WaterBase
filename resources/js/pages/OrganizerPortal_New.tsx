@@ -61,7 +61,11 @@ export const OrganizerPortal = () => {
 
     // State declarations
     const [activeTab, setActiveTab] = useState("areas");
+    const [showCreateEvent, setShowCreateEvent] = useState(false);
     const [selectedArea, setSelectedArea] = useState<AreaReport | null>(null);
+    const [showImageDialog, setShowImageDialog] = useState(false);
+    const [selectedReport, setSelectedReport] = useState<Report | null>(null);
+    const [reports, setReports] = useState<Report[]>([]);
     const [eligibleAreas, setEligibleAreas] = useState<AreaReport[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState("");
@@ -82,8 +86,6 @@ export const OrganizerPortal = () => {
             setError("");
 
             console.log('Fetching accessible reports...');
-            console.log('Token:', token ? 'Present' : 'Missing');
-            console.log('API URL:', '/api/reports/accessible');
 
             // Use the new location-based access control endpoint
             const response = await fetch('/api/reports/accessible', {
@@ -93,8 +95,7 @@ export const OrganizerPortal = () => {
                 },
             });
 
-            console.log('Response status:', response.status);
-            console.log('Response headers:', response.headers); if (response.ok) {
+            if (response.ok) {
                 const data = await response.json();
                 console.log('ACCESSIBLE REPORTS DATA:', data);
 
@@ -103,6 +104,7 @@ export const OrganizerPortal = () => {
                 console.log('ACCESSIBLE REPORTS:', accessibleReports);
                 console.log('USER AREA:', data.user_area);
 
+                setReports(accessibleReports);
                 processEligibleAreas(accessibleReports);
             } else {
                 const errorText = await response.text();
@@ -301,45 +303,22 @@ export const OrganizerPortal = () => {
         if (newReport.latitude === existingReport.latitude &&
             newReport.longitude === existingReport.longitude) return true;
 
-        // Group by location and time only (ignore pollution type and severity)
+        const sameType = newReport.pollutionType === existingReport.pollutionType;
         const timeDiff = Math.abs(
             new Date(newReport.created_at).getTime() - new Date(existingReport.created_at).getTime()
         );
         const daysDiff = timeDiff / (1000 * 60 * 60 * 24);
 
-        return daysDiff <= 7; // Group if within 7 days and same location
+        return sameType && daysDiff <= 7;
     };
 
     const calculateSeverityLevel = (reports: Report[]): string => {
-        if (reports.length === 0) return 'Low';
+        const severityLevels = reports.map(r => r.severityByUser?.toLowerCase() || 'low');
 
-        // Map severity levels to numerical values for averaging
-        const severityMap = {
-            'low': 1,
-            'medium': 2,
-            'high': 3,
-            'critical': 4
-        };
-
-        const reverseSeverityMap = {
-            1: 'Low',
-            2: 'Medium',
-            3: 'High',
-            4: 'Critical'
-        };
-
-        // Calculate average severity
-        const severityValues = reports.map(r => {
-            const severity = r.severityByUser?.toLowerCase() || 'low';
-            return severityMap[severity as keyof typeof severityMap] || 1;
-        });
-
-        const averageSeverity = severityValues.reduce((sum, val) => sum + val, 0) / severityValues.length;
-
-        // Round to nearest severity level
-        const roundedSeverity = Math.round(averageSeverity);
-
-        return reverseSeverityMap[roundedSeverity as keyof typeof reverseSeverityMap] || 'Low';
+        if (severityLevels.includes('critical')) return 'Critical';
+        if (severityLevels.includes('high')) return 'High';
+        if (severityLevels.includes('medium')) return 'Medium';
+        return 'Low';
     };
 
     const estimateCleanupEffort = (reports: Report[]): string => {
@@ -366,8 +345,8 @@ export const OrganizerPortal = () => {
     }, [user?.id, token]);
 
     const handleViewReport = (report: Report) => {
-        console.log('Viewing report:', report);
-        // Functionality can be implemented later if needed
+        setSelectedReport(report);
+        setShowImageDialog(true);
     };
 
     const handleApproveReport = async (reportId: number) => {
@@ -431,7 +410,6 @@ export const OrganizerPortal = () => {
 
         try {
             const reportIds = pendingReports.map(r => r.id);
-            console.log('Bulk approving report IDs:', reportIds);
 
             const response = await fetch('/api/reports/bulk-status', {
                 method: 'PATCH',
@@ -446,16 +424,11 @@ export const OrganizerPortal = () => {
                 }),
             });
 
-            console.log('Bulk approve response status:', response.status);
-
             if (response.ok) {
-                const responseData = await response.json();
-                console.log('Bulk approve success:', responseData);
                 fetchReports();
                 alert(`Successfully approved ${pendingReports.length} reports!`);
             } else {
                 const errorData = await response.json();
-                console.error('Bulk approve error:', errorData);
                 throw new Error(errorData.message || 'Failed to approve reports');
             }
         } catch (error) {
@@ -473,7 +446,6 @@ export const OrganizerPortal = () => {
 
         try {
             const reportIds = pendingReports.map(r => r.id);
-            console.log('Bulk declining report IDs:', reportIds);
 
             const response = await fetch('/api/reports/bulk-status', {
                 method: 'PATCH',
@@ -488,16 +460,11 @@ export const OrganizerPortal = () => {
                 }),
             });
 
-            console.log('Bulk decline response status:', response.status);
-
             if (response.ok) {
-                const responseData = await response.json();
-                console.log('Bulk decline success:', responseData);
                 fetchReports();
                 alert(`Successfully declined ${pendingReports.length} reports!`);
             } else {
                 const errorData = await response.json();
-                console.error('Bulk decline error:', errorData);
                 throw new Error(errorData.message || 'Failed to decline reports');
             }
         } catch (error) {
@@ -594,7 +561,7 @@ export const OrganizerPortal = () => {
                     <TabsContent value="areas">
                         <SufficientReportsTab
                             eligibleAreas={eligibleAreas}
-                            onCreateEvent={() => console.log('Create event triggered')}
+                            onCreateEvent={() => setShowCreateEvent(true)}
                             onSelectArea={(area) => {
                                 setSelectedArea(area);
                                 setShowAreaDetails(true);
@@ -629,7 +596,7 @@ export const OrganizerPortal = () => {
                     isOpen={showAreaDetails}
                     onClose={() => setShowAreaDetails(false)}
                     selectedArea={selectedArea}
-                    onCreateEvent={() => console.log('Create event from area details')}
+                    onCreateEvent={() => setShowCreateEvent(true)}
                     onApproveReport={handleApproveReport}
                     onDeclineReport={handleDeclineReport}
                     onBulkApproveReports={handleBulkApproveReports}
