@@ -27,6 +27,7 @@ return new class extends Migration
             $table->enum('severityByAI', ['low', 'medium', 'high', 'critical'])->default('low');
             $table->decimal('ai_confidence', 5, 2)->default(0.00);
             $table->decimal('severityPercentage', 5, 2)->default(0.00);
+            $table->boolean("ai_verified")->default(false);
             $table->foreignId('user_id')->constrained()->onDelete('cascade');
             $table->timestamps();
         });

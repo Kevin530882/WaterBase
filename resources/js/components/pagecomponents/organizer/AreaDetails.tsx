@@ -62,9 +62,7 @@ interface AreaDetailsProps {
     onClose: () => void;
     selectedArea: AreaReport | null;
     onCreateEvent: () => void;
-    onApproveReport: (reportId: number) => void;
     onDeclineReport: (reportId: number) => void;
-    onBulkApproveReports: (reports: Report[]) => void;
     onBulkDeclineReports: (reports: Report[]) => void;
     onViewReport: (report: Report) => void;
 }
@@ -74,9 +72,7 @@ export const AreaDetails = ({
     onClose,
     selectedArea,
     onCreateEvent,
-    onApproveReport,
     onDeclineReport,
-    onBulkApproveReports,
     onBulkDeclineReports,
     onViewReport,
 }: AreaDetailsProps) => {
@@ -290,17 +286,8 @@ export const AreaDetails = ({
 
                                                     {/* Action Buttons */}
                                                     <div className="flex gap-2 mt-2">
-                                                        {report.status === "pending" ? (
+                                                        {report.status === "verified" && (
                                                             <>
-                                                                <Button
-                                                                    variant="outline"
-                                                                    size="sm"
-                                                                    className="flex-1 text-green-600 border-green-200 hover:bg-green-50"
-                                                                    onClick={() => onApproveReport(report.id)}
-                                                                >
-                                                                    <CheckCircle className="w-3 h-3 mr-1" />
-                                                                    Approve
-                                                                </Button>
                                                                 <Button
                                                                     variant="outline"
                                                                     size="sm"
@@ -310,9 +297,7 @@ export const AreaDetails = ({
                                                                     <AlertTriangle className="w-3 h-3 mr-1" />
                                                                     Decline
                                                                 </Button>
-                                                            </>
-                                                        ) : (
-                                                            <Button
+                                                                <Button
                                                                 variant="outline"
                                                                 size="sm"
                                                                 className="w-full"
@@ -321,6 +306,8 @@ export const AreaDetails = ({
                                                                 <Eye className="w-3 h-3 mr-1" />
                                                                 View Details
                                                             </Button>
+                                                            </>
+                                                            
                                                         )}
                                                     </div>
                                                 </div>
@@ -339,34 +326,21 @@ export const AreaDetails = ({
                                     View on Map
                                 </Button>
 
-                                {/* Bulk Actions for Pending Reports */}
-                                {selectedArea.reports.some((r) => r.status === "pending") && (
+                                {/* Bulk Actions for Verified Reports */}
+                                {selectedArea.reports.some((r) => r.status === "verified") && (
                                     <>
-                                        <Button
-                                            variant="outline"
-                                            className="text-green-600 border-green-200 hover:bg-green-50"
-                                            onClick={() =>
-                                                onBulkApproveReports(
-                                                    selectedArea.reports.filter((r) => r.status === "pending")
-                                                )
-                                            }
-                                        >
-                                            <CheckCircle className="w-4 h-4 mr-2" />
-                                            Approve All Pending (
-                                            {selectedArea.reports.filter((r) => r.status === "pending").length})
-                                        </Button>
                                         <Button
                                             variant="outline"
                                             className="text-red-600 border-red-200 hover:bg-red-50"
                                             onClick={() =>
                                                 onBulkDeclineReports(
-                                                    selectedArea.reports.filter((r) => r.status === "pending")
+                                                    selectedArea.reports.filter((r) => r.status === "verified")
                                                 )
                                             }
                                         >
                                             <AlertTriangle className="w-4 h-4 mr-2" />
-                                            Decline All Pending (
-                                            {selectedArea.reports.filter((r) => r.status === "pending").length})
+                                            Decline All (
+                                            {selectedArea.reports.filter((r) => r.status === "verified").length})
                                         </Button>
                                     </>
                                 )}

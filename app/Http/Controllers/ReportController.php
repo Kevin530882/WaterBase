@@ -92,6 +92,10 @@ class ReportController extends Controller
                 'image' => 'required|string',
                 'severityByUser' => ['required', new Enum(SeverityLevel::class)],
                 'user_id' => 'required|integer|exists:users,id',
+                'ai_confidence'=>'numeric',
+                'severityByAI' => new Enum(SeverityLevel::class),
+                'severityPercentage' => 'numeric',
+                'ai_verified' => 'required|boolean'
             ]);
 
             $report->update($reportsValidated);

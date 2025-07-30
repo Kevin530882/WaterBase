@@ -271,6 +271,10 @@ def main(image_path):
         
         #get model confidence
         model_confidence = calculate_overall_confidence(water_predictions, trash_predictions, pollution_predictions)
+        if not trash_predictions or not pollution_predictions:
+            has_pollution = True
+        else:
+            has_pollution = False
         # Prepare output
 
         output = {
@@ -282,7 +286,8 @@ def main(image_path):
             "pollution_percentage": rounded_pollution_percentage,
             "severity_level": severity_level,
             "annotated_image_path": annotated_path,
-            "overall_confidence": model_confidence
+            "overall_confidence": model_confidence,
+            "has_pollution": has_pollution
         }
         
         # Output as JSON

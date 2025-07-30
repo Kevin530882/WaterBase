@@ -99,7 +99,8 @@ export const OrganizerPortal = () => {
                 console.log('ACCESSIBLE REPORTS DATA:', data);
 
                 // Extract reports from the response structure
-                const accessibleReports = data.reports?.data || data.reports || [];
+                const verifiedReports = data.reports?.data || data.reports || [];
+                const accessibleReports = verifiedReports.filter(r => r.status === 'verified');
                 console.log('ACCESSIBLE REPORTS:', accessibleReports);
                 console.log('USER AREA:', data.user_area);
 
@@ -382,29 +383,6 @@ export const OrganizerPortal = () => {
         // Functionality can be implemented later if needed
     };
 
-    const handleApproveReport = async (reportId: number) => {
-        try {
-            const response = await fetch(`/api/reports/${reportId}/status`, {
-                method: 'PATCH',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${token}`,
-                    'Accept': 'application/json',
-                },
-                body: JSON.stringify({ status: 'verified' }),
-            });
-
-            if (response.ok) {
-                fetchReports();
-                alert('Report approved successfully!');
-            } else {
-                throw new Error('Failed to approve report');
-            }
-        } catch (error) {
-            console.error('Error approving report:', error);
-            alert('Failed to approve report. Please try again.');
-        }
-    };
 
     const handleDeclineReport = async (reportId: number) => {
         if (!confirm('Are you sure you want to decline this report? This action cannot be undone.')) {
@@ -434,47 +412,6 @@ export const OrganizerPortal = () => {
         }
     };
 
-    const handleBulkApproveReports = async (pendingReports: Report[]) => {
-        if (pendingReports.length === 0) return;
-
-        if (!confirm(`Are you sure you want to approve all ${pendingReports.length} pending reports?`)) {
-            return;
-        }
-
-        try {
-            const reportIds = pendingReports.map(r => r.id);
-            console.log('Bulk approving report IDs:', reportIds);
-
-            const response = await fetch('/api/reports/bulk-status', {
-                method: 'PATCH',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${token}`,
-                    'Accept': 'application/json',
-                },
-                body: JSON.stringify({
-                    report_ids: reportIds,
-                    status: 'verified'
-                }),
-            });
-
-            console.log('Bulk approve response status:', response.status);
-
-            if (response.ok) {
-                const responseData = await response.json();
-                console.log('Bulk approve success:', responseData);
-                fetchReports();
-                alert(`Successfully approved ${pendingReports.length} reports!`);
-            } else {
-                const errorData = await response.json();
-                console.error('Bulk approve error:', errorData);
-                throw new Error(errorData.message || 'Failed to approve reports');
-            }
-        } catch (error) {
-            console.error('Error bulk approving reports:', error);
-            alert('Failed to approve all reports. Please try again.');
-        }
-    };
 
     const handleBulkDeclineReports = async (pendingReports: Report[]) => {
         if (pendingReports.length === 0) return;
@@ -642,9 +579,7 @@ export const OrganizerPortal = () => {
                     onClose={() => setShowAreaDetails(false)}
                     selectedArea={selectedArea}
                     onCreateEvent={() => console.log('Create event from area details')}
-                    onApproveReport={handleApproveReport}
                     onDeclineReport={handleDeclineReport}
-                    onBulkApproveReports={handleBulkApproveReports}
                     onBulkDeclineReports={handleBulkDeclineReports}
                     onViewReport={handleViewReport}
                 />

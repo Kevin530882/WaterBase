@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import Navigation from "@/components/Navigation";
 import { Button } from "@/components/ui/button";
 import {
@@ -27,10 +27,9 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Zap, AlertCircle, CheckCircle } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Camera, MapPin, Upload } from "lucide-react";
+import { MapPin, Upload } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { OpenStreetMapSearchableSelect } from "@/components/pagecomponents/openstreetmap-searchable-select";
-import piexif from "piexifjs";
 
 export const ReportPollution = () => {
   const { user, isAuthenticated } = useAuth();
@@ -40,10 +39,59 @@ export const ReportPollution = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitStatus, setSubmitStatus] = useState('idle');
   const [errorMessage, setErrorMessage] = useState('');
-  const [cameraError, setCameraError] = useState('');
-  const [stream, setStream] = useState(null);
-  const videoRef = useRef(null);
-  const canvasRef = useRef(null);
+  const [verificationStatus, setVerificationStatus] = useState('idle');
+  const [showLocationFields, setShowLocationFields] = useState(false);
+
+
+    const verifyImageMetadata = async (file) => {
+    setVerificationStatus('verifying');
+    setShowLocationFields(false); // Hide fields while verifying
+    try {
+      const imageBase64 = await convertImageToBase64(file);
+      const response = await fetch('/api/reports/verify-image', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('auth_token')}`,
+        },
+        body: JSON.stringify({ image: imageBase64 }),
+      });
+      const data = await response.json();
+      console.log(response);
+      console.log(data);
+      if (response.ok && data.tampered == false && data.gps != null) {
+        // Set location from API response
+        setNewReport(prev => ({
+          ...prev,
+          address: data.address || '',
+          latitude: data.latitude?.toString() || '',
+          longitude: data.longitude?.toString() || ''
+        }));
+        setVerificationStatus('success');
+        setShowLocationFields(false); // Hide fields since we have metadata
+        return true;
+      } 
+      else if(response.ok == false && data.tampered == true && data.gps !=null){
+        setVerificationStatus('failed');
+        setShowLocationFields(false);
+        setErrorMessage('Error: Image flagged as tampered. Please upload an original, unedited camera photo. Continued submissions of altered images may result in account suspension.');
+      }
+      else {
+        setVerificationStatus('failed');
+        setShowLocationFields(true); // Show location fields
+        setErrorMessage('No location metadata found. Please ensure location tagging is enabled and enter location manually.');
+        return false;
+      }
+    } catch (error) {
+      setVerificationStatus('failed');
+      setShowLocationFields(true); // Show location fields on error
+      setErrorMessage('Failed to verify image metadata. Please enter location manually.');
+      return false;
+    }
+  };
+
+
 
   const [newReport, setNewReport] = useState({
     title: "",
@@ -56,142 +104,31 @@ export const ReportPollution = () => {
     image: null,
   });
 
-  useEffect(() => {
-    if (showCameraModal && !stream) {
-      startCamera();
-    }
-    return () => {
-      if (stream) {
-        stopCamera();
-      }
-    };
-  }, [showCameraModal]);
-
-  const startCamera = async () => {
-    try {
-      const mediaStream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: "environment" },
-      });
-      setStream(mediaStream);
-      if (videoRef.current) {
-        videoRef.current.srcObject = mediaStream;
-      }
-      setCameraError('');
-    } catch (err) {
-      setCameraError('Unable to access camera. Please ensure permissions are granted.');
-      setShowCameraModal(false);
-    }
-  };
-
-  const stopCamera = () => {
-    if (stream) {
-      stream.getTracks().forEach((track) => track.stop());
-      setStream(null);
-    }
-  };
-
-  const takePhoto = () => {
-    if (videoRef.current && canvasRef.current) {
-      const video = videoRef.current;
-      const canvas = canvasRef.current;
-      canvas.width = video.videoWidth;
-      canvas.height = video.videoHeight;
-      const ctx = canvas.getContext('2d');
-      if (ctx) {
-        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-        navigator.geolocation.getCurrentPosition(
-          (position) => {
-            const latitude = position.coords.latitude;
-            const longitude = position.coords.longitude;
-            const imageData = canvas.toDataURL('image/jpeg');
-            const exifObj = {
-              'GPS': {
-                [piexif.GPSIFD.GPSLatitudeRef]: latitude >= 0 ? 'N' : 'S',
-                [piexif.GPSIFD.GPSLatitude]: piexif.GPSHelper.degToDmsRational(Math.abs(latitude)),
-                [piexif.GPSIFD.GPSLongitudeRef]: longitude >= 0 ? 'E' : 'W',
-                [piexif.GPSIFD.GPSLongitude]: piexif.GPSHelper.degToDmsRational(Math.abs(longitude)),
-              },
-            };
-            const exifBinary = piexif.dump(exifObj);
-            const modifiedImage = piexif.insert(exifBinary, imageData);
-            fetch(modifiedImage)
-              .then((res) => res.blob())
-              .then((blob) => {
-                const file = new File([blob], "pollution-photo.jpg", { type: "image/jpeg" });
-                setNewReport({ ...newReport, image: file });
-                stopCamera();
-                setShowCameraModal(false);
-              });
-          },
-          (error) => {
-            setErrorMessage('Unable to get location. Please ensure location services are enabled.');
-            setShowCameraModal(false);
-          }
-        );
-      }
-    }
-  };
-
   const convertImageToBase64 = (file) => {
     return new Promise((resolve, reject) => {
-      // Check file size first (limit to 10MB)
-      if (file.size > 10 * 1024 * 1024) {
-        reject(new Error('Image file too large. Please select an image smaller than 10MB.'));
-        return;
-      }
-
-      const canvas = document.createElement('canvas');
-      const ctx = canvas.getContext('2d');
-      const img = new Image();
-
-      img.onload = () => {
-        // Calculate new dimensions (max 1024x768)
-        const MAX_WIDTH = 1024;
-        const MAX_HEIGHT = 768;
-        let { width, height } = img;
-
-        if (width > height) {
-          if (width > MAX_WIDTH) {
-            height = (height * MAX_WIDTH) / width;
-            width = MAX_WIDTH;
-          }
-        } else {
-          if (height > MAX_HEIGHT) {
-            width = (width * MAX_HEIGHT) / height;
-            height = MAX_HEIGHT;
-          }
-        }
-
-        // Set canvas dimensions
-        canvas.width = width;
-        canvas.height = height;
-
-        // Draw and compress image
-        ctx.drawImage(img, 0, 0, width, height);
-
-        // Convert to base64 with compression (0.6 quality = 60%)
-        const compressedBase64 = canvas.toDataURL('image/jpeg', 0.6);
-
-        // Check if compressed size is still too large
-        const compressedSize = compressedBase64.length * 0.75; // Estimate binary size
-        if (compressedSize > 5 * 1024 * 1024) { // 5MB limit after compression
-          reject(new Error('Image is too large even after compression. Please use a smaller image.'));
-          return;
-        }
-
-        resolve(compressedBase64);
-      };
-
-      img.onerror = () => reject(new Error('Failed to load image'));
-
-      // Read file as data URL to load into image element
       const reader = new FileReader();
-      reader.onload = (e) => {
-        img.src = e.target?.result as string;
+      reader.onload = () => {
+        if (reader.result) {
+          resolve(reader.result);
+        } else {
+          reject(new Error('Failed to convert image'));
+        }
       };
       reader.onerror = () => reject(new Error('Failed to read file'));
       reader.readAsDataURL(file);
     });
+  };
+
+
+  const handleImageSelect = async (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      setNewReport({ ...newReport, image: file });
+      const isValid = await verifyImageMetadata(file);
+      if (!isValid) {
+        setNewReport({ ...newReport, image: file, latitude: '', longitude: '' });
+      }
+    }
   };
 
   const validateForm = () => {
@@ -223,19 +160,19 @@ export const ReportPollution = () => {
       setErrorMessage('Image is required');
       return false;
     }
-
+    
     const lat = parseFloat(newReport.latitude);
     const lng = parseFloat(newReport.longitude);
     if (isNaN(lat) || isNaN(lng)) {
       setErrorMessage('Please enter valid latitude and longitude values');
       return false;
     }
-
+    
     if (lat < -90 || lat > 90 || lng < -180 || lng > 180) {
       setErrorMessage('Please enter valid coordinate values');
       return false;
     }
-
+    
     return true;
   };
 
@@ -252,6 +189,26 @@ export const ReportPollution = () => {
     try {
       const imageBase64 = await convertImageToBase64(newReport.image);
 
+      let temp_data = {
+         image: imageBase64,
+         severityByUser: newReport.severityByUser
+      };
+      const ai_response = await fetch('/api/predict', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('auth_token')}`,
+        },
+        body: JSON.stringify(temp_data),
+      });
+      let new_status = 'pending';
+      let data = await ai_response.json();
+      console.log(ai_response)
+      console.log(data);
+      if(data.ai_verified == true){
+        new_status = 'verified';
+      }
       const reportData = {
         title: newReport.title,
         content: newReport.content,
@@ -259,10 +216,14 @@ export const ReportPollution = () => {
         latitude: parseFloat(newReport.latitude),
         longitude: parseFloat(newReport.longitude),
         pollutionType: newReport.pollutionType,
-        status: 'pending',
+        status: new_status,
         image: imageBase64,
         severityByUser: newReport.severityByUser,
         user_id: user?.id || 1,
+        severityByAI: data.severity_level,
+        ai_verified: data.ai_verified,
+        ai_confidence: data.overall_confidence,
+        severityPercentage: data.pollution_percentage
       };
 
       const response = await fetch('/api/reports', {
@@ -275,8 +236,11 @@ export const ReportPollution = () => {
         body: JSON.stringify(reportData),
       });
 
-      const data = await response.json();
+      data = await response.json();
+      console.log(response)
+      console.log(data);
       if (response.ok && data.status === 'success') {
+        console.log(data);
         setSubmitStatus('success');
         setNewReport({
           title: "",
@@ -290,8 +254,10 @@ export const ReportPollution = () => {
         });
         setTimeout(() => {
           setShowReportForm(false);
+          setShowCameraModal(false);
           setShowSubmitModal(false);
           setSubmitStatus('idle');
+          setVerificationStatus('idle');
         }, 5000);
       } else {
         throw new Error(data.message || 'Failed to submit report');
@@ -304,6 +270,7 @@ export const ReportPollution = () => {
       setIsSubmitting(false);
     }
   };
+
 
   const handleGetCurrentLocation = () => {
     if (navigator.geolocation) {
@@ -345,21 +312,21 @@ export const ReportPollution = () => {
           <Card className="border-waterbase-200">
             <CardHeader>
               <div className="w-12 h-12 bg-waterbase-100 rounded-lg flex items-center justify-center mb-4">
-                <Camera className="w-6 h-6 text-waterbase-600" />
+                <Upload className="w-6 h-6 text-waterbase-600" />
               </div>
               <CardTitle className="text-waterbase-950">
                 Quick Photo Report
               </CardTitle>
               <CardDescription className="text-waterbase-600">
-                Capture photos of water pollution directly with your camera.
+                Upload a photo of water pollution using your device's camera.
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <Button
+              <Button 
                 className="w-full bg-waterbase-500 hover:bg-waterbase-600"
                 onClick={() => setShowCameraModal(true)}
               >
-                <Camera className="w-4 h-4 mr-2" />
+                <Upload className="w-4 h-4 mr-2" />
                 Take Photo Report
               </Button>
               {newReport.image && (
@@ -455,76 +422,6 @@ export const ReportPollution = () => {
                         />
                       </div>
 
-                      <div>
-                        <label className="text-sm font-medium mb-1 block">
-                          Address *
-                        </label>
-                        <OpenStreetMapSearchableSelect
-                          value={newReport.address}
-                          onValueChange={(address: string, coordinates?: { lat: number; lng: number }) => {
-                            setNewReport({
-                              ...newReport,
-                              address,
-                              latitude: coordinates?.lat.toString() || newReport.latitude,
-                              longitude: coordinates?.lng.toString() || newReport.longitude,
-                            });
-                          }}
-                          placeholder="Search for barangay, city, or province in Philippines..."
-                          disabled={isSubmitting}
-                        />
-                        <p className="text-xs text-gray-500 mt-1">
-                          Search for the specific location where pollution was observed. Coordinates will be auto-filled.
-                        </p>
-                      </div>
-
-                      <div className="grid grid-cols-2 gap-2">
-                        <div>
-                          <label className="text-sm font-medium mb-1 block">
-                            Latitude * {newReport.latitude && <span className="text-green-600 text-xs">(Auto-filled)</span>}
-                          </label>
-                          <Input
-                            placeholder="14.5995 (will auto-fill from address)"
-                            value={newReport.latitude}
-                            onChange={(e) =>
-                              setNewReport({
-                                ...newReport,
-                                latitude: e.target.value,
-                              })
-                            }
-                            disabled={isSubmitting}
-                          />
-                        </div>
-                        <div>
-                          <label className="text-sm font-medium mb-1 block">
-                            Longitude * {newReport.longitude && <span className="text-green-600 text-xs">(Auto-filled)</span>}
-                          </label>
-                          <Input
-                            placeholder="121.0008 (will auto-fill from address)"
-                            value={newReport.longitude}
-                            onChange={(e) =>
-                              setNewReport({
-                                ...newReport,
-                                longitude: e.target.value,
-                              })
-                            }
-                            disabled={isSubmitting}
-                          />
-                        </div>
-                      </div>
-
-                      <div className="text-center">
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          onClick={handleGetCurrentLocation}
-                          disabled={isSubmitting}
-                        >
-                          <MapPin className="w-4 h-4 mr-2" />
-                          Use Current Location
-                        </Button>
-                      </div>
-
                       <div className="grid grid-cols-2 gap-4">
                         <div>
                           <label className="text-sm font-medium mb-1 block">
@@ -611,7 +508,7 @@ export const ReportPollution = () => {
           </Card>
         </div>
 
-        {(submitStatus === 'error' || errorMessage) && !showReportForm && (
+        {(submitStatus === 'error' || errorMessage) && !showReportForm && !showCameraModal && (
           <div className="mt-4">
             <Alert variant="destructive">
               <AlertCircle className="h-4 w-4" />
@@ -620,35 +517,104 @@ export const ReportPollution = () => {
           </div>
         )}
 
-        <Dialog open={showCameraModal} onOpenChange={(open) => {
-          setShowCameraModal(open);
-          if (!open) stopCamera();
-        }}>
-          <DialogContent className="max-w-4xl w-full">
+        <Dialog open={showCameraModal} onOpenChange={setShowCameraModal}>
+          <DialogContent className="max-w-[95vw] sm:max-w-md md:max-w-2xl lg:max-w-4xl w-full p-4 sm:p-6">
             <DialogHeader>
-              <DialogTitle>Take a Photo</DialogTitle>
+              <DialogTitle>Upload Photo Report</DialogTitle>
               <DialogDescription>
-                Use your camera to capture a photo of the pollution.
+                Use your device's camera or upload an image of the pollution.
               </DialogDescription>
             </DialogHeader>
-            {cameraError ? (
-              <Alert variant="destructive">
-                <AlertCircle className="h-4 w-4" />
-                <AlertDescription>{cameraError}</AlertDescription>
-              </Alert>
-            ) : (
-              <div className="space-y-4">
-                <video ref={videoRef} autoPlay playsInline className="w-full rounded-lg" />
-                <canvas ref={canvasRef} className="hidden" />
-                <Button
-                  onClick={takePhoto}
-                  className="w-full bg-waterbase-500 hover:bg-waterbase-600"
-                >
-                  <Camera className="w-4 h-4 mr-2" />
-                  Capture Photo
-                </Button>
-              </div>
-            )}
+            
+            <div className="space-y-4 max-h-[70vh] overflow-y-auto">
+              <Input
+                type="file"
+                accept="image/*"
+                capture="environment"
+                onChange={handleImageSelect}
+                className="w-full"
+              />
+              
+              {verificationStatus === 'verifying' && (
+                <div className="text-center py-4">
+                  <div className="w-8 h-8 mx-auto animate-spin rounded-full border-4 border-waterbase-500 border-t-transparent" />
+                  <p className="mt-2 text-waterbase-600">Verifying image metadata...</p>
+                </div>
+              )}
+              
+              {(verificationStatus === 'failed' || errorMessage) && (
+                <Alert variant="destructive">
+                  <AlertCircle className="h-4 w-4" />
+                  <AlertDescription>{errorMessage}</AlertDescription>
+                </Alert>
+              )}
+              
+              {newReport.image && verificationStatus !== 'verifying' && (
+                <div className="flex justify-center">
+                  <img
+                    src={URL.createObjectURL(newReport.image)}
+                    alt="Preview"
+                    className="max-w-full max-h-[40vh] object-contain rounded-lg"
+                  />
+                </div>
+              )}
+              
+              {showLocationFields && (
+                <>
+                  <div>
+                    <label className="text-sm font-medium mb-1 block">Address *</label>
+                    <OpenStreetMapSearchableSelect
+                      value={newReport.address}
+                      onValueChange={(address: string, coordinates?: { lat: number; lng: number }) => {
+                        setNewReport({
+                          ...newReport,
+                          address,
+                          latitude: coordinates?.lat.toString() || newReport.latitude,
+                          longitude: coordinates?.lng.toString() || newReport.longitude,
+                        });
+                      }}
+                      placeholder="Search for region, province, city, or barangay..."
+                      disabled={verificationStatus === 'verifying'}
+                    />
+                  </div>
+                  
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    <div>
+                      <label className="text-sm font-medium mb-1 block">Latitude *</label>
+                      <Input
+                        placeholder="14.5995"
+                        value={newReport.latitude}
+                        onChange={(e) => setNewReport({ ...newReport, latitude: e.target.value })}
+                        disabled={verificationStatus === 'verifying'}
+                      />
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium mb-1 block">Longitude *</label>
+                      <Input
+                        placeholder="121.0008"
+                        value={newReport.longitude}
+                        onChange={(e) => setNewReport({ ...newReport, longitude: e.target.value })}
+                        disabled={verificationStatus === 'verifying'}
+                      />
+                    </div>
+                  </div>
+                  
+                  <div className="flex justify-center">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={handleGetCurrentLocation}
+                      disabled={verificationStatus === 'verifying'}
+                    >
+                      <MapPin className="w-4 h-4 mr-2" />
+                      Use Current Location
+                    </Button>
+                  </div>
+                </>
+              )}
+              
+            </div>
           </DialogContent>
         </Dialog>
 
@@ -695,7 +661,7 @@ export const ReportPollution = () => {
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
             <div className="text-center">
               <div className="w-16 h-16 bg-waterbase-100 rounded-full flex items-center justify-center mx-auto mb-4">
-                <Camera className="w-8 h-8 text-waterbase-600" />
+                <Upload className="w-8 h-8 text-waterbase-600" />
               </div>
               <h3 className="font-semibold text-waterbase-950 mb-2">
                 1. Capture
