@@ -179,10 +179,18 @@ export const OrganizerPortal = () => {
             }
         });
 
-        // Convert groups to eligible areas
+        // Convert groups to eligible areas with declined report filtering
         const areas: AreaReport[] = Object.entries(groupedReports)
             .map(([groupId, groupReports]) => {
-                const mostRecentReport = groupReports.sort((a, b) =>
+                // Filter out declined reports from the group
+                const activeReports = groupReports.filter(report => report.status !== 'declined');
+
+                // If all reports in the group are declined, exclude this group entirely
+                if (activeReports.length === 0) {
+                    return null;
+                }
+
+                const mostRecentReport = activeReports.sort((a, b) =>
                     new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
                 )[0];
 
@@ -195,10 +203,10 @@ export const OrganizerPortal = () => {
                             ? mostRecentReport.province_name
                             : mostRecentReport.address || `Location ${mostRecentReport.latitude?.toFixed(4)}, ${mostRecentReport.longitude?.toFixed(4)}`;
 
-                const pollutionTypes = [...new Set(groupReports.map(r => r.pollutionType))];
-                const description = groupReports.length === 1
+                const pollutionTypes = [...new Set(activeReports.map(r => r.pollutionType))];
+                const description = activeReports.length === 1
                     ? `${pollutionTypes[0]} pollution reported`
-                    : `Multiple pollution types: ${pollutionTypes.join(', ')} (${groupReports.length} reports)`;
+                    : `Multiple pollution types: ${pollutionTypes.join(', ')} (${activeReports.length} reports)`;
 
                 return {
                     id: parseInt(groupId),
@@ -207,15 +215,16 @@ export const OrganizerPortal = () => {
                         lat: mostRecentReport.latitude,
                         lng: mostRecentReport.longitude
                     },
-                    reportCount: groupReports.length,
-                    severityLevel: calculateSeverityLevel(groupReports),
+                    reportCount: activeReports.length,
+                    severityLevel: calculateSeverityLevel(activeReports),
                     lastReported: formatDistanceToNow(new Date(mostRecentReport.created_at), { addSuffix: true }),
                     description,
-                    estimatedCleanupEffort: estimateCleanupEffort(groupReports),
-                    priority: calculatePriority(groupReports),
-                    reports: groupReports,
+                    estimatedCleanupEffort: estimateCleanupEffort(activeReports),
+                    priority: calculatePriority(activeReports),
+                    reports: activeReports,
                 };
-            });
+            })
+            .filter(area => area !== null);
 
         console.log('Areas from report groups:', areas);
         setEligibleAreas(areas);
@@ -223,11 +232,14 @@ export const OrganizerPortal = () => {
 
     // Legacy function for coordinate-based grouping (fallback)
     const processAreasLegacy = (reports: Report[]) => {
+        // First filter out declined individual reports for legacy grouping
+        const activeReports = reports.filter(report => report.status !== 'declined');
+
         // Group reports by location (using latitude/longitude proximity)
         const locationGroups: { [key: string]: Report[] } = {};
         const DISTANCE_THRESHOLD = 0.001; // approximately 100m
 
-        reports.forEach((report) => {
+        activeReports.forEach((report) => {
             if (!report.latitude || !report.longitude) {
                 return;
             }
