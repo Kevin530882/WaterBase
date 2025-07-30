@@ -25,6 +25,10 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::patch('/reports/bulk-status', [ReportController::class, 'bulkUpdateStatus']);
     Route::get('/reports/area/{area}', [ReportController::class, 'getReportsByArea']);
 
+    Route::get('/user', function (Request $request) {
+        return $request->user();
+    });
+
     // Resourceful route (must come after specific routes)
     Route::apiResource('reports', ReportController::class);
 
