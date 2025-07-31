@@ -49,23 +49,88 @@ class ReportController extends Controller
 
     public function store(Request $request)
     {
-        $reportsValidated = $request->validate([
-            'title' => 'required|string|max:255|min:1',
-            'content' => 'required|string',
-            'address' => 'required|string',
-            'latitude' => 'required|numeric',
-            'longitude' => 'required|numeric',
-            'pollutionType' => 'required|string',
-            'status' => ['required', new enum(ReportStatus::class)],
-            'image' => 'required|string',
-            'severityByUser' => ['required', new enum(SeverityLevel::class)],
-            'user_id' => 'required|integer',
-        ]);
+      
+        try {
+            // Validate request data
+            $reportsValidated = $request->validate([
+                'title' => 'required|string|max:255|min:1',
+                'content' => 'required|string',
+                'address' => 'required|string',
+                'latitude' => 'required|numeric|between:-90,90',
+                'longitude' => 'required|numeric|between:-180,180',
+                'pollutionType' => 'required|string',
+                'status' => ['required', new Enum(ReportStatus::class)],
+                'image' => 'required|image|mimes:jpeg,png,jpg,gif|max:2048',
+                'severityByUser' => ['required', new Enum(SeverityLevel::class)],
+                'user_id' => 'required|integer|exists:users,id',
+                'severityByAI' => ['required', new Enum(SeverityLevel::class)],
+                'ai_verified' => 'boolean',
+                'ai_confidence' => 'numeric',
+                'severityPercentage' => 'numeric',
+            ]);
 
-        $imageValidated = $this->verifyImage($request->image);
+            // Store image
+            try {
+                $image = $request->file('image');
+                $imageName = uniqid() . '.' . $image->getClientOriginalExtension();
+                $imagePath = $image->storeAs('uploads', $imageName, 'public');
+                
+                if (!$imagePath) {
+                    throw new \Exception('Failed to store image in uploads directory.');
+                }
+            } catch (\Exception $e) {
+                Log::error('Image storage failed: ' . $e->getMessage(), [
+                    'file' => $request->file('image') ? $request->file('image')->getClientOriginalName() : null,
+                    'user_id' => $request->user_id,
+                ]);
+                return response()->json([
+                    'status' => 'error',
+                    'message' => 'Failed to store image: ' . $e->getMessage(),
+                ], 500);
+            }
 
-        Report::create(array_merge($reportsValidated, ['severityByAI' => $request->severityByAI, 'severityPercentage' => $request->severityPercentage, 'ai_confidence' => $request->ai_confidence]));
-        return response()->json(['success' => 'Report Created Successfully', 'status' => 'success', 'imagething' => $imageValidated], 200);
+            // Create report
+            try {
+                $report = Report::create(array_merge($reportsValidated, [
+                    'image' => $imagePath, // Store path, not blob
+                ]));
+            } catch (\Exception $e) {
+                Log::error('Report creation failed: ' . $e->getMessage(), [
+                    'validated_data' => $reportsValidated,
+                    'image_path' => $imagePath,
+                ]);
+                return response()->json([
+                    'status' => 'error',
+                    'message' => 'Failed to create report: ' . $e->getMessage(),
+                ], 500);
+            }
+
+            return response()->json([
+                'success' => 'Report Created Successfully',
+                'status' => 'success',
+                'report' => $report,
+            ], 200);
+
+        } catch (ValidationException $e) {
+            Log::warning('Validation failed for report creation: ' . json_encode($e->errors()), [
+                'request_data' => $request->all(),
+            ]);
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Validation failed',
+                'errors' => $e->errors(),
+            ], 422);
+        } catch (\Exception $e) {
+            Log::error('Unexpected error in report creation: ' . $e->getMessage(), [
+                'request_data' => $request->all(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+            return response()->json([
+                'status' => 'error',
+                'message' => 'An unexpected error occurred. Please try again later.',
+            ], 500);
+        }
+    
     }
 
     public function show(string $id)
@@ -186,77 +251,24 @@ class ReportController extends Controller
 
         return response()->json($reports);
     }
-    private function verifyImage(string $imageString)
-    {
-        // Temporarily increase memory limit for image processing
-        $originalMemoryLimit = ini_get('memory_limit');
-        ini_set('memory_limit', '512M');
+    private function verifyImage(Request $request){
+                // Store the uploaded image
+        set_time_limit(600);
+        $request->validate([
+            'image' => 'required|image|mimes:jpeg,png,jpg|max:2048',
+        ]);
 
-        try {
-            // Store the uploaded image
-            if (strpos($imageString, 'data:image/') === 0) {
-                $base64_string = substr($imageString, strpos($imageString, ',') + 1);
-            } else {
-                $base64_string = $imageString;
-            }
+        // Store the uploaded image
+        $file = $request->image;
+        $fileName = $file->getClientOriginalName();
+        $imagePath = Storage::disk("public")->putFileAs("uploads", $file, $fileName);
 
-            $decoded_image_data = base64_decode($base64_string);
-
-            // Check if decoded data is valid
-            if ($decoded_image_data === false) {
-                return ['error' => 'Invalid base64 image data'];
-            }
-
-            // Create image resource from decoded data to optimize it
-            $image = imagecreatefromstring($decoded_image_data);
-            if ($image === false) {
-                return ['error' => 'Invalid image format'];
-            }
-
-            // Get original dimensions
-            $originalWidth = imagesx($image);
-            $originalHeight = imagesy($image);
-
-            // Resize if image is too large (max 1920x1080)
-            $maxWidth = 1920;
-            $maxHeight = 1080;
-
-            if ($originalWidth > $maxWidth || $originalHeight > $maxHeight) {
-                $ratio = min($maxWidth / $originalWidth, $maxHeight / $originalHeight);
-                $newWidth = intval($originalWidth * $ratio);
-                $newHeight = intval($originalHeight * $ratio);
-
-                $resizedImage = imagecreatetruecolor($newWidth, $newHeight);
-                imagecopyresampled($resizedImage, $image, 0, 0, 0, 0, $newWidth, $newHeight, $originalWidth, $originalHeight);
-                imagedestroy($image);
-                $image = $resizedImage;
-            }
-
-            // Convert to JPEG with compression to reduce file size
-            $fileName = uniqid() . '.jpeg';
-            $tempPath = Storage::disk('public')->path("uploads/{$fileName}");
-
-            // Ensure directory exists
-            $uploadDir = Storage::disk('public')->path("uploads");
-            if (!file_exists($uploadDir)) {
-                mkdir($uploadDir, 0755, true);
-            }
-
-            // Save optimized image
-            imagejpeg($image, $tempPath, 80); // 80% quality
-            imagedestroy($image);
-
-            $imageFullPath = $tempPath;
-            $python = base_path('python_environment/Scripts/python.exe'); // Windows venv
-            $script = base_path('scripts/check_location.py');
-            $cmd = "\"$python\" \"$script\" \"$imageFullPath\"";
-            $output = shell_exec($cmd);
-            Log::info('Python output: ' . $output);
-
-            // Clean up the temporary file
-            if (file_exists($imageFullPath)) {
-                unlink($imageFullPath);
-            }
+        $imageFullPath = Storage::disk('public')->path($imagePath);
+        $python = base_path('python_environment/Scripts/python.exe'); // Windows venv
+        $script = base_path('scripts/check_location.py');
+        $cmd = "\"$python\" \"$script\" \"$imageFullPath\"";
+        $output = shell_exec($cmd);
+        Log::info('Python output: ' . $output);
 
             if (!$output) {
                 return ['error' => 'Error processing image. No output from Python script.'];
@@ -277,12 +289,6 @@ class ReportController extends Controller
 
             return $location;
 
-        } catch (Exception $e) {
-            Log::error('Image processing error: ' . $e->getMessage());
-            return ['error' => 'Error processing image: ' . $e->getMessage()];
-        } finally {
-            // Restore original memory limit
-            ini_set('memory_limit', $originalMemoryLimit);
-        }
+
     }
 }

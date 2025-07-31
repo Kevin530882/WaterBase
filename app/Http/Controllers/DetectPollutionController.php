@@ -11,23 +11,16 @@ class DetectPollutionController extends Controller
     public function predict(Request $request)
     {
         set_time_limit(600);
-        ini_set('memory_limit', '256M');
         $request->validate([
-            'image' => 'required',
+            'image' => 'required|image|mimes:jpeg,png,jpg|max:2048',
         ]);
 
-        $imageString = $request->image;
-        if (strpos($imageString, 'data:image/') === 0) {
-            $base64_string = substr($imageString, strpos($imageString, ',') + 1);
-        }
-        $decoded_image_data = base64_decode($base64_string);
+        // Store the uploaded image
+        $file = $request->image;
+        $fileName = $file->getClientOriginalName();
+        $imagePath = Storage::disk("public")->putFileAs("uploads", $file, $fileName);
 
-        $fileName = uniqid() . '.jpeg';
-
-        //$imagePath = Storage::disk("public")->putFileAs("uploads", $decoded_image_data, $fileName);
-        Storage::disk('public')->put("uploads/{$fileName}", $decoded_image_data);
-
-        $imageFullPath = Storage::disk('public')->path("uploads/{$fileName}");
+        $imageFullPath = Storage::disk('public')->path($imagePath);
 
         $python = base_path('python_environment/Scripts/python.exe'); // Windows venv
         $script = base_path('scripts/predict_pollution.py');

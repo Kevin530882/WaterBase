@@ -24,7 +24,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Zap, AlertCircle, CheckCircle, Loader2 } from "lucide-react";
+import { Zap, AlertCircle, CheckCircle } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { MapPin, Upload } from "lucide-react";
@@ -42,57 +42,6 @@ export const ReportPollution = () => {
   const [verificationStatus, setVerificationStatus] = useState('idle');
   const [showLocationFields, setShowLocationFields] = useState(false);
 
-
-  const verifyImageMetadata = async (file) => {
-    setVerificationStatus('verifying');
-    setShowLocationFields(false); // Hide fields while verifying
-    try {
-      const imageBase64 = await convertImageToBase64(file);
-      const response = await fetch('/api/reports/verify-image', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('auth_token')}`,
-        },
-        body: JSON.stringify({ image: imageBase64 }),
-      });
-      const data = await response.json();
-      console.log(response);
-      console.log(data);
-      if (response.ok && data.tampered == false && data.gps != null) {
-        // Set location from API response
-        setNewReport(prev => ({
-          ...prev,
-          address: data.address || '',
-          latitude: data.latitude?.toString() || '',
-          longitude: data.longitude?.toString() || ''
-        }));
-        setVerificationStatus('success');
-        setShowLocationFields(false); // Hide fields since we have metadata
-        return true;
-      }
-      else if (response.ok == false && data.tampered == true && data.gps != null) {
-        setVerificationStatus('failed');
-        setShowLocationFields(false);
-        setErrorMessage('Error: Image flagged as tampered. Please upload an original, unedited camera photo. Continued submissions of altered images may result in account suspension.');
-      }
-      else {
-        setVerificationStatus('failed');
-        setShowLocationFields(true); // Show location fields
-        setErrorMessage('No location metadata found. Please ensure location tagging is enabled and enter location manually.');
-        return false;
-      }
-    } catch (error) {
-      setVerificationStatus('failed');
-      setShowLocationFields(true); // Show location fields on error
-      setErrorMessage('Failed to verify image metadata. Please enter location manually.');
-      return false;
-    }
-  };
-
-
-
   const [newReport, setNewReport] = useState({
     title: "",
     content: "",
@@ -104,57 +53,74 @@ export const ReportPollution = () => {
     image: null,
   });
 
-  const convertImageToBase64 = (file) => {
-    return new Promise((resolve, reject) => {
-      const canvas = document.createElement('canvas');
-      const ctx = canvas.getContext('2d');
-      const img = new Image();
-
-      img.onload = () => {
-        // Calculate new dimensions (max 1920x1080)
-        const maxWidth = 1920;
-        const maxHeight = 1080;
-        let { width, height } = img;
-
-        if (width > maxWidth || height > maxHeight) {
-          const ratio = Math.min(maxWidth / width, maxHeight / height);
-          width = Math.floor(width * ratio);
-          height = Math.floor(height * ratio);
-        }
-
-        // Set canvas dimensions
-        canvas.width = width;
-        canvas.height = height;
-
-        // Draw and compress image
-        ctx.drawImage(img, 0, 0, width, height);
-
-        // Convert to base64 with compression (0.8 quality)
-        const compressedBase64 = canvas.toDataURL('image/jpeg', 0.8);
-        resolve(compressedBase64);
-      };
-
-      img.onerror = () => reject(new Error('Failed to load image'));
-
-      // Create object URL for the image
-      const objectUrl = URL.createObjectURL(file);
-      img.src = objectUrl;
-    });
+  const verifyImageMetadata = async (file) => {
+    setVerificationStatus('verifying');
+    setShowLocationFields(false);
+    try {
+      const formData = new FormData();
+      formData.append('image', file);
+      const response = await fetch('/api/reports/verify-image', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('auth_token')}`,
+        },
+        body: formData,
+      });
+      const data = await response.json();
+      console.log('Verify image response:', response);
+      console.log('Verify image data:', data);
+      if (response.ok && data.tampered === false && data.gps != null) {
+        setNewReport(prev => ({
+          ...prev,
+          address: data.address || '',
+          latitude: data.latitude?.toString() || '',
+          longitude: data.longitude?.toString() || ''
+        }));
+        setVerificationStatus('success');
+        setShowLocationFields(false);
+        return true;
+      } else if (response.ok === false && data.tampered === true && data.gps != null) {
+        setVerificationStatus('failed');
+        setShowLocationFields(false);
+        setErrorMessage('Error: Image flagged as tampered. Please upload an original, unedited camera photo.');
+        return false;
+      } else {
+        setVerificationStatus('failed');
+        setShowLocationFields(true);
+        setErrorMessage('No location metadata found. Please enter location manually.');
+        return false;
+      }
+    } catch (error) {
+      console.error('Verify image error:', error);
+      setVerificationStatus('failed');
+      setShowLocationFields(true);
+      setErrorMessage('Failed to verify image metadata. Please enter location manually.');
+      return false;
+    }
   };
 
-
   const handleImageSelect = async (e) => {
-    const file = e.target.files[0];
+    const file = e.target.files?.[0];
+    console.log('Selected file:', file);
     if (file) {
-      setNewReport({ ...newReport, image: file });
-      const isValid = await verifyImageMetadata(file);
-      if (!isValid) {
-        setNewReport({ ...newReport, image: file, latitude: '', longitude: '' });
+      if (file.type.startsWith('image/') && ['image/jpeg', 'image/png', 'image/jpg', 'image/gif'].includes(file.type)) {
+        setNewReport({ ...newReport, image: file });
+        console.log('Image set in state:', file.name);
+        const isValid = await verifyImageMetadata(file);
+        if (!isValid) {
+          setNewReport({ ...newReport, image: file, latitude: '', longitude: '' });
+        }
+      } else {
+        setErrorMessage('Please select a valid image file (JPEG, PNG, JPG, or GIF).');
       }
+    } else {
+      setErrorMessage('No image file selected. Please choose an image.');
+      setNewReport({ ...newReport, image: null });
     }
   };
 
   const validateForm = () => {
+    console.log('Form values before validation:', newReport);
     if (!newReport.title.trim()) {
       setErrorMessage('Title is required');
       return false;
@@ -171,31 +137,31 @@ export const ReportPollution = () => {
       setErrorMessage('Latitude and longitude are required');
       return false;
     }
-    if (!newReport.pollutionType) {
-      setErrorMessage('Pollution type is required');
+    if (!newReport.latitude || !newReport.longitude) {
+      setErrorMessage('Latitude and longitude are required');
       return false;
     }
     if (!newReport.severityByUser) {
       setErrorMessage('Severity level is required');
       return false;
     }
-    if (!newReport.image) {
-      setErrorMessage('Image is required');
+    if (!newReport.image || !(newReport.image instanceof File)) {
+      setErrorMessage('A valid image file is required');
       return false;
     }
-
+    
     const lat = parseFloat(newReport.latitude);
     const lng = parseFloat(newReport.longitude);
     if (isNaN(lat) || isNaN(lng)) {
       setErrorMessage('Please enter valid latitude and longitude values');
       return false;
     }
-
+    
     if (lat < -90 || lat > 90 || lng < -180 || lng > 180) {
       setErrorMessage('Please enter valid coordinate values');
       return false;
     }
-
+    
     return true;
   };
 
@@ -210,60 +176,101 @@ export const ReportPollution = () => {
     setSubmitStatus('idle');
 
     try {
-      const imageBase64 = await convertImageToBase64(newReport.image);
+      // Step 1: Call /api/predict with FormData
+      const predictFormData = new FormData();
+      predictFormData.append('image', newReport.image);
+      predictFormData.append('severityByUser', newReport.severityByUser);
 
-      let temp_data = {
-        image: imageBase64,
-        severityByUser: newReport.severityByUser
-      };
+      console.log('Submitting to /api/predict:', {
+        image: newReport.image.name,
+        severityByUser: newReport.severityByUser,
+      });
+
       const ai_response = await fetch('/api/predict', {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
           'Authorization': `Bearer ${localStorage.getItem('auth_token')}`,
         },
-        body: JSON.stringify(temp_data),
+        body: predictFormData,
       });
+
+      if (!ai_response.ok) {
+        const text = await ai_response.text();
+        console.error('AI Prediction response:', {
+          status: ai_response.status,
+          statusText: ai_response.statusText,
+          body: text,
+        });
+        throw new Error(`Prediction failed: ${text}`);
+      }
+
+      const ai_data = await ai_response.json();
+      console.log('AI Response:', ai_response);
+      console.log('AI Data:', ai_data);
+
       let new_status = 'pending';
-      let data = await ai_response.json();
-      console.log(ai_response)
-      console.log(data);
-      if (data.ai_verified == true) {
+      if (ai_data.ai_verified === true) {
         new_status = 'verified';
       }
-      const reportData = {
+
+      // Step 2: Submit report with FormData
+      const reportFormData = new FormData();
+      reportFormData.append('title', newReport.title);
+      reportFormData.append('content', newReport.content);
+      reportFormData.append('address', newReport.address);
+      reportFormData.append('latitude', newReport.latitude);
+      reportFormData.append('longitude', newReport.longitude);
+      reportFormData.append('pollutionType', newReport.pollutionType);
+      reportFormData.append('status', new_status);
+      reportFormData.append('image', newReport.image);
+      reportFormData.append('severityByUser', newReport.severityByUser);
+      reportFormData.append('user_id', (user?.id || 1).toString());
+      reportFormData.append('severityByAI', ai_data[0].severity_level);
+      reportFormData.append('ai_verified', ai_data.ai_verified ? '1' : '0');
+      reportFormData.append('ai_confidence', ai_data[0].overall_confidence.toString());
+      reportFormData.append('severityPercentage', ai_data[0].pollution_percentage.toString());
+
+      console.log('Submitting to /api/reports:', {
         title: newReport.title,
         content: newReport.content,
         address: newReport.address,
-        latitude: parseFloat(newReport.latitude),
-        longitude: parseFloat(newReport.longitude),
+        latitude: newReport.latitude,
+        longitude: newReport.longitude,
         pollutionType: newReport.pollutionType,
         status: new_status,
-        image: imageBase64,
+        image: newReport.image?.name || 'undefined',
         severityByUser: newReport.severityByUser,
         user_id: user?.id || 1,
-        severityByAI: data.severity_level,
-        ai_verified: data.ai_verified,
-        ai_confidence: data.overall_confidence,
-        severityPercentage: data.pollution_percentage
-      };
+        severityByAI: ai_data[0].severity_level,
+        ai_verified: ai_data.ai_verified,
+        ai_confidence: ai_data[0].overall_confidence,
+        severityPercentage: ai_data[0].pollution_percentage,
+      });
 
       const response = await fetch('/api/reports', {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json',
-          'Accept': 'application/json',
           'Authorization': `Bearer ${localStorage.getItem('auth_token')}`,
         },
-        body: JSON.stringify(reportData),
+        body: reportFormData,
       });
 
-      data = await response.json();
-      console.log(response)
-      console.log(data);
-      if (response.ok && data.status === 'success') {
-        console.log(data);
+      if (!response.ok) {
+        const text = await response.text();
+        console.error('Report submission response:', {
+          status: response.status,
+          statusText: response.statusText,
+          headers: Object.fromEntries(response.headers.entries()),
+          body: text,
+        });
+        throw new Error(`Report submission failed: ${text}`);
+      }
+
+      const data = await response.json();
+      console.log('Report Response:', response);
+      console.log('Report Data:', data);
+
+      if (data.status === 'success') {
         setSubmitStatus('success');
         setNewReport({
           title: "",
@@ -294,7 +301,6 @@ export const ReportPollution = () => {
     }
   };
 
-
   const handleGetCurrentLocation = () => {
     if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
@@ -314,6 +320,7 @@ export const ReportPollution = () => {
       setErrorMessage('Geolocation is not supported by this browser.');
     }
   };
+
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-waterbase-50 to-enviro-50">
@@ -345,7 +352,7 @@ export const ReportPollution = () => {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <Button
+              <Button 
                 className="w-full bg-waterbase-500 hover:bg-waterbase-600"
                 onClick={() => setShowCameraModal(true)}
               >
@@ -397,6 +404,22 @@ export const ReportPollution = () => {
                     </DialogHeader>
 
                     <div className="space-y-4">
+                      {submitStatus === 'success' && (
+                        <Alert className="border-green-200 bg-green-50">
+                          <CheckCircle className="h-4 w-4 text-green-600" />
+                          <AlertDescription className="text-green-700">
+                            Report submitted successfully! Thank you for helping protect our waterways.
+                          </AlertDescription>
+                        </Alert>
+                      )}
+
+                      {(submitStatus === 'error' || errorMessage) && (
+                        <Alert variant="destructive">
+                          <AlertCircle className="h-4 w-4" />
+                          <AlertDescription>{errorMessage}</AlertDescription>
+                        </Alert>
+                      )}
+
                       <div>
                         <label className="text-sm font-medium mb-1 block">
                           Title *
@@ -532,7 +555,7 @@ export const ReportPollution = () => {
                 Use your device's camera or upload an image of the pollution.
               </DialogDescription>
             </DialogHeader>
-
+            
             <div className="space-y-4 max-h-[70vh] overflow-y-auto">
               <Input
                 type="file"
@@ -541,21 +564,21 @@ export const ReportPollution = () => {
                 onChange={handleImageSelect}
                 className="w-full"
               />
-
+              
               {verificationStatus === 'verifying' && (
                 <div className="text-center py-4">
                   <div className="w-8 h-8 mx-auto animate-spin rounded-full border-4 border-waterbase-500 border-t-transparent" />
                   <p className="mt-2 text-waterbase-600">Verifying image metadata...</p>
                 </div>
               )}
-
+              
               {(verificationStatus === 'failed' || errorMessage) && (
                 <Alert variant="destructive">
                   <AlertCircle className="h-4 w-4" />
                   <AlertDescription>{errorMessage}</AlertDescription>
                 </Alert>
               )}
-
+              
               {newReport.image && verificationStatus !== 'verifying' && (
                 <div className="flex justify-center">
                   <img
@@ -565,7 +588,7 @@ export const ReportPollution = () => {
                   />
                 </div>
               )}
-
+              
               {showLocationFields && (
                 <>
                   <div>
@@ -584,7 +607,7 @@ export const ReportPollution = () => {
                       disabled={verificationStatus === 'verifying'}
                     />
                   </div>
-
+                  
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                     <div>
                       <label className="text-sm font-medium mb-1 block">Latitude *</label>
@@ -605,7 +628,7 @@ export const ReportPollution = () => {
                       />
                     </div>
                   </div>
-
+                  
                   <div className="flex justify-center">
                     <Button
                       type="button"
@@ -620,7 +643,7 @@ export const ReportPollution = () => {
                   </div>
                 </>
               )}
-
+              
             </div>
           </DialogContent>
         </Dialog>
@@ -641,10 +664,8 @@ export const ReportPollution = () => {
             </DialogHeader>
             {isSubmitting ? (
               <div className="text-center">
-                <div className="flex items-center justify-center">
-                  <Loader2 className="w-8 h-8 animate-spin text-waterbase-500" />
-                </div>
-                <p className="mt-4 text-waterbase-600">Processing and verifying your report...</p>
+                <div className="w-8 h-8 mx-auto animate-spin rounded-full border-4 border-waterbase-500 border-t-transparent" />
+                <p className="mt-2 text-waterbase-600">Processing...</p>
               </div>
             ) : submitStatus === 'success' ? (
               <Alert className="border-green-200 bg-green-50">
@@ -709,3 +730,4 @@ export const ReportPollution = () => {
     </div>
   );
 };
+
