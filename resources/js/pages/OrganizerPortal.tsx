@@ -85,8 +85,8 @@ export const OrganizerPortal = () => {
             console.log('Token:', token ? 'Present' : 'Missing');
             console.log('API URL:', '/api/reports/accessible');
 
-            // Fetch all reports
-            const response = await fetch('/api/reports', {
+            // Fetch accessible reports based on user's area
+            const response = await fetch('/api/reports/accessible', {
                 headers: {
                     'Authorization': `Bearer ${token}`,
                     'Accept': 'application/json',
@@ -94,17 +94,21 @@ export const OrganizerPortal = () => {
             });
 
             console.log('Response status:', response.status);
-            console.log('Response headers:', response.headers); if (response.ok) {
+            console.log('Response headers:', response.headers);
+            if (response.ok) {
                 const data = await response.json();
                 console.log('ACCESSIBLE REPORTS DATA:', data);
 
-                // Extract reports from the response structure
-                const verifiedReports = data.reports?.data || data.reports || [];
-                const accessibleReports = verifiedReports.filter(r => r.status === 'verified');
-                console.log('ACCESSIBLE REPORTS:', accessibleReports);
-                console.log('USER AREA:', data.user_area);
+                // The API should return reports directly as an array
+                const allReports = Array.isArray(data) ? data : (data.reports || data.data || []);
+                console.log('ALL REPORTS FROM API:', allReports);
 
-                processEligibleAreas(accessibleReports);
+                // Filter for verified reports only (for cleanup events)
+                const verifiedReports = allReports.filter(r => r.status === 'verified');
+                console.log('VERIFIED REPORTS:', verifiedReports);
+                console.log('USER AREA:', user?.areaOfResponsibility);
+
+                processEligibleAreas(verifiedReports);
             } else {
                 const errorText = await response.text();
                 console.error('API Error:', errorText);

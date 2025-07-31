@@ -178,6 +178,15 @@ export const ReportPollution = () => {
     try {
       // Step 1: Call /api/predict with FormData
       const predictFormData = new FormData();
+      
+      // Debug: Check if the image is still valid
+      console.log('Image file before prediction:', {
+        name: newReport.image?.name,
+        type: newReport.image?.type,
+        size: newReport.image?.size,
+        isFile: newReport.image instanceof File
+      });
+      
       predictFormData.append('image', newReport.image);
       predictFormData.append('severityByUser', newReport.severityByUser);
 

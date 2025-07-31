@@ -12,6 +12,7 @@ use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\Rules\Enum;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
+use Illuminate\Validation\ValidationException;
 
 class ReportController extends Controller
 {
@@ -26,13 +27,30 @@ class ReportController extends Controller
             'user_area' => $user->areaOfResponsibility ?? 'none'
         ]);
 
-        // For now, let's return ALL reports to debug
-        $reports = Report::with(['user:id,firstName,lastName,email'])
-            ->orderBy('created_at', 'desc')
-            ->get();
+        // Apply area filtering if user has area of responsibility
+        $query = Report::with(['user:id,firstName,lastName,email']);
+
+        if ($user->areaOfResponsibility) {
+            \Log::info('Applying area filtering', [
+                'user_area' => $user->areaOfResponsibility,
+                'total_reports_before_filter' => Report::count()
+            ]);
+
+            $query = $this->filterByAreaOfResponsibility($query, $user->areaOfResponsibility);
+
+            // Get count after filtering for debugging
+            $filteredCount = clone $query;
+            \Log::info('Reports after area filtering', [
+                'filtered_count' => $filteredCount->count(),
+                'sample_addresses' => Report::take(3)->pluck('address')->toArray()
+            ]);
+        }
+
+        $reports = $query->orderBy('created_at', 'desc')->get();
 
         \Log::info('Found reports', [
             'count' => $reports->count(),
+            'user_area' => $user->areaOfResponsibility,
             'first_few' => $reports->take(3)->map(function ($report) {
                 return [
                     'id' => $report->id,
@@ -47,9 +65,15 @@ class ReportController extends Controller
         return response()->json($reports);
     }
 
+    public function accessible(Request $request)
+    {
+        // This method provides the same functionality as index but with explicit "accessible" naming
+        return $this->index($request);
+    }
+
     public function store(Request $request)
     {
-      
+
         try {
             // Validate request data
             $reportsValidated = $request->validate([
@@ -74,7 +98,7 @@ class ReportController extends Controller
                 $image = $request->file('image');
                 $imageName = uniqid() . '.' . $image->getClientOriginalExtension();
                 $imagePath = $image->storeAs('uploads', $imageName, 'public');
-                
+
                 if (!$imagePath) {
                     throw new \Exception('Failed to store image in uploads directory.');
                 }
@@ -130,7 +154,7 @@ class ReportController extends Controller
                 'message' => 'An unexpected error occurred. Please try again later.',
             ], 500);
         }
-    
+
     }
 
     public function show(string $id)
@@ -251,27 +275,30 @@ class ReportController extends Controller
 
         return response()->json($reports);
     }
-    private function verifyImage(Request $request){
-                // Store the uploaded image
-        set_time_limit(600);
-        $request->validate([
-            'image' => 'required|image|mimes:jpeg,png,jpg|max:2048',
-        ]);
 
-        // Store the uploaded image
-        $file = $request->image;
-        $fileName = $file->getClientOriginalName();
-        $imagePath = Storage::disk("public")->putFileAs("uploads", $file, $fileName);
+    public function verifyImage(Request $request)
+    {
+        try {
+            // Store the uploaded image
+            set_time_limit(600);
+            $request->validate([
+                'image' => 'required|image|mimes:jpeg,png,jpg|max:2048',
+            ]);
 
-        $imageFullPath = Storage::disk('public')->path($imagePath);
-        $python = base_path('python_environment/Scripts/python.exe'); // Windows venv
-        $script = base_path('scripts/check_location.py');
-        $cmd = "\"$python\" \"$script\" \"$imageFullPath\"";
-        $output = shell_exec($cmd);
-        Log::info('Python output: ' . $output);
+            // Store the uploaded image
+            $file = $request->image;
+            $fileName = $file->getClientOriginalName();
+            $imagePath = Storage::disk("public")->putFileAs("uploads", $file, $fileName);
+
+            $imageFullPath = Storage::disk('public')->path($imagePath);
+            $python = base_path('python_environment/Scripts/python.exe'); // Windows venv
+            $script = base_path('scripts/check_location.py');
+            $cmd = "\"$python\" \"$script\" \"$imageFullPath\"";
+            $output = shell_exec($cmd);
+            Log::info('Python output: ' . $output);
 
             if (!$output) {
-                return ['error' => 'Error processing image. No output from Python script.'];
+                return response()->json(['error' => 'Error processing image. No output from Python script.'], 500);
             }
 
             // Extract the last line of the output (should be the JSON)
@@ -284,11 +311,78 @@ class ReportController extends Controller
 
             // Check if JSON decoding failed
             if ($location === null) {
-                return ['error' => 'Invalid JSON output from Python script.', 'output' => $json_line];
+                return response()->json(['error' => 'Invalid JSON output from Python script.', 'output' => $json_line], 500);
             }
 
-            return $location;
+            return response()->json($location);
 
+        } catch (ValidationException $e) {
+            return response()->json([
+                'error' => 'Validation failed',
+                'errors' => $e->errors()
+            ], 422);
+        } catch (\Exception $e) {
+            Log::error('Image verification error: ' . $e->getMessage());
+            return response()->json([
+                'error' => 'Failed to verify image: ' . $e->getMessage()
+            ], 500);
+        }
 
+    }
+
+    /**
+     * Filter reports based on user's area of responsibility
+     */
+    private function filterByAreaOfResponsibility($query, $areaOfResponsibility)
+    {
+        // Parse the area of responsibility and extract meaningful location parts
+        $areaOfResponsibility = strtoupper(trim($areaOfResponsibility));
+
+        \Log::info('Area filtering details', [
+            'original_area' => $areaOfResponsibility
+        ]);
+
+        // Extract key location identifiers from the area of responsibility
+        $locationParts = [];
+
+        // Split by common delimiters
+        $parts = preg_split('/[,\-]+/', $areaOfResponsibility);
+
+        foreach ($parts as $part) {
+            $part = trim($part);
+            if (!empty($part)) {
+                // Add the full part
+                $locationParts[] = $part;
+
+                // Also add individual words from the part (for cases like "METRO MANILA")
+                $words = explode(' ', $part);
+                foreach ($words as $word) {
+                    $word = trim($word);
+                    if (strlen($word) > 2 && !in_array($word, ['THE', 'OF', 'AND', 'REGION', 'CAPITAL', 'DISTRICT'])) {
+                        $locationParts[] = $word;
+                    }
+                }
+            }
+        }
+
+        // Remove duplicates and empty values
+        $locationParts = array_unique(array_filter($locationParts));
+
+        \Log::info('Extracted location parts for filtering', [
+            'location_parts' => $locationParts
+        ]);
+
+        if (empty($locationParts)) {
+            return $query->whereRaw('1 = 0'); // No access
+        }
+
+        // Match if the address contains ANY of the location parts
+        return $query->where(function ($q) use ($locationParts) {
+            foreach ($locationParts as $locationPart) {
+                if (!empty($locationPart)) {
+                    $q->orWhereRaw('UPPER(address) LIKE ?', ['%' . $locationPart . '%']);
+                }
+            }
+        });
     }
 }
