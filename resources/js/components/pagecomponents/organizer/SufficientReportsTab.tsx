@@ -255,25 +255,28 @@ export const SufficientReportsTab = ({
                     <h2 className="text-lg sm:text-xl font-semibold text-waterbase-950">
                         Areas with Sufficient Reports
                     </h2>
-                    <Badge className="bg-waterbase-500 text-white text-xs sm:text-sm px-2 py-1 h-auto w-fit">
-                        {filteredAreas.length} locations {showUrgentOnly ? 'urgent' : 'eligible'}
-                    </Badge>
+                    
                 </div>
 
                 {/* Toggle Switch */}
-                <div className="flex items-center space-x-2 sm:space-x-3">
-                    <Label htmlFor="urgent-toggle" className="text-xs sm:text-sm text-gray-600 whitespace-nowrap">
-                        Show urgent only:
-                    </Label>
-                    <Switch
-                        id="urgent-toggle"
-                        checked={showUrgentOnly}
-                        onCheckedChange={setShowUrgentOnly}
-                        className="data-[state=checked]:bg-red-500"
-                    />
-                    <span className="text-xs sm:text-sm font-medium text-gray-700">
-                        {showUrgentOnly ? "Urgent" : "All"}
-                    </span>
+                <div className="flex justify-between items-center space-x-2 sm:space-x-3">
+                    <Badge className="bg-waterbase-500 text-white text-xs sm:text-sm px-2 py-1 h-auto w-fit">
+                        {filteredAreas.length} locations {showUrgentOnly ? 'urgent' : 'eligible'}
+                    </Badge>
+                    <div className="flex items-center gap-2">
+                        <Label htmlFor="urgent-toggle" className="text-xs sm:text-sm text-gray-600 whitespace-nowrap">
+                            Show urgent only:
+                        </Label>
+                        <Switch
+                            id="urgent-toggle"
+                            checked={showUrgentOnly}
+                            onCheckedChange={setShowUrgentOnly}
+                            className="data-[state=checked]:bg-red-500"
+                        />
+                        <span className="text-xs sm:text-sm font-medium text-gray-700">
+                            {showUrgentOnly ? "Urgent" : "All"}
+                        </span>
+                    </div>
                 </div>
             </div>
 
