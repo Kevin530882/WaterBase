@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use finfo;
+use Exception;
 use App\Models\Report;
 use App\Enums\ReportStatus;
 use App\Enums\SeverityLevel;
@@ -45,7 +46,7 @@ class ReportController extends Controller
 
         return response()->json($reports);
     }
-    
+
     public function store(Request $request)
     {
         $reportsValidated = $request->validate([
@@ -60,11 +61,11 @@ class ReportController extends Controller
             'severityByUser' => ['required', new enum(SeverityLevel::class)],
             'user_id' => 'required|integer',
         ]);
-            
+
         $imageValidated = $this->verifyImage($request->image);
 
         Report::create(array_merge($reportsValidated, ['severityByAI' => $request->severityByAI, 'severityPercentage' => $request->severityPercentage, 'ai_confidence' => $request->ai_confidence]));
-        return response()->json(['success'=> 'Report Created Successfully', 'status' => 'success', 'imagething' => $imageValidated], 200);
+        return response()->json(['success' => 'Report Created Successfully', 'status' => 'success', 'imagething' => $imageValidated], 200);
     }
 
     public function show(string $id)
@@ -92,7 +93,7 @@ class ReportController extends Controller
                 'image' => 'required|string',
                 'severityByUser' => ['required', new Enum(SeverityLevel::class)],
                 'user_id' => 'required|integer|exists:users,id',
-                'ai_confidence'=>'numeric',
+                'ai_confidence' => 'numeric',
                 'severityByAI' => new Enum(SeverityLevel::class),
                 'severityPercentage' => 'numeric',
                 'ai_verified' => 'required|boolean'
@@ -185,43 +186,103 @@ class ReportController extends Controller
 
         return response()->json($reports);
     }
-    private function verifyImage(string $imageString){
-                // Store the uploaded image
-        if (strpos($imageString, 'data:image/') === 0) {
-            $base64_string = substr($imageString, strpos($imageString, ',') + 1);
+    private function verifyImage(string $imageString)
+    {
+        // Temporarily increase memory limit for image processing
+        $originalMemoryLimit = ini_get('memory_limit');
+        ini_set('memory_limit', '512M');
+
+        try {
+            // Store the uploaded image
+            if (strpos($imageString, 'data:image/') === 0) {
+                $base64_string = substr($imageString, strpos($imageString, ',') + 1);
+            } else {
+                $base64_string = $imageString;
+            }
+
+            $decoded_image_data = base64_decode($base64_string);
+
+            // Check if decoded data is valid
+            if ($decoded_image_data === false) {
+                return ['error' => 'Invalid base64 image data'];
+            }
+
+            // Create image resource from decoded data to optimize it
+            $image = imagecreatefromstring($decoded_image_data);
+            if ($image === false) {
+                return ['error' => 'Invalid image format'];
+            }
+
+            // Get original dimensions
+            $originalWidth = imagesx($image);
+            $originalHeight = imagesy($image);
+
+            // Resize if image is too large (max 1920x1080)
+            $maxWidth = 1920;
+            $maxHeight = 1080;
+
+            if ($originalWidth > $maxWidth || $originalHeight > $maxHeight) {
+                $ratio = min($maxWidth / $originalWidth, $maxHeight / $originalHeight);
+                $newWidth = intval($originalWidth * $ratio);
+                $newHeight = intval($originalHeight * $ratio);
+
+                $resizedImage = imagecreatetruecolor($newWidth, $newHeight);
+                imagecopyresampled($resizedImage, $image, 0, 0, 0, 0, $newWidth, $newHeight, $originalWidth, $originalHeight);
+                imagedestroy($image);
+                $image = $resizedImage;
+            }
+
+            // Convert to JPEG with compression to reduce file size
+            $fileName = uniqid() . '.jpeg';
+            $tempPath = Storage::disk('public')->path("uploads/{$fileName}");
+
+            // Ensure directory exists
+            $uploadDir = Storage::disk('public')->path("uploads");
+            if (!file_exists($uploadDir)) {
+                mkdir($uploadDir, 0755, true);
+            }
+
+            // Save optimized image
+            imagejpeg($image, $tempPath, 80); // 80% quality
+            imagedestroy($image);
+
+            $imageFullPath = $tempPath;
+            $python = base_path('python_environment/Scripts/python.exe'); // Windows venv
+            $script = base_path('scripts/check_location.py');
+            $cmd = "\"$python\" \"$script\" \"$imageFullPath\"";
+            $output = shell_exec($cmd);
+            Log::info('Python output: ' . $output);
+
+            // Clean up the temporary file
+            if (file_exists($imageFullPath)) {
+                unlink($imageFullPath);
+            }
+
+            if (!$output) {
+                return ['error' => 'Error processing image. No output from Python script.'];
+            }
+
+            // Extract the last line of the output (should be the JSON)
+            $lines = explode("\n", trim($output));
+            $json_line = end($lines);
+            Log::info('Extracted JSON line: ' . $json_line); // Log this for debugging
+
+            // Decode the JSON response from the Python script
+            $location = json_decode($json_line, true);
+
+            // Check if JSON decoding failed
+            if ($location === null) {
+                return ['error' => 'Invalid JSON output from Python script.', 'output' => $json_line];
+            }
+
+            return $location;
+
+        } catch (Exception $e) {
+            Log::error('Image processing error: ' . $e->getMessage());
+            return ['error' => 'Error processing image: ' . $e->getMessage()];
+        } finally {
+            // Restore original memory limit
+            ini_set('memory_limit', $originalMemoryLimit);
         }
-        $decoded_image_data = base64_decode($base64_string);
-
-        $fileName = uniqid() . '.jpeg';
-
-        //$imagePath = Storage::disk("public")->putFileAs("uploads", $decoded_image_data, $fileName);
-        Storage::disk('public')->put("uploads/{$fileName}", $decoded_image_data);
-
-        $imageFullPath = Storage::disk('public')->path("uploads/{$fileName}");
-        $python = base_path('python_environment/Scripts/python.exe'); // Windows venv
-        $script = base_path('scripts/check_location.py');
-        $cmd = "\"$python\" \"$script\" \"$imageFullPath\"";
-        $output = shell_exec($cmd);
-        Log::info('Python output: ' . $output);
-
-        if (!$output) {
-            return ['error' => 'Error processing image. No output from Python script.'];
-        }
-
-        // Extract the last line of the output (should be the JSON)
-        $lines = explode("\n", trim($output));
-        $json_line = end($lines);
-        Log::info('Extracted JSON line: ' . $json_line); // Log this for debugging
-
-        // Decode the JSON response from the Python script
-        $location = json_decode($json_line, true);
-
-        // Check if JSON decoding failed
-        if ($location === null) {
-            return ['error' => 'Invalid JSON output from Python script.', 'output' => $json_line];
-        }
-
-        return $location;
-
     }
 }

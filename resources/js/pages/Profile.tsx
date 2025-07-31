@@ -50,12 +50,12 @@ export const Profile = () => {
     const fetchUserStats = async () => {
         try {
             setIsLoading(true);
-            
+
             // Use single endpoint for all roles
             const response = await fetch('/api/user/stats', {
                 headers: { Authorization: `Bearer ${token}` }
             });
-            
+
             if (response.ok) {
                 const stats = await response.json();
                 setUserStats(stats);
@@ -75,7 +75,7 @@ export const Profile = () => {
 
     const getBadgeIcon = (badgeName: string) => {
         const name = badgeName?.toLowerCase() || '';
-        
+
         if (name.includes('water') || name.includes('clean')) {
             return '💧';
         } else if (name.includes('eco') || name.includes('green')) {
@@ -121,7 +121,7 @@ export const Profile = () => {
                             label: "Community Points"
                         }
                     ];
-                
+
                 case 'ngo':
                 case 'lgu':
                     return [
@@ -146,7 +146,7 @@ export const Profile = () => {
                             label: "Success Rate"
                         }
                     ];
-                
+
                 case 'researcher':
                     return [
                         {
@@ -170,7 +170,7 @@ export const Profile = () => {
                             label: "Accuracy Rate"
                         }
                     ];
-                
+
                 default:
                     return [
                         {
@@ -189,14 +189,14 @@ export const Profile = () => {
 
         return getStatsConfig().map((stat, index) => (
             <Card key={index} className="border-waterbase-200">
-                <CardContent className="p-4 text-center">
+                <CardContent className="p-3 sm:p-4 text-center">
                     <div className="flex items-center justify-center mb-2">
                         {stat.icon}
                     </div>
-                    <div className="text-2xl font-bold text-waterbase-950">
+                    <div className="text-xl sm:text-2xl font-bold text-waterbase-950">
                         {stat.value}
                     </div>
-                    <div className="text-sm text-waterbase-600">
+                    <div className="text-xs sm:text-sm text-waterbase-600 leading-tight">
                         {stat.label}
                     </div>
                 </CardContent>
@@ -211,12 +211,12 @@ export const Profile = () => {
             <div className="max-w-4xl mx-auto py-8 px-4 sm:px-6 lg:px-8">
                 {/* Profile Header */}
                 <Card className="border-waterbase-200 mb-6">
-                    <CardContent className="p-6">
-                        <div className="flex items-start space-x-6">
-                            <div className="relative">
-                                <Avatar className="w-24 h-24">
+                    <CardContent className="p-4 sm:p-6">
+                        <div className="flex flex-col sm:flex-row items-center sm:items-start gap-4 sm:gap-6">
+                            <div className="relative flex-shrink-0">
+                                <Avatar className="w-20 h-20 sm:w-24 sm:h-24">
                                     <AvatarImage src="/placeholder-avatar.jpg" />
-                                    <AvatarFallback className="bg-waterbase-100 text-waterbase-700 text-xl">
+                                    <AvatarFallback className="bg-waterbase-100 text-waterbase-700 text-lg sm:text-xl">
                                         {profileData.firstName[0] || 'U'}
                                         {profileData.lastName[0] || 'U'}
                                     </AvatarFallback>
@@ -224,71 +224,71 @@ export const Profile = () => {
                                 <Button
                                     size="icon"
                                     variant="outline"
-                                    className="absolute -bottom-2 -right-2 h-8 w-8 rounded-full"
+                                    className="absolute -bottom-2 -right-2 h-6 w-6 sm:h-8 sm:w-8 rounded-full"
                                 >
-                                    <Camera className="w-4 h-4" />
+                                    <Camera className="w-3 h-3 sm:w-4 sm:h-4" />
                                 </Button>
                             </div>
 
-                            <div className="flex-1">
-                                <h1 className="text-2xl font-bold text-waterbase-950">
+                            <div className="flex-1 min-w-0 text-center sm:text-left w-full">
+                                <h1 className="text-lg sm:text-xl lg:text-2xl font-bold text-waterbase-950 break-words mb-3 sm:mb-2">
                                     {profileData.firstName} {profileData.lastName}
                                 </h1>
-                                <div className="flex items-center space-x-4 text-sm text-waterbase-600 mb-3">
+                                <div className="flex gap-5 sm:flex-col sm:gap-2 text-xs sm:text-sm text-waterbase-600 mb-3 max-w-xs mx-auto sm:max-w-none sm:mx-0 justify-center sm:justify-start">
                                     {profileData.areaOfResponsibility && (
                                         <div className="flex items-center space-x-1">
-                                            <MapPin className="w-4 h-4" />
-                                            <span>{profileData.areaOfResponsibility}</span>
+                                            <MapPin className="w-3 h-3 sm:w-4 sm:h-4 flex-shrink-0" />
+                                            <span className="break-words truncate">{profileData.areaOfResponsibility}</span>
                                         </div>
                                     )}
                                     {profileData.organization && (
                                         <div className="flex items-center space-x-1">
-                                            <User className="w-4 h-4" />
-                                            <span>{profileData.organization}</span>
+                                            <User className="w-3 h-3 sm:w-4 sm:h-4 flex-shrink-0" />
+                                            <span className="break-words truncate">{profileData.organization}</span>
                                         </div>
                                     )}
                                 </div>
 
-                                <div className="flex items-center space-x-3 mb-3">
-                                    <Badge variant="outline">
+                                <div className="flex flex-wrap justify-center sm:justify-start items-center gap-1 sm:gap-2 mb-3">
+                                    <Badge variant="outline" className="text-xs px-2 py-1 h-auto">
                                         {user?.role?.toUpperCase() || 'VOLUNTEER'} Role
                                     </Badge>
-                                    <Badge variant="outline">
-                                        Member since {new Date(user?.created_at || Date.now()).toLocaleDateString('en-US', { 
-                                            year: 'numeric', 
-                                            month: 'long' 
+                                    <Badge variant="outline" className="text-xs px-2 py-1 h-auto">
+                                        Member since {new Date(user?.created_at || Date.now()).toLocaleDateString('en-US', {
+                                            year: 'numeric',
+                                            month: 'long'
                                         })}
                                     </Badge>
                                 </div>
 
                                 {/* Badges Display */}
                                 {userStats.badges && userStats.badges.length > 0 && (
-                                    <div className="flex items-center space-x-2">
-                                        <span className="text-sm font-medium text-waterbase-700">Badges:</span>
-                                        <div className="flex space-x-1">
+                                    <div className="flex flex-col items-center sm:items-start sm:flex-row sm:items-center gap-2">
+                                        <span className="text-xs sm:text-sm font-medium text-waterbase-700">Badges:</span>
+                                        <div className="flex flex-wrap justify-center sm:justify-start gap-1">
                                             {userStats.badges.slice(0, 5).map((badge, index) => (
                                                 <Tooltip key={index}>
                                                     <TooltipTrigger>
-                                                        <div className="flex items-center justify-center w-8 h-8 bg-gradient-to-br from-yellow-100 to-yellow-200 rounded-full border-2 border-yellow-300 text-lg hover:scale-110 transition-transform cursor-pointer">
+                                                        <div className="flex items-center justify-center w-6 h-6 sm:w-8 sm:h-8 bg-gradient-to-br from-yellow-100 to-yellow-200 rounded-full border-2 border-yellow-300 text-sm sm:text-lg hover:scale-110 transition-transform cursor-pointer">
                                                             {getBadgeIcon(badge)}
                                                         </div>
                                                     </TooltipTrigger>
                                                     <TooltipContent>
-                                                        <p className="font-medium">{badge}</p>
+                                                        <p className="font-medium text-xs sm:text-sm">{badge}</p>
                                                     </TooltipContent>
                                                 </Tooltip>
                                             ))}
                                             {userStats.badges.length > 5 && (
                                                 <Tooltip>
                                                     <TooltipTrigger>
-                                                        <div className="flex items-center justify-center w-8 h-8 bg-gradient-to-br from-gray-100 to-gray-200 rounded-full border-2 border-gray-300 text-xs font-bold text-gray-600 hover:scale-110 transition-transform cursor-pointer">
+                                                        <div className="flex items-center justify-center w-6 h-6 sm:w-8 sm:h-8 bg-gradient-to-br from-gray-100 to-gray-200 rounded-full border-2 border-gray-300 text-xs font-bold text-gray-600 hover:scale-110 transition-transform cursor-pointer">
                                                             +{userStats.badges.length - 5}
                                                         </div>
                                                     </TooltipTrigger>
                                                     <TooltipContent>
                                                         <div className="max-w-xs">
-                                                            <p className="font-medium mb-2">All Badges:</p>
-                                                            <div className="grid grid-cols-2 gap-1 text-sm">
+                                                            <p className="font-medium mb-2 text-sm">All Badges:</p>
+                                                            <div className="grid grid-cols-2 gap-1 text-xs">
                                                                 {userStats.badges.map((badge, index) => (
                                                                     <div key={index} className="flex items-center space-x-1">
                                                                         <span>{getBadgeIcon(badge)}</span>
@@ -309,7 +309,7 @@ export const Profile = () => {
                 </Card>
 
                 {/* Stats Cards */}
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+                <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4 mb-6">
                     {isLoading ? (
                         // Loading skeleton
                         Array.from({ length: 4 }).map((_, i) => (

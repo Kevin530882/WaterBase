@@ -64,7 +64,7 @@ const Navigation = () => {
   // Handle community click with role-based redirect
   const handleCommunityClick = (e: React.MouseEvent) => {
     e.preventDefault();
-    
+
     if (!user) {
       navigate('/community');
       return;
@@ -120,7 +120,7 @@ const Navigation = () => {
               <>
                 {navigationItems.map((item) => {
                   const Icon = item.icon;
-                  
+
                   // Special handling for Community link
                   if (item.label === "Community" && user) {
                     return (
@@ -184,7 +184,7 @@ const Navigation = () => {
                         </Link>
                       </DropdownMenuItem>
                       <DropdownMenuSeparator />
-                      <DropdownMenuItem 
+                      <DropdownMenuItem
                         onClick={handleLogout}
                         className="flex items-center space-x-2 cursor-pointer text-red-600 focus:text-red-600"
                       >
@@ -201,10 +201,10 @@ const Navigation = () => {
             {(isAuthPage || !isAuthenticated) && (
               <div className="flex items-center space-x-2">
                 <Link to="/login">
-                  <Button 
-                    variant={location.pathname === '/login' ? "default" : "ghost"} 
+                  <Button
+                    variant={location.pathname === '/login' ? "default" : "ghost"}
                     className={cn(
-                      location.pathname === '/login' 
+                      location.pathname === '/login'
                         ? "bg-waterbase-500 text-white hover:bg-waterbase-600"
                         : "text-waterbase-700 hover:text-waterbase-900 hover:bg-waterbase-50"
                     )}
@@ -213,7 +213,7 @@ const Navigation = () => {
                   </Button>
                 </Link>
                 <Link to="/register">
-                  <Button 
+                  <Button
                     variant={location.pathname === '/register' ? "default" : "outline"}
                     className={cn(
                       location.pathname === '/register'
@@ -255,6 +255,52 @@ const Navigation = () => {
                   {navItems.map((item) => {
                     const Icon = item.icon;
                     const isActive = location.pathname === item.href;
+
+                    // Special handling for Community link with role-based redirect
+                    if (item.label === "Community" && user) {
+                      const getCommunityLabel = () => {
+                        if (user.role === 'admin') return "Admin Dashboard";
+                        if (user.role === 'ngo' || user.role === 'lgu') return "Organizer Portal";
+                        if (user.role === 'volunteer') return "Volunteer Portal";
+                        return "Community";
+                      };
+
+                      const getCommunityPath = () => {
+                        if (user.role === 'admin') return '/admin';
+                        if (user.role === 'ngo' || user.role === 'lgu') return '/organizer';
+                        if (user.role === 'volunteer') return '/volunteer';
+                        return '/community';
+                      };
+
+                      const communityPath = getCommunityPath();
+                      const communityLabel = getCommunityLabel();
+                      const isActiveRoute = location.pathname === communityPath;
+
+                      return (
+                        <button
+                          key={item.href}
+                          onClick={(e) => {
+                            e.preventDefault();
+                            handleCommunityClick(e);
+                            setIsMobileMenuOpen(false);
+                          }}
+                        >
+                          <Button
+                            variant={isActiveRoute ? "default" : "ghost"}
+                            className={cn(
+                              "w-full justify-start space-x-2",
+                              isActiveRoute
+                                ? "bg-waterbase-500 text-white"
+                                : "text-waterbase-700 hover:text-waterbase-900 hover:bg-waterbase-50",
+                            )}
+                          >
+                            <Icon className="w-4 h-4" />
+                            <span>{communityLabel}</span>
+                          </Button>
+                        </button>
+                      );
+                    }
+
                     return (
                       <Link
                         key={item.href}
@@ -320,7 +366,7 @@ const Navigation = () => {
                     to="/login"
                     onClick={() => setIsMobileMenuOpen(false)}
                   >
-                    <Button 
+                    <Button
                       variant={location.pathname === '/login' ? "default" : "ghost"}
                       className={cn(
                         "w-full justify-start",
@@ -336,7 +382,7 @@ const Navigation = () => {
                     to="/register"
                     onClick={() => setIsMobileMenuOpen(false)}
                   >
-                    <Button 
+                    <Button
                       variant={location.pathname === '/register' ? "default" : "outline"}
                       className={cn(
                         "w-full justify-start",

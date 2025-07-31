@@ -24,7 +24,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Zap, AlertCircle, CheckCircle } from "lucide-react";
+import { Zap, AlertCircle, CheckCircle, Loader2 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { MapPin, Upload } from "lucide-react";
@@ -43,7 +43,7 @@ export const ReportPollution = () => {
   const [showLocationFields, setShowLocationFields] = useState(false);
 
 
-    const verifyImageMetadata = async (file) => {
+  const verifyImageMetadata = async (file) => {
     setVerificationStatus('verifying');
     setShowLocationFields(false); // Hide fields while verifying
     try {
@@ -71,8 +71,8 @@ export const ReportPollution = () => {
         setVerificationStatus('success');
         setShowLocationFields(false); // Hide fields since we have metadata
         return true;
-      } 
-      else if(response.ok == false && data.tampered == true && data.gps !=null){
+      }
+      else if (response.ok == false && data.tampered == true && data.gps != null) {
         setVerificationStatus('failed');
         setShowLocationFields(false);
         setErrorMessage('Error: Image flagged as tampered. Please upload an original, unedited camera photo. Continued submissions of altered images may result in account suspension.');
@@ -106,16 +106,39 @@ export const ReportPollution = () => {
 
   const convertImageToBase64 = (file) => {
     return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => {
-        if (reader.result) {
-          resolve(reader.result);
-        } else {
-          reject(new Error('Failed to convert image'));
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+      const img = new Image();
+
+      img.onload = () => {
+        // Calculate new dimensions (max 1920x1080)
+        const maxWidth = 1920;
+        const maxHeight = 1080;
+        let { width, height } = img;
+
+        if (width > maxWidth || height > maxHeight) {
+          const ratio = Math.min(maxWidth / width, maxHeight / height);
+          width = Math.floor(width * ratio);
+          height = Math.floor(height * ratio);
         }
+
+        // Set canvas dimensions
+        canvas.width = width;
+        canvas.height = height;
+
+        // Draw and compress image
+        ctx.drawImage(img, 0, 0, width, height);
+
+        // Convert to base64 with compression (0.8 quality)
+        const compressedBase64 = canvas.toDataURL('image/jpeg', 0.8);
+        resolve(compressedBase64);
       };
-      reader.onerror = () => reject(new Error('Failed to read file'));
-      reader.readAsDataURL(file);
+
+      img.onerror = () => reject(new Error('Failed to load image'));
+
+      // Create object URL for the image
+      const objectUrl = URL.createObjectURL(file);
+      img.src = objectUrl;
     });
   };
 
@@ -160,19 +183,19 @@ export const ReportPollution = () => {
       setErrorMessage('Image is required');
       return false;
     }
-    
+
     const lat = parseFloat(newReport.latitude);
     const lng = parseFloat(newReport.longitude);
     if (isNaN(lat) || isNaN(lng)) {
       setErrorMessage('Please enter valid latitude and longitude values');
       return false;
     }
-    
+
     if (lat < -90 || lat > 90 || lng < -180 || lng > 180) {
       setErrorMessage('Please enter valid coordinate values');
       return false;
     }
-    
+
     return true;
   };
 
@@ -190,8 +213,8 @@ export const ReportPollution = () => {
       const imageBase64 = await convertImageToBase64(newReport.image);
 
       let temp_data = {
-         image: imageBase64,
-         severityByUser: newReport.severityByUser
+        image: imageBase64,
+        severityByUser: newReport.severityByUser
       };
       const ai_response = await fetch('/api/predict', {
         method: 'POST',
@@ -206,7 +229,7 @@ export const ReportPollution = () => {
       let data = await ai_response.json();
       console.log(ai_response)
       console.log(data);
-      if(data.ai_verified == true){
+      if (data.ai_verified == true) {
         new_status = 'verified';
       }
       const reportData = {
@@ -322,7 +345,7 @@ export const ReportPollution = () => {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <Button 
+              <Button
                 className="w-full bg-waterbase-500 hover:bg-waterbase-600"
                 onClick={() => setShowCameraModal(true)}
               >
@@ -374,22 +397,6 @@ export const ReportPollution = () => {
                     </DialogHeader>
 
                     <div className="space-y-4">
-                      {submitStatus === 'success' && (
-                        <Alert className="border-green-200 bg-green-50">
-                          <CheckCircle className="h-4 w-4 text-green-600" />
-                          <AlertDescription className="text-green-700">
-                            Report submitted successfully! Thank you for helping protect our waterways.
-                          </AlertDescription>
-                        </Alert>
-                      )}
-
-                      {(submitStatus === 'error' || errorMessage) && (
-                        <Alert variant="destructive">
-                          <AlertCircle className="h-4 w-4" />
-                          <AlertDescription>{errorMessage}</AlertDescription>
-                        </Alert>
-                      )}
-
                       <div>
                         <label className="text-sm font-medium mb-1 block">
                           Title *
@@ -525,7 +532,7 @@ export const ReportPollution = () => {
                 Use your device's camera or upload an image of the pollution.
               </DialogDescription>
             </DialogHeader>
-            
+
             <div className="space-y-4 max-h-[70vh] overflow-y-auto">
               <Input
                 type="file"
@@ -534,21 +541,21 @@ export const ReportPollution = () => {
                 onChange={handleImageSelect}
                 className="w-full"
               />
-              
+
               {verificationStatus === 'verifying' && (
                 <div className="text-center py-4">
                   <div className="w-8 h-8 mx-auto animate-spin rounded-full border-4 border-waterbase-500 border-t-transparent" />
                   <p className="mt-2 text-waterbase-600">Verifying image metadata...</p>
                 </div>
               )}
-              
+
               {(verificationStatus === 'failed' || errorMessage) && (
                 <Alert variant="destructive">
                   <AlertCircle className="h-4 w-4" />
                   <AlertDescription>{errorMessage}</AlertDescription>
                 </Alert>
               )}
-              
+
               {newReport.image && verificationStatus !== 'verifying' && (
                 <div className="flex justify-center">
                   <img
@@ -558,7 +565,7 @@ export const ReportPollution = () => {
                   />
                 </div>
               )}
-              
+
               {showLocationFields && (
                 <>
                   <div>
@@ -577,7 +584,7 @@ export const ReportPollution = () => {
                       disabled={verificationStatus === 'verifying'}
                     />
                   </div>
-                  
+
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                     <div>
                       <label className="text-sm font-medium mb-1 block">Latitude *</label>
@@ -598,7 +605,7 @@ export const ReportPollution = () => {
                       />
                     </div>
                   </div>
-                  
+
                   <div className="flex justify-center">
                     <Button
                       type="button"
@@ -613,7 +620,7 @@ export const ReportPollution = () => {
                   </div>
                 </>
               )}
-              
+
             </div>
           </DialogContent>
         </Dialog>
@@ -634,8 +641,10 @@ export const ReportPollution = () => {
             </DialogHeader>
             {isSubmitting ? (
               <div className="text-center">
-                <div className="w-8 h-8 mx-auto animate-spin rounded-full border-4 border-waterbase-500 border-t-transparent" />
-                <p className="mt-2 text-waterbase-600">Processing...</p>
+                <div className="flex items-center justify-center">
+                  <Loader2 className="w-8 h-8 animate-spin text-waterbase-500" />
+                </div>
+                <p className="mt-4 text-waterbase-600">Processing and verifying your report...</p>
               </div>
             ) : submitStatus === 'success' ? (
               <Alert className="border-green-200 bg-green-50">

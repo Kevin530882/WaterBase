@@ -55,10 +55,10 @@ interface AreaReport {
     reports: Report[];
 }
 
-export const SufficientReportsTab = ({ 
-    eligibleAreas, 
-    onCreateEvent, 
-    onSelectArea ,
+export const SufficientReportsTab = ({
+    eligibleAreas,
+    onCreateEvent,
+    onSelectArea,
     onRefresh,
     createdEvents = []
 }: {
@@ -88,16 +88,16 @@ export const SufficientReportsTab = ({
 
     const getSeverityColor = (severity: string) => {
         switch (severity.toLowerCase()) {
-        case "critical":
-            return "bg-red-500 text-white";
-        case "high":
-            return "bg-orange-500 text-white";
-        case "medium":
-            return "bg-yellow-500 text-black";
-        case "low":
-            return "bg-green-500 text-white";
-        default:
-            return "bg-gray-500 text-white";
+            case "critical":
+                return "bg-red-500 text-white";
+            case "high":
+                return "bg-orange-500 text-white";
+            case "medium":
+                return "bg-yellow-500 text-black";
+            case "low":
+                return "bg-green-500 text-white";
+            default:
+                return "bg-gray-500 text-white";
         }
     };
 
@@ -136,7 +136,7 @@ export const SufficientReportsTab = ({
                 badge: newEvent.rewardBadge || "Environmental Volunteer",
                 status: 'recruiting',
                 user_id: user.id,
-            }; 
+            };
 
             console.log('Sending event data:', eventData);
 
@@ -153,7 +153,7 @@ export const SufficientReportsTab = ({
             if (response.ok) {
                 const createdEvent = await response.json();
                 console.log("Cleanup event created successfully:", createdEvent);
-                
+
                 setNewEvent({
                     title: "",
                     date: "",
@@ -170,10 +170,10 @@ export const SufficientReportsTab = ({
 
                 // Use the prop instead of fetchCreatedEvents
                 onRefresh();
-                
+
                 // Show success message
                 alert("Cleanup event created successfully!");
-                
+
             } else {
                 const errorData = await response.json();
                 console.error('Event creation error:', errorData);
@@ -188,14 +188,14 @@ export const SufficientReportsTab = ({
     };
 
     const areLocationsMatching = (
-        coord1: { lat: number; lng: number }, 
+        coord1: { lat: number; lng: number },
         coord2: { lat: number; lng: number }
     ): boolean => {
         // Same exact coordinates
         if (coord1.lat === coord2.lat && coord1.lng === coord2.lng) {
             return true;
         }
-        
+
         // Very close proximity (50m tolerance)
         const latDiff = Math.abs(coord1.lat - coord2.lat);
         const lngDiff = Math.abs(coord1.lng - coord2.lng);
@@ -207,35 +207,35 @@ export const SufficientReportsTab = ({
     // Then replace hasExistingEvent with:
     const hasExistingEvent = (area: AreaReport) => {
         if (!createdEvents || createdEvents.length === 0) return false;
-        
+
         return createdEvents.some(event => {
             const eventCoords = { lat: event.latitude, lng: event.longitude };
             const areaCoords = area.coordinates;
-            
+
             const isMatch = areLocationsMatching(eventCoords, areaCoords);
-            
+
             console.log(`Event ${event.id} vs Area ${area.id}:`, {
                 eventCoords,
-                areaCoords, 
+                areaCoords,
                 isMatch
             });
-            
+
             return isMatch;
         });
     };
 
     const filteredAreas = useMemo(() => {
         let areas = eligibleAreas;
-        
+
         // Don't filter out areas with events - show them all
         // Just apply urgent filter if enabled
         if (showUrgentOnly) {
-            areas = areas.filter(area => 
-                area.severityLevel.toLowerCase() === 'high' || 
+            areas = areas.filter(area =>
+                area.severityLevel.toLowerCase() === 'high' ||
                 area.severityLevel.toLowerCase() === 'critical'
             );
         }
-        
+
         return areas;
     }, [eligibleAreas, showUrgentOnly]);
 
@@ -250,19 +250,19 @@ export const SufficientReportsTab = ({
 
     return (
         <div className="space-y-6">
-            <div className="flex items-center justify-between">
-                <div className="flex items-center space-x-4">
-                    <h2 className="text-xl font-semibold text-waterbase-950">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:space-x-4">
+                    <h2 className="text-lg sm:text-xl font-semibold text-waterbase-950">
                         Areas with Sufficient Reports
                     </h2>
-                    <Badge className="bg-waterbase-500 text-white">
+                    <Badge className="bg-waterbase-500 text-white text-xs sm:text-sm px-2 py-1 h-auto w-fit">
                         {filteredAreas.length} locations {showUrgentOnly ? 'urgent' : 'eligible'}
                     </Badge>
                 </div>
-                
+
                 {/* Toggle Switch */}
-                <div className="flex items-center space-x-3">
-                    <Label htmlFor="urgent-toggle" className="text-sm text-gray-600">
+                <div className="flex items-center space-x-2 sm:space-x-3">
+                    <Label htmlFor="urgent-toggle" className="text-xs sm:text-sm text-gray-600 whitespace-nowrap">
                         Show urgent only:
                     </Label>
                     <Switch
@@ -271,7 +271,7 @@ export const SufficientReportsTab = ({
                         onCheckedChange={setShowUrgentOnly}
                         className="data-[state=checked]:bg-red-500"
                     />
-                    <span className="text-sm font-medium text-gray-700">
+                    <span className="text-xs sm:text-sm font-medium text-gray-700">
                         {showUrgentOnly ? "Urgent" : "All"}
                     </span>
                 </div>
@@ -279,224 +279,224 @@ export const SufficientReportsTab = ({
 
             {/* Areas with Events Info */}
             {areasWithEvents.length > 0 && (
-    <Alert className="border-blue-200 bg-blue-50">
-        <AlertCircle className="h-4 w-4 text-blue-600" />
-        <AlertDescription className="text-blue-800">
-            <strong>{areasWithEvents.length}</strong> area{areasWithEvents.length > 1 ? 's' : ''} already {areasWithEvents.length > 1 ? 'have' : 'has'} cleanup events scheduled.
-            You can manage existing events in the "My Events" tab.
-        </AlertDescription>
-    </Alert>
-)}
-
-{/* Filter Info */}
-{showUrgentOnly && (
-    <Alert className="border-red-200 bg-red-50">
-        <AlertTriangle className="h-4 w-4 text-red-600" />
-        <AlertDescription className="text-red-800">
-            Showing only areas with <strong>high</strong> or <strong>critical</strong> severity levels that require immediate attention.
-            {filteredAreas.length === 0 && " No urgent areas found."}
-        </AlertDescription>
-    </Alert>
-)}
-
-{filteredAreas.length === 0 ? (
-    <Card className="border-waterbase-200">
-        <CardContent className="p-8 text-center">
-            <FileText className="w-12 h-12 mx-auto mb-4 text-gray-400" />
-            <h3 className="text-lg font-medium text-gray-900 mb-2">
-                {showUrgentOnly ? "No Urgent Areas" : "No Eligible Areas Yet"}
-            </h3>
-            <p className="text-gray-600">
-                {showUrgentOnly 
-                    ? "No areas with high or critical severity levels found. Toggle to show all areas." 
-                    : "Areas need at least 1 verified report to be eligible for cleanup events."
-                }
-            </p>
-            {showUrgentOnly && (
-                <Button
-                    variant="outline"
-                    onClick={() => setShowUrgentOnly(false)}
-                    className="mt-4"
-                >
-                    Show All Areas
-                </Button>
+                <Alert className="border-blue-200 bg-blue-50">
+                    <AlertCircle className="h-4 w-4 text-blue-600" />
+                    <AlertDescription className="text-blue-800">
+                        <strong>{areasWithEvents.length}</strong> area{areasWithEvents.length > 1 ? 's' : ''} already {areasWithEvents.length > 1 ? 'have' : 'has'} cleanup events scheduled.
+                        You can manage existing events in the "My Events" tab.
+                    </AlertDescription>
+                </Alert>
             )}
-        </CardContent>
-    </Card>
-) : (
-    <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
-        {filteredAreas.map((area) => {
-            const hasEvent = hasExistingEvent(area);
-            
-            return (
-                <Card key={area.id} className={cn(
-                    "border-waterbase-200 hover:shadow-lg transition-shadow",
-                    hasEvent && "ring-2 ring-green-200 bg-green-50/50",
-                    (area.severityLevel.toLowerCase() === 'critical' || 
-                        area.severityLevel.toLowerCase() === 'high') && 
-                    showUrgentOnly && "ring-2 ring-red-200"
-                )}>
-                    <CardHeader>
-                        <div className="flex items-start justify-between">
-                            <div className="flex-1">
-                                <CardTitle className="text-lg text-waterbase-950">
-                                    {area.location}
-                                </CardTitle>
-                                <CardDescription className="mt-2">
-                                    {area.description}
-                                </CardDescription>
-                            </div>
-                            <div className="flex flex-col items-end space-y-1">
-                                <Badge
-                                    className={cn(
-                                        "text-xs",
-                                        getSeverityColor(area.severityLevel),
-                                    )}
-                                >
-                                    {area.severityLevel}
-                                </Badge>
-                                {hasEvent && (
-                                    <Badge className="bg-green-500 text-white text-xs">
-                                        Event Scheduled
-                                    </Badge>
-                                )}
-                                {(area.severityLevel.toLowerCase() === 'critical' || 
-                                    area.severityLevel.toLowerCase() === 'high') && (
-                                    <Badge variant="destructive" className="text-xs">
-                                        <AlertTriangle className="w-3 h-3 mr-1" />
-                                        Urgent
-                                    </Badge>
-                                )}
-                            </div>
-                        </div>
-                    </CardHeader>
 
-                    <CardContent className="space-y-4">
-                        <div className="grid grid-cols-2 gap-4 text-sm">
-                            <div>
-                                <span className="text-gray-600">Reports:</span>
-                                <div className="font-semibold text-waterbase-950">
-                                    {area.reportCount} verified
-                                </div>
-                            </div>
-                            <div>
-                                <span className="text-gray-600">Effort:</span>
-                                <div className="font-semibold text-waterbase-950">
-                                    {area.estimatedCleanupEffort}
-                                </div>
-                            </div>
-                            <div>
-                                <span className="text-gray-600">Last Report:</span>
-                                <div className="font-semibold text-waterbase-950">
-                                    {area.lastReported}
-                                </div>
-                            </div>
-                            <div>
-                                <span className="text-gray-600">Priority:</span>
-                                <div className="font-semibold capitalize text-waterbase-950">
-                                    {area.priority}
-                                </div>
-                            </div>
-                        </div>
+            {/* Filter Info */}
+            {showUrgentOnly && (
+                <Alert className="border-red-200 bg-red-50">
+                    <AlertTriangle className="h-4 w-4 text-red-600" />
+                    <AlertDescription className="text-red-800">
+                        Showing only areas with <strong>high</strong> or <strong>critical</strong> severity levels that require immediate attention.
+                        {filteredAreas.length === 0 && " No urgent areas found."}
+                    </AlertDescription>
+                </Alert>
+            )}
 
-                        {/* Action Buttons */}
-                        <div className="space-y-2">
-                            {/* Create Event Button - Different states based on existing event */}
-                            {hasEvent ? (
-                                <Button
-                                    className="w-full bg-gray-400 cursor-not-allowed"
-                                    disabled={true}
-                                >
-                                    <Calendar className="w-4 h-4 mr-2" />
-                                    Event Already Scheduled
-                                </Button>
-                            ) : (
-                                <Dialog
-                                    open={showCreateEvent && selectedArea?.id === area.id}
-                                    onOpenChange={(open) => {
-                                        setShowCreateEvent(open);
-                                        if (!open) {
-                                            setSelectedArea(null);
-                                            setEventError("");
-                                        }
-                                    }}
-                                >
-                                    <DialogTrigger asChild>
-                                        <Button
-                                            className={cn(
-                                                "w-full",
-                                                (area.severityLevel.toLowerCase() === 'critical' || 
-                                                    area.severityLevel.toLowerCase() === 'high')
-                                                    ? "bg-red-500 hover:bg-red-600 text-white"
-                                                    : "bg-waterbase-500 hover:bg-waterbase-600"
-                                            )}
-                                            onClick={() => {
-                                                setSelectedArea(area);
-                                                setShowCreateEvent(true);
-                                            }}
-                                        >
-                                            <Plus className="w-4 h-4 mr-2" />
-                                            {(area.severityLevel.toLowerCase() === 'critical' || 
-                                                area.severityLevel.toLowerCase() === 'high')
-                                                ? "Create Urgent Event"
-                                                : "Create Cleanup Event"
-                                            }
-                                        </Button>
-                                    </DialogTrigger>
-
-                                    {/* Keep your existing Dialog Content here */}
-                                    <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
-                                        {/* ... existing dialog content ... */}
-                                    </DialogContent>
-                                </Dialog>
-                            )}
-
-                            {/* View Details Button */}
+            {filteredAreas.length === 0 ? (
+                <Card className="border-waterbase-200">
+                    <CardContent className="p-8 text-center">
+                        <FileText className="w-12 h-12 mx-auto mb-4 text-gray-400" />
+                        <h3 className="text-lg font-medium text-gray-900 mb-2">
+                            {showUrgentOnly ? "No Urgent Areas" : "No Eligible Areas Yet"}
+                        </h3>
+                        <p className="text-gray-600">
+                            {showUrgentOnly
+                                ? "No areas with high or critical severity levels found. Toggle to show all areas."
+                                : "Areas need at least 1 verified report to be eligible for cleanup events."
+                            }
+                        </p>
+                        {showUrgentOnly && (
                             <Button
                                 variant="outline"
-                                className="w-full"
-                                onClick={() => onSelectArea(area)}
+                                onClick={() => setShowUrgentOnly(false)}
+                                className="mt-4"
                             >
-                                <Eye className="w-4 h-4 mr-2" />
-                                View Details ({area.reports?.length || 0} reports)
+                                Show All Areas
                             </Button>
-                        </div>
+                        )}
                     </CardContent>
                 </Card>
-            );
-        })}
-    </div>
-)}
+            ) : (
+                <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
+                    {filteredAreas.map((area) => {
+                        const hasEvent = hasExistingEvent(area);
 
-{/* Updated Summary Stats */}
-{eligibleAreas.length > 0 && (
-    <div className="border-t pt-4">
-        <div className="flex items-center justify-between text-sm text-gray-600">
-            <div className="flex items-center space-x-4">
-                <span>Total areas: {eligibleAreas.length}</span>
-                <span>Available for events: {areasWithoutEvents.length}</span>
-                <span className="text-green-600">With events: {areasWithEvents.length}</span>
-                <span className="text-red-600">
-                    Urgent: {filteredAreas.filter(area => 
-                        area.severityLevel.toLowerCase() === 'high' || 
-                        area.severityLevel.toLowerCase() === 'critical'
-                    ).length}
-                </span>
-            </div>
-            {showUrgentOnly && (
-                <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => setShowUrgentOnly(false)}
-                    className="text-waterbase-600 hover:text-waterbase-800"
-                >
-                    <Filter className="w-4 h-4 mr-1" />
-                    View all areas
-                </Button>
+                        return (
+                            <Card key={area.id} className={cn(
+                                "border-waterbase-200 hover:shadow-lg transition-shadow",
+                                hasEvent && "ring-2 ring-green-200 bg-green-50/50",
+                                (area.severityLevel.toLowerCase() === 'critical' ||
+                                    area.severityLevel.toLowerCase() === 'high') &&
+                                showUrgentOnly && "ring-2 ring-red-200"
+                            )}>
+                                <CardHeader>
+                                    <div className="flex items-start justify-between gap-3">
+                                        <div className="flex-1 min-w-0">
+                                            <CardTitle className="text-base sm:text-lg text-waterbase-950 break-words">
+                                                {area.location}
+                                            </CardTitle>
+                                            <CardDescription className="mt-2 text-sm">
+                                                {area.description}
+                                            </CardDescription>
+                                        </div>
+                                        <div className="flex flex-col items-end space-y-1 flex-shrink-0">
+                                            <Badge
+                                                className={cn(
+                                                    "text-xs px-2 py-1 h-auto",
+                                                    getSeverityColor(area.severityLevel),
+                                                )}
+                                            >
+                                                {area.severityLevel}
+                                            </Badge>
+                                            {hasEvent && (
+                                                <Badge className="bg-green-500 text-white text-xs px-2 py-1 h-auto">
+                                                    Event Scheduled
+                                                </Badge>
+                                            )}
+                                            {(area.severityLevel.toLowerCase() === 'critical' ||
+                                                area.severityLevel.toLowerCase() === 'high') && (
+                                                    <Badge variant="destructive" className="text-xs px-2 py-1 h-auto">
+                                                        <AlertTriangle className="w-3 h-3 mr-1" />
+                                                        Urgent
+                                                    </Badge>
+                                                )}
+                                        </div>
+                                    </div>
+                                </CardHeader>
+
+                                <CardContent className="space-y-4">
+                                    <div className="grid grid-cols-2 gap-4 text-sm">
+                                        <div>
+                                            <span className="text-gray-600">Reports:</span>
+                                            <div className="font-semibold text-waterbase-950">
+                                                {area.reportCount} verified
+                                            </div>
+                                        </div>
+                                        <div>
+                                            <span className="text-gray-600">Effort:</span>
+                                            <div className="font-semibold text-waterbase-950">
+                                                {area.estimatedCleanupEffort}
+                                            </div>
+                                        </div>
+                                        <div>
+                                            <span className="text-gray-600">Last Report:</span>
+                                            <div className="font-semibold text-waterbase-950">
+                                                {area.lastReported}
+                                            </div>
+                                        </div>
+                                        <div>
+                                            <span className="text-gray-600">Priority:</span>
+                                            <div className="font-semibold capitalize text-waterbase-950">
+                                                {area.priority}
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* Action Buttons */}
+                                    <div className="space-y-2">
+                                        {/* Create Event Button - Different states based on existing event */}
+                                        {hasEvent ? (
+                                            <Button
+                                                className="w-full bg-gray-400 cursor-not-allowed"
+                                                disabled={true}
+                                            >
+                                                <Calendar className="w-4 h-4 mr-2" />
+                                                Event Already Scheduled
+                                            </Button>
+                                        ) : (
+                                            <Dialog
+                                                open={showCreateEvent && selectedArea?.id === area.id}
+                                                onOpenChange={(open) => {
+                                                    setShowCreateEvent(open);
+                                                    if (!open) {
+                                                        setSelectedArea(null);
+                                                        setEventError("");
+                                                    }
+                                                }}
+                                            >
+                                                <DialogTrigger asChild>
+                                                    <Button
+                                                        className={cn(
+                                                            "w-full",
+                                                            (area.severityLevel.toLowerCase() === 'critical' ||
+                                                                area.severityLevel.toLowerCase() === 'high')
+                                                                ? "bg-red-500 hover:bg-red-600 text-white"
+                                                                : "bg-waterbase-500 hover:bg-waterbase-600"
+                                                        )}
+                                                        onClick={() => {
+                                                            setSelectedArea(area);
+                                                            setShowCreateEvent(true);
+                                                        }}
+                                                    >
+                                                        <Plus className="w-4 h-4 mr-2" />
+                                                        {(area.severityLevel.toLowerCase() === 'critical' ||
+                                                            area.severityLevel.toLowerCase() === 'high')
+                                                            ? "Create Urgent Event"
+                                                            : "Create Cleanup Event"
+                                                        }
+                                                    </Button>
+                                                </DialogTrigger>
+
+                                                {/* Keep your existing Dialog Content here */}
+                                                <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+                                                    {/* ... existing dialog content ... */}
+                                                </DialogContent>
+                                            </Dialog>
+                                        )}
+
+                                        {/* View Details Button */}
+                                        <Button
+                                            variant="outline"
+                                            className="w-full"
+                                            onClick={() => onSelectArea(area)}
+                                        >
+                                            <Eye className="w-4 h-4 mr-2" />
+                                            View Details ({area.reports?.length || 0} reports)
+                                        </Button>
+                                    </div>
+                                </CardContent>
+                            </Card>
+                        );
+                    })}
+                </div>
             )}
-        </div>
-    </div>
-)}
+
+            {/* Updated Summary Stats */}
+            {eligibleAreas.length > 0 && (
+                <div className="border-t pt-4">
+                    <div className="flex items-center justify-between text-sm text-gray-600">
+                        <div className="flex items-center space-x-4">
+                            <span>Total areas: {eligibleAreas.length}</span>
+                            <span>Available for events: {areasWithoutEvents.length}</span>
+                            <span className="text-green-600">With events: {areasWithEvents.length}</span>
+                            <span className="text-red-600">
+                                Urgent: {filteredAreas.filter(area =>
+                                    area.severityLevel.toLowerCase() === 'high' ||
+                                    area.severityLevel.toLowerCase() === 'critical'
+                                ).length}
+                            </span>
+                        </div>
+                        {showUrgentOnly && (
+                            <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => setShowUrgentOnly(false)}
+                                className="text-waterbase-600 hover:text-waterbase-800"
+                            >
+                                <Filter className="w-4 h-4 mr-1" />
+                                View all areas
+                            </Button>
+                        )}
+                    </div>
+                </div>
+            )}
         </div>
     )
 }

@@ -116,10 +116,10 @@ export const AreaDetails = ({
         <Dialog open={isOpen} onOpenChange={onClose}>
             <DialogContent className="max-w-7xl max-h-[90vh] overflow-y-auto">
                 <DialogHeader>
-                    <DialogTitle className="text-xl">
+                    <DialogTitle className="text-lg sm:text-xl break-words">
                         📍 Area Details - {selectedArea?.location}
                     </DialogTitle>
-                    <DialogDescription>
+                    <DialogDescription className="text-sm">
                         Comprehensive overview of {selectedArea?.reportCount} reports in this area
                     </DialogDescription>
                 </DialogHeader>
@@ -127,42 +127,42 @@ export const AreaDetails = ({
                 {selectedArea && (
                     <div className="space-y-6">
                         {/* Area Overview */}
-                        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 p-4 bg-gradient-to-r from-waterbase-50 to-enviro-50 rounded-lg">
+                        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 p-4 bg-gradient-to-r from-waterbase-50 to-enviro-50 rounded-lg">
                             <div className="text-center">
-                                <div className="text-2xl font-bold text-waterbase-600">
+                                <div className="text-xl sm:text-2xl font-bold text-waterbase-600">
                                     {selectedArea.reportCount}
                                 </div>
-                                <div className="text-sm text-gray-600">Total Reports</div>
+                                <div className="text-xs sm:text-sm text-gray-600">Total Reports</div>
                             </div>
                             <div className="text-center">
-                                <div className="text-2xl font-bold text-enviro-600">
+                                <div className="text-xl sm:text-2xl font-bold text-enviro-600">
                                     {selectedArea.reports.filter(
                                         (r) => r.severityByUser === "critical" || r.severityByUser === "high"
                                     ).length}
                                 </div>
-                                <div className="text-sm text-gray-600">High Priority</div>
+                                <div className="text-xs sm:text-sm text-gray-600">High Priority</div>
                             </div>
                             <div className="text-center">
-                                <div className="text-2xl font-bold text-green-600">
+                                <div className="text-xl sm:text-2xl font-bold text-green-600">
                                     {selectedArea.reports.filter((r) => r.status === "verified").length}
                                 </div>
-                                <div className="text-sm text-gray-600">Verified</div>
+                                <div className="text-xs sm:text-sm text-gray-600">Verified</div>
                             </div>
                             <div className="text-center">
-                                <div className="text-2xl font-bold text-waterbase-600">
+                                <div className="text-xl sm:text-2xl font-bold text-waterbase-600">
                                     {selectedArea.estimatedCleanupEffort}
                                 </div>
-                                <div className="text-sm text-gray-600">Cleanup Effort</div>
+                                <div className="text-xs sm:text-sm text-gray-600">Cleanup Effort</div>
                             </div>
                         </div>
 
                         {/* Area Information */}
                         <Card className="border-waterbase-200">
                             <CardHeader>
-                                <CardTitle className="flex items-center justify-between">
-                                    <span>Area Information</span>
+                                <CardTitle className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                                    <span className="text-base sm:text-lg">Area Information</span>
                                     <Badge
-                                        className={cn("text-sm", getSeverityColor(selectedArea.severityLevel))}
+                                        className={cn("text-xs sm:text-sm px-2 py-1 h-auto w-fit", getSeverityColor(selectedArea.severityLevel))}
                                     >
                                         {selectedArea.severityLevel} Priority
                                     </Badge>
@@ -170,41 +170,41 @@ export const AreaDetails = ({
                             </CardHeader>
                             <CardContent className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 <div>
-                                    <label className="text-sm font-medium text-gray-600">Location</label>
-                                    <p className="text-sm mt-1">{selectedArea.location}</p>
+                                    <label className="text-xs sm:text-sm font-medium text-gray-600">Location</label>
+                                    <p className="text-xs sm:text-sm mt-1 break-words">{selectedArea.location}</p>
                                 </div>
                                 <div>
-                                    <label className="text-sm font-medium text-gray-600">Coordinates</label>
-                                    <p className="text-sm mt-1 font-mono">
+                                    <label className="text-xs sm:text-sm font-medium text-gray-600">Coordinates</label>
+                                    <p className="text-xs sm:text-sm mt-1 font-mono break-all">
                                         {selectedArea.coordinates.lat.toFixed(6)},{" "}
                                         {selectedArea.coordinates.lng.toFixed(6)}
                                     </p>
                                 </div>
                                 <div>
-                                    <label className="text-sm font-medium text-gray-600">Last Reported</label>
-                                    <p className="text-sm mt-1">{selectedArea.lastReported}</p>
+                                    <label className="text-xs sm:text-sm font-medium text-gray-600">Last Reported</label>
+                                    <p className="text-xs sm:text-sm mt-1">{selectedArea.lastReported}</p>
                                 </div>
                                 <div>
-                                    <label className="text-sm font-medium text-gray-600">Description</label>
-                                    <p className="text-sm mt-1">{selectedArea.description}</p>
+                                    <label className="text-xs sm:text-sm font-medium text-gray-600">Description</label>
+                                    <p className="text-xs sm:text-sm mt-1 break-words">{selectedArea.description}</p>
                                 </div>
                             </CardContent>
                         </Card>
 
                         {/* Reports Grid with Images */}
                         <div className="space-y-4">
-                            <h3 className="text-lg font-semibold text-waterbase-950">Individual Reports</h3>
+                            <h3 className="text-base sm:text-lg font-semibold text-waterbase-950">Individual Reports</h3>
 
-                            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                            <div className="grid grid-cols-1 gap-4">
                                 {selectedArea.reports.map((report) => (
                                     <Card
                                         key={report.id}
                                         className="border-gray-200 hover:shadow-md transition-shadow"
                                     >
                                         <CardContent className="p-4">
-                                            <div className="flex gap-4">
+                                            <div className="flex flex-col sm:flex-row gap-4">
                                                 {/* Image Container with Hover Zoom */}
-                                                <div className="relative w-24 h-24 flex-shrink-0">
+                                                <div className="relative w-full sm:w-24 h-48 sm:h-24 flex-shrink-0">
                                                     <img
                                                         src={
                                                             report.image.startsWith("data:")
@@ -241,15 +241,15 @@ export const AreaDetails = ({
                                                 </div>
 
                                                 {/* Report Details */}
-                                                <div className="flex-1 space-y-2">
-                                                    <div className="flex items-start justify-between">
-                                                        <h4 className="font-medium text-sm line-clamp-2">
+                                                <div className="flex-1 space-y-2 min-w-0">
+                                                    <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-2">
+                                                        <h4 className="font-medium text-sm break-words line-clamp-2 flex-1">
                                                             {report.title}
                                                         </h4>
-                                                        <div className="flex gap-1">
+                                                        <div className="flex flex-wrap gap-1 flex-shrink-0">
                                                             <Badge
                                                                 className={cn(
-                                                                    "text-xs",
+                                                                    "text-xs px-2 py-1 h-auto",
                                                                     getSeverityColor(report.severityByUser)
                                                                 )}
                                                             >
@@ -257,7 +257,7 @@ export const AreaDetails = ({
                                                             </Badge>
                                                             <Badge
                                                                 className={cn(
-                                                                    "text-xs",
+                                                                    "text-xs px-2 py-1 h-auto",
                                                                     getStatusColor(report.status)
                                                                 )}
                                                             >
@@ -266,26 +266,25 @@ export const AreaDetails = ({
                                                         </div>
                                                     </div>
 
-                                                    <p className="text-xs text-gray-600 line-clamp-2">
+                                                    <p className="text-xs text-gray-600 line-clamp-2 break-words">
                                                         {report.content}
                                                     </p>
 
                                                     <div className="space-y-1 text-xs text-gray-500">
-                                                        <div>📍 {report.pollutionType}</div>
+                                                        <div className="break-words">📍 {report.pollutionType}</div>
                                                         <div>
                                                             📅{" "}
                                                             {new Date(report.created_at).toLocaleDateString()}
                                                         </div>
                                                         {report.user && (
-                                                            <div>
+                                                            <div className="break-words">
                                                                 👤 {report.user.firstName} {report.user.lastName}
                                                             </div>
                                                         )}
-                                                        <div>💬 {report.content}</div>
                                                     </div>
 
                                                     {/* Action Buttons */}
-                                                    <div className="flex gap-2 mt-2">
+                                                    <div className="flex flex-col sm:flex-row gap-2 mt-2">
                                                         {report.status === "verified" && (
                                                             <>
                                                                 <Button
@@ -298,16 +297,15 @@ export const AreaDetails = ({
                                                                     Decline
                                                                 </Button>
                                                                 <Button
-                                                                variant="outline"
-                                                                size="sm"
-                                                                className="w-full"
-                                                                onClick={() => onViewReport(report)}
-                                                            >
-                                                                <Eye className="w-3 h-3 mr-1" />
-                                                                View Details
-                                                            </Button>
+                                                                    variant="outline"
+                                                                    size="sm"
+                                                                    className="flex-1"
+                                                                    onClick={() => onViewReport(report)}
+                                                                >
+                                                                    <Eye className="w-3 h-3 mr-1" />
+                                                                    View Details
+                                                                </Button>
                                                             </>
-                                                            
                                                         )}
                                                     </div>
                                                 </div>
@@ -319,39 +317,39 @@ export const AreaDetails = ({
                         </div>
 
                         {/* Action Buttons */}
-                        <div className="flex justify-between pt-4 border-t">
-                            <div className="flex items-center space-x-2">
-                                <Button variant="outline">
+                        <div className="flex flex-col sm:flex-row justify-between gap-4 pt-4 border-t">
+                            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2">
+                                <Button variant="outline" className="w-full sm:w-auto">
                                     <MapPin className="w-4 h-4 mr-2" />
                                     View on Map
                                 </Button>
 
                                 {/* Bulk Actions for Verified Reports */}
                                 {selectedArea.reports.some((r) => r.status === "verified") && (
-                                    <>
-                                        <Button
-                                            variant="outline"
-                                            className="text-red-600 border-red-200 hover:bg-red-50"
-                                            onClick={() =>
-                                                onBulkDeclineReports(
-                                                    selectedArea.reports.filter((r) => r.status === "verified")
-                                                )
-                                            }
-                                        >
-                                            <AlertTriangle className="w-4 h-4 mr-2" />
+                                    <Button
+                                        variant="outline"
+                                        className="w-full sm:w-auto text-red-600 border-red-200 hover:bg-red-50"
+                                        onClick={() =>
+                                            onBulkDeclineReports(
+                                                selectedArea.reports.filter((r) => r.status === "verified")
+                                            )
+                                        }
+                                    >
+                                        <AlertTriangle className="w-4 h-4 mr-2" />
+                                        <span className="break-words">
                                             Decline All (
                                             {selectedArea.reports.filter((r) => r.status === "verified").length})
-                                        </Button>
-                                    </>
+                                        </span>
+                                    </Button>
                                 )}
                             </div>
 
-                            <div className="space-x-2">
-                                <Button variant="outline" onClick={onClose}>
+                            <div className="flex flex-col sm:flex-row gap-2">
+                                <Button variant="outline" onClick={onClose} className="w-full sm:w-auto">
                                     Close
                                 </Button>
                                 <Button
-                                    className="bg-waterbase-500 hover:bg-waterbase-600"
+                                    className="w-full sm:w-auto bg-waterbase-500 hover:bg-waterbase-600"
                                     onClick={() => {
                                         onClose();
                                         onCreateEvent();

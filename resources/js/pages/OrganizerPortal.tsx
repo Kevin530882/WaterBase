@@ -478,28 +478,28 @@ export const OrganizerPortal = () => {
             <div className="max-w-7xl mx-auto py-8 px-4 sm:px-6 lg:px-8">
                 {/* Header */}
                 <div className="mb-8">
-                    <h1 className="text-3xl font-bold text-waterbase-950 mb-2">
+                    <h1 className="text-2xl sm:text-3xl font-bold text-waterbase-950 mb-2">
                         Organizer Portal
                     </h1>
-                    <p className="text-waterbase-700 mb-4">
+                    <p className="text-sm sm:text-base text-waterbase-700 mb-4">
                         Manage cleanup events with location-based access control
                         {user?.areaOfResponsibility && (
-                            <span className="block text-sm mt-1">
+                            <span className="block text-xs sm:text-sm mt-1">
                                 📍 Your area of responsibility: <strong>{user.areaOfResponsibility}</strong>
                             </span>
                         )}
                     </p>
-                    <div className="flex items-center space-x-4">
-                        <Badge variant="outline" className="bg-enviro-50 text-enviro-700">
+                    <div className="flex flex-wrap items-center gap-2 sm:gap-4">
+                        <Badge variant="outline" className="bg-enviro-50 text-enviro-700 text-xs sm:text-sm px-2 py-1 h-auto">
                             {user?.role?.toUpperCase()} Access
                         </Badge>
                         {user?.organization && (
-                            <Badge variant="outline" className="bg-waterbase-50 text-waterbase-700">
+                            <Badge variant="outline" className="bg-waterbase-50 text-waterbase-700 text-xs sm:text-sm px-2 py-1 h-auto">
                                 {user.organization}
                             </Badge>
                         )}
                         {user?.areaOfResponsibility && (
-                            <Badge variant="outline" className="bg-yellow-50 text-yellow-700">
+                            <Badge variant="outline" className="bg-yellow-50 text-yellow-700 text-xs sm:text-sm px-2 py-1 h-auto">
                                 Area: {user.areaOfResponsibility}
                             </Badge>
                         )}
@@ -524,18 +524,18 @@ export const OrganizerPortal = () => {
                 )}
 
                 <Tabs value={activeTab} onValueChange={setActiveTab}>
-                    <TabsList className="grid w-full grid-cols-3 mb-6">
-                        <TabsTrigger value="areas" className="flex items-center space-x-2">
-                            <MapPin className="w-4 h-4" />
-                            <span>Eligible Areas</span>
+                    <TabsList className="grid w-full grid-cols-3 mb-6 h-auto">
+                        <TabsTrigger value="areas" className="flex flex-col sm:flex-row items-center space-y-1 sm:space-y-0 sm:space-x-2 px-2 py-2 sm:px-4 sm:py-2 text-xs sm:text-sm h-auto min-h-[3rem] sm:min-h-[2.5rem]">
+                            <MapPin className="w-3 h-3 sm:w-4 sm:h-4" />
+                            <span className="text-center leading-tight">Reports</span>
                         </TabsTrigger>
-                        <TabsTrigger value="events" className="flex items-center space-x-2">
-                            <Calendar className="w-4 h-4" />
-                            <span>My Events</span>
+                        <TabsTrigger value="events" className="flex flex-col sm:flex-row items-center space-y-1 sm:space-y-0 sm:space-x-2 px-2 py-2 sm:px-4 sm:py-2 text-xs sm:text-sm h-auto min-h-[3rem] sm:min-h-[2.5rem]">
+                            <Calendar className="w-3 h-3 sm:w-4 sm:h-4" />
+                            <span className="text-center leading-tight">My Events</span>
                         </TabsTrigger>
-                        <TabsTrigger value="volunteers" className="flex items-center space-x-2">
-                            <Users className="w-4 h-4" />
-                            <span>Volunteer Management</span>
+                        <TabsTrigger value="volunteers" className="flex flex-col sm:flex-row items-center space-y-1 sm:space-y-0 sm:space-x-2 px-2 py-2 sm:px-4 sm:py-2 text-xs sm:text-sm h-auto min-h-[3rem] sm:min-h-[2.5rem]">
+                            <Users className="w-3 h-3 sm:w-4 sm:h-4" />
+                            <span className="text-center leading-tight">Volunteers </span>
                         </TabsTrigger>
                     </TabsList>
 
