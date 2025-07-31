@@ -38,6 +38,7 @@ const Navigation = () => {
       case 'admin':
         return [
           { href: "/admin/dashboard", label: "Admin Dashboard", icon: BarChart3 },
+          { href: "/admin/reports", label: "Admin Reports", icon: Upload },
         ];
       case 'ngo':
       case 'lgu':

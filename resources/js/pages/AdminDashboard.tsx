@@ -72,7 +72,6 @@ rejectedReports: 158,
 monthlyGrowth: 18,
 };
 
-// Mock pending reports for validation
 const pendingReports = [
 {
     id: 1,
@@ -87,6 +86,8 @@ const pendingReports = [
     description: "Heavy oil contamination with visible plastic debris",
     coordinates: { lat: 14.5995, lng: 121.0008 },
     status: "pending",
+    submittedImage: "https://example.com/images/pasig_river_submitted.jpg",
+    aiAnnotatedImage: "https://example.com/images/pasig_river_ai_annotated.jpg",
 },
 {
     id: 2,
@@ -101,6 +102,8 @@ const pendingReports = [
     description: "Large amount of plastic bottles floating",
     coordinates: { lat: 14.5794, lng: 120.9647 },
     status: "pending",
+    submittedImage: "https://example.com/images/manila_bay_submitted.jpg",
+    aiAnnotatedImage: "https://example.com/images/manila_bay_ai_annotated.jpg",
 },
 ];
 
@@ -444,12 +447,6 @@ return (
                             <div className="text-xs text-gray-600">
                             {report.location}
                             </div>
-                            <div className="flex items-center mt-1">
-                            <Camera className="w-3 h-3 mr-1 text-gray-400" />
-                            <span className="text-xs text-gray-600">
-                                {report.photos} photos
-                            </span>
-                            </div>
                         </div>
                         </TableCell>
                         <TableCell>
@@ -457,7 +454,7 @@ return (
                         </TableCell>
                         <TableCell>
                         <div className="space-y-1">
-                            <Badge variant="outline" className="text-xs">
+                            <Badge variant="outline" className="text-xs mr-1">
                             {report.type}
                             </Badge>
                             <Badge
@@ -538,15 +535,48 @@ return (
                                     {selectedReport?.description}
                                     </div>
                                 </div>
+
+                                {/* Added images section */}
+                                <div className="grid grid-cols-2 gap-4 my-4">
+                                    <div className="flex flex-col items-center">
+                                    <Label>Submitted Image</Label>
+                                    {selectedReport?.submittedImage ? (
+                                        <img
+                                        src={selectedReport.submittedImage}
+                                        alt="Submitted"
+                                        className="max-h-48 rounded-md border border-gray-300"
+                                        />
+                                    ) : (
+                                        <p className="text-xs text-gray-500">
+                                        No submitted image available
+                                        </p>
+                                    )}
+                                    </div>
+                                    <div className="flex flex-col items-center">
+                                    <Label>AI Annotated Image</Label>
+                                    {selectedReport?.aiAnnotatedImage ? (
+                                        <img
+                                        src={selectedReport.aiAnnotatedImage}
+                                        alt="AI Annotated"
+                                        className="max-h-48 rounded-md border border-gray-300"
+                                        />
+                                    ) : (
+                                        <p className="text-xs text-gray-500">
+                                        No AI annotated image available
+                                        </p>
+                                    )}
+                                    </div>
+                                </div>
+
                                 <div className="grid grid-cols-3 gap-4">
                                     <div>
                                     <Label>Type</Label>
-                                    <Badge variant="outline">
+                                    <Badge variant="outline" className="ml-1">
                                         {selectedReport?.type}
                                     </Badge>
                                     </div>
                                     <div>
-                                    <Label>Severity</Label>
+                                    <Label className="mr-1">Severity</Label>
                                     <Badge
                                         className={getSeverityColor(
                                         selectedReport?.severity || "",
