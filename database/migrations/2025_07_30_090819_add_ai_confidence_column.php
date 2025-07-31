@@ -15,7 +15,6 @@ return new class extends Migration {
                 $table->decimal('ai_confidence', 5, 2)->default(0.00)->after('severityByAI');
             }
         });
-        DB::statement('ALTER TABLE reports MODIFY COLUMN image LONGBLOB');
     }
 
     /**

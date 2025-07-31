@@ -10,14 +10,11 @@ use Illuminate\Support\Facades\Cache;
 
 class ReportAccessControlService
 {
-    private LocationService $locationService;
     private ReportGroupingService $groupingService;
 
     public function __construct(
-        LocationService $locationService,
         ReportGroupingService $groupingService
     ) {
-        $this->locationService = $locationService;
         $this->groupingService = $groupingService;
     }
 
@@ -119,84 +116,6 @@ class ReportAccessControlService
             $user->areaOfResponsibility,
             $report->getLocationHierarchy()
         );
-    }
-
-    /**
-     * Geocode and update location fields for a report with address verification
-     */
-    public function geocodeReport(Report $report): bool
-    {
-        try {
-            // First, verify that address and coordinates match using Nominatim
-            $verification = NominatimService::verifyAddressCoordinates(
-                $report->address,
-                (float) $report->latitude,
-                (float) $report->longitude
-            );
-
-            // Log the verification result
-            \Log::info('Address verification for report', [
-                'report_id' => $report->id,
-                'verification' => $verification
-            ]);
-
-            // If verification fails completely, don't geocode
-            if ($verification['confidence'] === 'error' || $verification['confidence'] === 'none') {
-                \Log::warning('Report failed address verification', [
-                    'report_id' => $report->id,
-                    'message' => $verification['message']
-                ]);
-
-                // Mark as suspicious but don't completely reject
-                $report->update([
-                    'verification_status' => 'suspicious',
-                    'verification_notes' => $verification['message'],
-                    'verification_confidence' => $verification['confidence']
-                ]);
-
-                return false;
-            }
-
-            // Use existing location service for hierarchical geocoding
-            $locationData = $this->locationService->geocodeCoordinates(
-                (float) $report->latitude,
-                (float) $report->longitude
-            );
-
-            if ($locationData['confidence'] === 'none') {
-                return false;
-            }
-
-            // Update report with both geocoding and verification data
-            $report->update([
-                'region_code' => $locationData['region_code'],
-                'region_name' => $locationData['region_name'],
-                'province_name' => $locationData['province_name'],
-                'municipality_name' => $locationData['municipality_name'],
-                'barangay_name' => $locationData['barangay_name'],
-                'geocoded_at' => now(),
-                'verification_status' => $verification['is_valid'] ? 'verified' : 'flagged',
-                'verification_confidence' => $verification['confidence'],
-                'verification_notes' => $verification['message'],
-                'geocoded_address' => $verification['geocoded_address'] ?? null,
-                'address_similarity' => $verification['similarity_score'] ?? null,
-                'coordinate_distance' => $verification['distance_meters'] ?? null,
-                'verification_at' => now(),
-            ]);
-
-            // Only process for grouping if verification passed
-            if ($verification['is_valid']) {
-                $this->groupingService->processNewReport($report);
-            }
-
-            return true;
-        } catch (\Exception $e) {
-            \Log::error('Failed to geocode report', [
-                'report_id' => $report->id,
-                'error' => $e->getMessage()
-            ]);
-            return false;
-        }
     }
 
     /**

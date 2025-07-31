@@ -85,8 +85,8 @@ export const OrganizerPortal = () => {
             console.log('Token:', token ? 'Present' : 'Missing');
             console.log('API URL:', '/api/reports/accessible');
 
-            // Use the new location-based access control endpoint
-            const response = await fetch('/api/reports/accessible', {
+            // Fetch all reports
+            const response = await fetch('/api/reports', {
                 headers: {
                     'Authorization': `Bearer ${token}`,
                     'Accept': 'application/json',

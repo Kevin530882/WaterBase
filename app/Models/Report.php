@@ -15,31 +15,18 @@ class Report extends Model
         'longitude',
         'pollutionType',
         'severityByUser',
+        'severityByAI',
+        'ai_confidence',
+        'severityPercentage',
+        'ai_verified',
         'image',
         'user_id',
         'status',
-        'region_code',
-        'region_name',
-        'province_name',
-        'municipality_name',
-        'barangay_name',
-        'report_group_id',
-        'geocoded_at',
-        'verification_status',
-        'verification_confidence',
-        'verification_notes',
-        'geocoded_address',
-        'address_similarity',
-        'coordinate_distance',
-        'verification_at',
     ];
 
     protected $casts = [
         'latitude' => 'decimal:8',
         'longitude' => 'decimal:8',
-        'address_similarity' => 'decimal:3',
-        'geocoded_at' => 'datetime',
-        'verification_at' => 'datetime',
     ];
 
     public function user(): BelongsTo
@@ -50,48 +37,5 @@ class Report extends Model
     public function reportGroup(): BelongsTo
     {
         return $this->belongsTo(ReportGroup::class);
-    }
-
-    /**
-     * Check if the report has been geocoded
-     */
-    public function isGeocoded(): bool
-    {
-        return !is_null($this->geocoded_at);
-    }
-
-    /**
-     * Get the full location hierarchy as an array
-     */
-    public function getLocationHierarchy(): array
-    {
-        return [
-            'region_code' => $this->region_code,
-            'region_name' => $this->region_name,
-            'province_name' => $this->province_name,
-            'municipality_name' => $this->municipality_name,
-            'barangay_name' => $this->barangay_name,
-        ];
-    }
-
-    /**
-     * Get the most specific location level available
-     */
-    public function getMostSpecificLocation(): array
-    {
-        if ($this->barangay_name) {
-            return ['level' => 'barangay', 'name' => $this->barangay_name];
-        }
-        if ($this->municipality_name) {
-            return ['level' => 'municipality', 'name' => $this->municipality_name];
-        }
-        if ($this->province_name) {
-            return ['level' => 'province', 'name' => $this->province_name];
-        }
-        if ($this->region_name) {
-            return ['level' => 'region', 'name' => $this->region_name];
-        }
-
-        return ['level' => 'unknown', 'name' => null];
     }
 }
