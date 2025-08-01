@@ -18,6 +18,7 @@ Route::middleware('auth:sanctum')->group(function () {
     // Event routes
     Route::apiResource('events', EventController::class);
     Route::post('/events/{id}/join', [EventController::class, 'join']);
+    Route::get('/events/{id}/volunteers', [EventController::class, 'getVolunteers']);
     Route::get('/user/events', [EventController::class, 'getUserEvents']);
 
     // Report routes - specific routes MUST come before resourceful routes

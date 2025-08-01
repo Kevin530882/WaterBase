@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
 import {
     Card,
     CardContent,
@@ -18,8 +19,18 @@ import {
 } from "@/components/ui/table";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from "@/components/ui/select";
+import {
     Users,
+    Award,
     CheckCircle,
+    Search,
+    Eye,
     Loader2,
     AlertCircle,
     Trophy,
@@ -61,12 +72,15 @@ export const VolunteerManagementTab = () => {
     const [volunteers, setVolunteers] = useState<Volunteer[]>([]);
     const [stats, setStats] = useState<VolunteerStats | null>(null);
     const [isLoading, setIsLoading] = useState(true);
-    const [error, setError] = useState(""); const fetchVolunteers = async () => {
-        if (!token || !user?.id) {
-            setError("User not authenticated");
-            setIsLoading(false);
-            return;
-        }
+    const [error, setError] = useState("");
+
+    // Filters
+    const [searchTerm, setSearchTerm] = useState("");
+    const [statusFilter, setStatusFilter] = useState<string>("all");
+    const [rankFilter, setRankFilter] = useState<string>("all");
+
+    const fetchVolunteers = async () => {
+        if (!token || !user?.id) return;
 
         try {
             setIsLoading(true);
@@ -82,131 +96,36 @@ export const VolunteerManagementTab = () => {
 
             if (eventsResponse.ok) {
                 const events = await eventsResponse.json();
-                console.log('Fetched events:', events);
 
-                // Extract volunteers from events
-                const volunteerMap = new Map<number, Volunteer>();
-
-                for (const event of events) {
-                    console.log('Processing event:', event);
-
-                    // Try to fetch volunteers from the new endpoint
-                    try {
-                        const volunteersResponse = await fetch(`/api/events/${event.id}/volunteers`, {
-                            headers: {
-                                'Authorization': `Bearer ${token}`,
-                                'Accept': 'application/json',
-                            },
-                        });
-
-                        if (volunteersResponse.ok) {
-                            const eventVolunteers = await volunteersResponse.json();
-                            console.log(`Volunteers for event ${event.id}:`, eventVolunteers);
-
-                            eventVolunteers.forEach((eventVolunteer: any) => {
-                                const userId = eventVolunteer.user_id || eventVolunteer.id;
-
-                                if (!volunteerMap.has(userId)) {
-                                    // Create new volunteer record from REAL data - no made up names!
-                                    const volunteer: Volunteer = {
-                                        id: userId,
-                                        firstName: eventVolunteer.firstName || 'Unknown',
-                                        lastName: eventVolunteer.lastName || 'Volunteer',
-                                        email: eventVolunteer.email || 'no-email@provided.com',
-                                        phone: eventVolunteer.phone || eventVolunteer.phoneNumber || '',
-                                        address: eventVolunteer.organization || '',
-                                        totalEvents: 0,
-                                        totalPoints: 0,
-                                        eventsThisMonth: 0,
-                                        totalHours: 0,
-                                        lastActivity: event.date || event.created_at,
-                                        status: 'active' as const,
-                                        joinDate: eventVolunteer.pivot?.created_at || eventVolunteer.joined_at || event.created_at,
-                                        badges: ['Environmental Volunteer'],
-                                        rank: 'Active',
-                                        currentEvents: []
-                                    };
-                                    volunteerMap.set(userId, volunteer);
-                                }
-
-                                // Update volunteer stats
-                                const volunteer = volunteerMap.get(userId)!;
-                                volunteer.totalEvents++;
-                                volunteer.totalPoints += event.points || 50;
-                                volunteer.totalHours += parseInt(event.duration) || 3;
-
-                                // Check if event is this month
-                                const eventDate = new Date(event.date);
-                                const now = new Date();
-                                if (eventDate.getMonth() === now.getMonth() &&
-                                    eventDate.getFullYear() === now.getFullYear()) {
-                                    volunteer.eventsThisMonth++;
-                                }
-
-                                // Update last activity
-                                const eventEndDate = new Date(event.date);
-                                const lastActivityDate = new Date(volunteer.lastActivity);
-                                if (eventEndDate > lastActivityDate) {
-                                    volunteer.lastActivity = event.date;
-                                }
-                            });
-                        } else {
-                            console.log(`No volunteers found for event ${event.id}, status:`, volunteersResponse.status);
-                        }
-                    } catch (volunteerError) {
-                        console.log(`Could not fetch volunteers for event ${event.id}:`, volunteerError);
-                    }
-                }
-
-                const volunteersArray = Array.from(volunteerMap.values());
-                console.log('Final volunteers array:', volunteersArray);
-
-                // Update last activity to relative time
-                volunteersArray.forEach(volunteer => {
-                    const lastActivityDate = new Date(volunteer.lastActivity);
-                    const now = new Date();
-                    const diffTime = Math.abs(now.getTime() - lastActivityDate.getTime());
-                    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-
-                    if (diffDays === 1) volunteer.lastActivity = '1 day ago';
-                    else if (diffDays <= 7) volunteer.lastActivity = `${diffDays} days ago`;
-                    else if (diffDays <= 30) volunteer.lastActivity = `${Math.ceil(diffDays / 7)} weeks ago`;
-                    else volunteer.lastActivity = `${Math.ceil(diffDays / 30)} months ago`;
-
-                    // Update status based on recent activity
-                    volunteer.status = diffDays <= 30 ? 'active' : 'inactive';
-                });
+                // For now, create empty volunteers array since we don't have participant data
+                const volunteersArray: Volunteer[] = [];
 
                 setVolunteers(volunteersArray);
-
-                // Calculate stats
-                const activeThisMonth = volunteersArray.filter(v => v.eventsThisMonth > 0).length;
-                const totalPointsAwarded = volunteersArray.reduce((sum, v) => sum + v.totalPoints, 0);
-                const averageEvents = volunteersArray.length > 0
-                    ? volunteersArray.reduce((sum, v) => sum + v.totalEvents, 0) / volunteersArray.length
-                    : 0;
-                const topVolunteers = [...volunteersArray]
-                    .sort((a, b) => b.totalPoints - a.totalPoints)
-                    .slice(0, 5);
-
                 setStats({
                     totalVolunteers: volunteersArray.length,
-                    activeThisMonth,
-                    totalPointsAwarded,
-                    averageEventsPerVolunteer: Math.round(averageEvents * 10) / 10,
-                    topVolunteers
+                    activeThisMonth: 0,
+                    totalPointsAwarded: 0,
+                    averageEventsPerVolunteer: 0,
+                    topVolunteers: []
                 });
-
             } else {
-                const errorText = await eventsResponse.text();
-                console.error('API Error:', eventsResponse.status, errorText);
-                setError(`Failed to fetch events (${eventsResponse.status}). Please try again.`);
+                throw new Error('Failed to fetch events');
             }
         } catch (error) {
             console.error('Error fetching volunteers:', error);
-            setError('Network error. Please check your connection and try again.');
+            setError('Failed to load volunteer data. This feature requires participant tracking.');
         } finally {
             setIsLoading(false);
+        }
+    };
+
+    const getRankColor = (rank: string) => {
+        switch (rank) {
+            case "Champion": return "bg-purple-500 text-white";
+            case "Expert": return "bg-blue-500 text-white";
+            case "Experienced": return "bg-green-500 text-white";
+            case "Active": return "bg-yellow-500 text-black";
+            default: return "bg-gray-500 text-white";
         }
     };
 
@@ -214,8 +133,17 @@ export const VolunteerManagementTab = () => {
         return status === 'active' ? 'bg-green-500 text-white' : 'bg-gray-500 text-white';
     };
 
-    const filteredVolunteers = volunteers
-        .sort((a, b) => new Date(b.joinDate).getTime() - new Date(a.joinDate).getTime()); // Sort latest to oldest
+    const filteredVolunteers = volunteers.filter(volunteer => {
+        const matchesSearch =
+            volunteer.firstName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            volunteer.lastName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+            volunteer.email.toLowerCase().includes(searchTerm.toLowerCase());
+
+        const matchesStatus = statusFilter === 'all' || volunteer.status === statusFilter;
+        const matchesRank = rankFilter === 'all' || volunteer.rank === rankFilter;
+
+        return matchesSearch && matchesStatus && matchesRank;
+    });
 
     useEffect(() => {
         fetchVolunteers();
@@ -251,15 +179,9 @@ export const VolunteerManagementTab = () => {
             </div>
 
             {error && (
-                <Alert>
+                <Alert variant="destructive">
                     <AlertCircle className="h-4 w-4" />
-                    <AlertDescription>
-                        {error}
-                        <br />
-                        <span className="text-sm text-gray-600">
-                            This feature will be fully functional once the participant tracking system is implemented.
-                        </span>
-                    </AlertDescription>
+                    <AlertDescription>{error}</AlertDescription>
                 </Alert>
             )}
 
@@ -315,6 +237,41 @@ export const VolunteerManagementTab = () => {
                     </CardDescription>
                 </CardHeader>
                 <CardContent>
+                    <div className="flex flex-col sm:flex-row gap-4 mb-6">
+                        <div className="relative flex-1">
+                            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
+                            <Input
+                                placeholder="Search volunteers..."
+                                value={searchTerm}
+                                onChange={(e) => setSearchTerm(e.target.value)}
+                                className="pl-10"
+                            />
+                        </div>
+                        <Select value={statusFilter} onValueChange={setStatusFilter}>
+                            <SelectTrigger className="w-[180px]">
+                                <SelectValue placeholder="Filter by status" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="all">All Status</SelectItem>
+                                <SelectItem value="active">Active</SelectItem>
+                                <SelectItem value="inactive">Inactive</SelectItem>
+                            </SelectContent>
+                        </Select>
+                        <Select value={rankFilter} onValueChange={setRankFilter}>
+                            <SelectTrigger className="w-[180px]">
+                                <SelectValue placeholder="Filter by rank" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="all">All Ranks</SelectItem>
+                                <SelectItem value="Champion">Champion</SelectItem>
+                                <SelectItem value="Expert">Expert</SelectItem>
+                                <SelectItem value="Experienced">Experienced</SelectItem>
+                                <SelectItem value="Active">Active</SelectItem>
+                                <SelectItem value="Newcomer">Newcomer</SelectItem>
+                            </SelectContent>
+                        </Select>
+                    </div>
+
                     {/* Volunteers Table */}
                     <div className="overflow-x-auto">
                         <Table>
@@ -322,9 +279,11 @@ export const VolunteerManagementTab = () => {
                                 <TableRow>
                                     <TableHead>Volunteer</TableHead>
                                     <TableHead>Status</TableHead>
+                                    <TableHead>Rank</TableHead>
                                     <TableHead>Events</TableHead>
                                     <TableHead>Points</TableHead>
                                     <TableHead>Last Activity</TableHead>
+                                    <TableHead>Actions</TableHead>
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
@@ -346,6 +305,11 @@ export const VolunteerManagementTab = () => {
                                             </Badge>
                                         </TableCell>
                                         <TableCell>
+                                            <Badge className={cn("text-xs", getRankColor(volunteer.rank))}>
+                                                {volunteer.rank}
+                                            </Badge>
+                                        </TableCell>
+                                        <TableCell>
                                             <div className="text-sm">
                                                 <div>{volunteer.totalEvents} total</div>
                                                 <div className="text-gray-600">{volunteer.eventsThisMonth} this month</div>
@@ -357,18 +321,27 @@ export const VolunteerManagementTab = () => {
                                         <TableCell>
                                             <div className="text-sm">{volunteer.lastActivity}</div>
                                         </TableCell>
+                                        <TableCell>
+                                            <Button
+                                                variant="outline"
+                                                size="sm"
+                                            >
+                                                <Eye className="w-4 h-4 mr-1" />
+                                                View
+                                            </Button>
+                                        </TableCell>
                                     </TableRow>
                                 ))}
                             </TableBody>
                         </Table>
                     </div>
 
-                    {filteredVolunteers.length === 0 && !isLoading && (
+                    {filteredVolunteers.length === 0 && (
                         <div className="text-center py-8 text-gray-500">
                             <Users className="w-12 h-12 mx-auto mb-4 text-gray-400" />
                             <p>No volunteers found</p>
                             <p className="text-sm">
-                                Volunteers will appear here once they join your events and the participant tracking system is fully implemented
+                                Volunteers will appear here once the participant tracking system is implemented
                             </p>
                         </div>
                     )}
