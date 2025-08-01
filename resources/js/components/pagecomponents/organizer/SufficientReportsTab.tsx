@@ -255,7 +255,7 @@ export const SufficientReportsTab = ({
                     <h2 className="text-lg sm:text-xl font-semibold text-waterbase-950">
                         Areas with Sufficient Reports
                     </h2>
-                    
+
                 </div>
 
                 {/* Toggle Switch */}
@@ -447,9 +447,163 @@ export const SufficientReportsTab = ({
                                                     </Button>
                                                 </DialogTrigger>
 
-                                                {/* Keep your existing Dialog Content here */}
+                                                {/* Event Creation Dialog */}
                                                 <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
-                                                    {/* ... existing dialog content ... */}
+                                                    <DialogHeader>
+                                                        <DialogTitle>Create Cleanup Event</DialogTitle>
+                                                        <DialogDescription>
+                                                            Set up a new cleanup event for {selectedArea?.location}
+                                                        </DialogDescription>
+                                                    </DialogHeader>
+
+                                                    {eventError && (
+                                                        <Alert variant="destructive">
+                                                            <AlertCircle className="h-4 w-4" />
+                                                            <AlertDescription>{eventError}</AlertDescription>
+                                                        </Alert>
+                                                    )}
+
+                                                    <div className="space-y-2">
+                                                        {/* Event Title */}
+                                                        <div>
+                                                            <Label htmlFor="title">Event Title *</Label>
+                                                            <Input
+                                                                id="title"
+                                                                placeholder="e.g., Beach Cleanup at Manila Bay"
+                                                                value={newEvent.title}
+                                                                onChange={(e) => setNewEvent({ ...newEvent, title: e.target.value })}
+                                                            />
+                                                        </div>
+
+                                                        {/* Date and Time */}
+                                                        <div className="grid grid-cols-2 gap-4">
+                                                            <div>
+                                                                <Label htmlFor="date">Date *</Label>
+                                                                <Input
+                                                                    id="date"
+                                                                    type="date"
+                                                                    value={newEvent.date}
+                                                                    onChange={(e) => setNewEvent({ ...newEvent, date: e.target.value })}
+                                                                />
+                                                            </div>
+                                                            <div>
+                                                                <Label htmlFor="time">Time *</Label>
+                                                                <Input
+                                                                    id="time"
+                                                                    type="time"
+                                                                    value={newEvent.time}
+                                                                    onChange={(e) => setNewEvent({ ...newEvent, time: e.target.value })}
+                                                                />
+                                                            </div>
+                                                        </div>
+
+                                                        {/* Duration and Max Volunteers */}
+                                                        <div className="grid grid-cols-2 gap-4">
+                                                            <div>
+                                                                <Label htmlFor="duration">Duration (hours)</Label>
+                                                                <Select
+                                                                    value={newEvent.duration}
+                                                                    onValueChange={(value) => setNewEvent({ ...newEvent, duration: value })}
+                                                                >
+                                                                    <SelectTrigger>
+                                                                        <SelectValue placeholder="Select duration" />
+                                                                    </SelectTrigger>
+                                                                    <SelectContent>
+                                                                        <SelectItem value="2">2 hours</SelectItem>
+                                                                        <SelectItem value="3">3 hours</SelectItem>
+                                                                        <SelectItem value="4">4 hours</SelectItem>
+                                                                        <SelectItem value="6">6 hours</SelectItem>
+                                                                        <SelectItem value="8">8 hours (Full day)</SelectItem>
+                                                                    </SelectContent>
+                                                                </Select>
+                                                            </div>
+                                                            <div>
+                                                                <Label htmlFor="maxVolunteers">Max Volunteers *</Label>
+                                                                <Input
+                                                                    id="maxVolunteers"
+                                                                    type="number"
+                                                                    min="1"
+                                                                    placeholder="e.g., 20"
+                                                                    value={newEvent.maxVolunteers}
+                                                                    onChange={(e) => setNewEvent({ ...newEvent, maxVolunteers: e.target.value })}
+                                                                />
+                                                            </div>
+                                                        </div>
+
+                                                        {/* Description */}
+                                                        <div>
+                                                            <Label htmlFor="description">Description</Label>
+                                                            <Textarea
+                                                                id="description"
+                                                                placeholder="Describe the cleanup activities, what to bring, meeting point, etc."
+                                                                value={newEvent.description}
+                                                                onChange={(e) => setNewEvent({ ...newEvent, description: e.target.value })}
+                                                                rows={3}
+                                                            />
+                                                        </div>
+
+                                                        {/* Rewards Section */}
+                                                        <div className="space-y-3">
+                                                            <Label className="text-base font-medium flex items-center">
+                                                                <Gift className="w-4 h-4 mr-2" />
+                                                                Volunteer Rewards
+                                                            </Label>
+
+                                                            <div className="grid grid-cols-2 gap-4">
+                                                                <div>
+                                                                    <Label htmlFor="rewardPoints">Points</Label>
+                                                                    <Input
+                                                                        id="rewardPoints"
+                                                                        type="number"
+                                                                        placeholder="50"
+                                                                        value={newEvent.rewardPoints}
+                                                                        onChange={(e) => setNewEvent({ ...newEvent, rewardPoints: e.target.value })}
+                                                                    />
+                                                                </div>
+                                                                <div>
+                                                                    <Label htmlFor="rewardBadge">Badge Name</Label>
+                                                                    <Input
+                                                                        id="rewardBadge"
+                                                                        placeholder="Environmental Volunteer"
+                                                                        value={newEvent.rewardBadge}
+                                                                        onChange={(e) => setNewEvent({ ...newEvent, rewardBadge: e.target.value })}
+                                                                    />
+                                                                </div>
+                                                            </div>
+                                                        </div>
+
+                                                        {/* Action Buttons */}
+                                                        <div className="flex justify-end space-x-2 pt-4">
+                                                            <Button
+                                                                variant="outline"
+                                                                onClick={() => {
+                                                                    setShowCreateEvent(false);
+                                                                    setSelectedArea(null);
+                                                                    setEventError("");
+                                                                }}
+                                                                disabled={isCreatingEvent}
+                                                            >
+                                                                Cancel
+                                                            </Button>
+                                                            <Button
+                                                                onClick={handleCreateEvent}
+                                                                disabled={isCreatingEvent}
+                                                                className="bg-waterbase-500 hover:bg-waterbase-600"
+                                                            >
+                                                                {isCreatingEvent ? (
+                                                                    <>
+                                                                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                                                                        Creating...
+                                                                    </>
+                                                                ) : (
+                                                                    <>
+                                                                        <Calendar className="w-4 h-4 mr-2" />
+                                                                        Create Event
+                                                                    </>
+                                                                )}
+                                                            </Button>
+                                                        </div>
+                                                    </div>
                                                 </DialogContent>
                                             </Dialog>
                                         )}

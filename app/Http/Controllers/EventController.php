@@ -14,12 +14,12 @@ class EventController extends Controller
     {
         try {
             $query = Event::query();
-            
+
             // Filter by user_id if provided
             if ($request->has('user_id')) {
                 $query->where('user_id', $request->user_id);
             }
-            
+
             $events = $query->orderBy('created_at', 'desc')->get();
             return response()->json($events);
         } catch (ModelNotFoundException $e) {
@@ -31,9 +31,9 @@ class EventController extends Controller
     {
         $validated = $request->validate([
             'title' => 'required|string|max:255',
-            'address'=> 'required|string',
-            'latitude'=> 'required|numeric',
-            'longitude'=> 'required|numeric',
+            'address' => 'required|string',
+            'latitude' => 'required|numeric',
+            'longitude' => 'required|numeric',
             'date' => 'required|date',
             'time' => 'required|date_format:H:i',
             'duration' => 'required|numeric|min:0.1|max:24',
@@ -71,7 +71,7 @@ class EventController extends Controller
     {
         try {
             $event = Event::findOrFail($id);
-            
+
             // Check if user owns this event
             if ($event->user_id !== auth()->id()) {
                 return response()->json(['message' => 'Unauthorized'], 403);
@@ -103,7 +103,7 @@ class EventController extends Controller
     {
         try {
             $event = Event::findOrFail($id);
-            
+
             // Check if user owns this event
             if ($event->user_id !== auth()->id()) {
                 return response()->json(['message' => 'Unauthorized'], 403);
@@ -121,37 +121,37 @@ class EventController extends Controller
         try {
             $event = Event::findOrFail($id);
             $user = auth()->user();
-            
+
             // Check if event is still recruiting
             if ($event->status !== 'recruiting') {
                 return response()->json(['message' => 'This event is no longer accepting volunteers'], 400);
             }
-            
+
             // Check if user is already joined
             if ($event->attendees()->where('user_id', $user->id)->exists()) {
                 return response()->json(['message' => 'You have already joined this event'], 400);
             }
-            
+
             // Check if event is full
             $currentVolunteers = $event->attendees()->count();
             if ($currentVolunteers >= $event->maxVolunteers) {
                 return response()->json(['message' => 'This event is full'], 400);
             }
-            
+
             // Add user to event
             $event->attendees()->attach($user->id, [
                 'joined_at' => now(),
             ]);
-            
+
             // Update current volunteer count
             $event->currentVolunteers = $currentVolunteers + 1;
             $event->save();
-            
+
             return response()->json([
                 'message' => 'Successfully joined the event',
                 'event' => $event->load('attendees')
             ]);
-            
+
         } catch (ModelNotFoundException $e) {
             return response()->json(['message' => 'Event not found'], 404);
         }
@@ -161,17 +161,55 @@ class EventController extends Controller
     {
         try {
             $user = auth()->user();
-            
+
             // Get events the user has joined
             $joinedEvents = $user->attendedEvents()
                 ->with('creator')
                 ->orderBy('date', 'desc')
                 ->get();
-            
+
             return response()->json($joinedEvents);
-            
+
         } catch (\Exception $e) {
             return response()->json(['message' => 'Failed to fetch user events'], 500);
+        }
+    }
+
+    public function getVolunteers($id)
+    {
+        try {
+            $event = Event::findOrFail($id);
+
+            // Get all volunteers for this event through the pivot table
+            $volunteers = $event->attendees()
+                ->select('users.id', 'users.firstName', 'users.lastName', 'users.email', 'users.phoneNumber', 'users.organization')
+                ->get()
+                ->map(function ($user) use ($event) {
+                    return [
+                        'id' => $user->id,
+                        'user_id' => $user->id,
+                        'firstName' => $user->firstName,
+                        'lastName' => $user->lastName,
+                        'name' => $user->firstName . ' ' . $user->lastName,
+                        'email' => $user->email,
+                        'phone' => $user->phoneNumber ?? '',
+                        'organization' => $user->organization ?? '',
+                        'joined_at' => now()->toISOString(),
+                        'pivot' => [
+                            'user_id' => $user->id,
+                            'event_id' => $event->id,
+                            'created_at' => now()->toISOString()
+                        ]
+                    ];
+                });
+
+            return response()->json($volunteers);
+
+        } catch (ModelNotFoundException $e) {
+            return response()->json(['message' => 'Event not found'], 404);
+        } catch (\Exception $e) {
+            \Log::error('Error fetching volunteers: ' . $e->getMessage());
+            return response()->json(['message' => 'Failed to fetch volunteers: ' . $e->getMessage()], 500);
         }
     }
 }

@@ -181,6 +181,7 @@ class UserController extends Controller
                     $eventsJoined = 0;
                     $badgesEarned = 0;
                     $communityPoints = 0;
+                    $totalHours = 0;
                     $userBadges = [];
 
                     if (class_exists('\App\Models\Event')) {
@@ -192,6 +193,10 @@ class UserController extends Controller
                             ->where('status', 'completed')
                             ->whereNotNull('badge')
                             ->get();
+
+                        // Get all attended events to calculate hours
+                        $allAttendedEvents = $user->attendedEvents()->get();
+                        $totalHours = $allAttendedEvents->sum('duration') ?? 0;
 
                         // Count unique badges earned
                         $userBadges = $completedEvents->pluck('badge')->unique()->values()->toArray();
@@ -209,6 +214,7 @@ class UserController extends Controller
                         'eventsJoined' => $eventsJoined,
                         'badgesEarned' => $badgesEarned,
                         'communityPoints' => $communityPoints,
+                        'totalHours' => $totalHours,
                         'badges' => $userBadges
                     ];
                     break;
