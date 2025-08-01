@@ -20,8 +20,10 @@ class Report extends Model
         'severityPercentage',
         'ai_verified',
         'image',
+        'ai_annotated_image',
         'user_id',
         'status',
+        'verifiedBy'
     ];
 
     protected $casts = [

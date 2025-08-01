@@ -49,4 +49,9 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/predict', [DetectPollutionController::class, 'predict']);
 
     Route::get('/admin/reports/pending',[AdminDashboardController::class,'getPendingReports']);
+    Route::put('/admin/reports/{report}/status', [AdminDashboardController::class, 'updateStatus']);
+
+    Route::get('/admin/users', [AdminDashboardController::class,'getExistingUsers']);
+    Route::put('/admin/users/{user}', [AdminDashboardController::class,'editExistingUser']);
+    Route::delete('/admin/users/{user}', [AdminDashboardController::class, 'deleteUser']);
 });

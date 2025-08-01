@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { format, parseISO } from 'date-fns';
+import { useAuth } from "@/contexts/AuthContext";
 import {
     Card,
     CardContent,
@@ -55,10 +56,13 @@ import {
     RefreshCw,
     Calendar,
     Award,
+    Mail,
+    Phone,
+    MapPin,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { SearchableSelect } from "@/components/pagecomponents/searchable-select";
 
-// Mock admin statistics
 const adminStats = {
     totalUsers: 2450,
     totalReports: 1234,
@@ -70,46 +74,6 @@ const adminStats = {
     monthlyGrowth: 18,
 };
 
-
-
-// Mock user management data
-const systemUsers = [
-    {
-        id: 1,
-        name: "Maria Santos",
-        email: "maria@example.com",
-        role: "Volunteer",
-        joinDate: "2024-01-10",
-        status: "Active",
-        reportsSubmitted: 23,
-        eventsJoined: 8,
-        points: 450,
-    },
-    {
-        id: 2,
-        name: "Manila Bay Coalition",
-        email: "admin@manilabay.org",
-        role: "NGO",
-        joinDate: "2023-12-15",
-        status: "Active",
-        reportsSubmitted: 0,
-        eventsJoined: 0,
-        eventsOrganized: 12,
-    },
-    {
-        id: 3,
-        name: "Juan dela Cruz",
-        email: "juan@email.com",
-        role: "Volunteer",
-        joinDate: "2024-01-05",
-        status: "Suspended",
-        reportsSubmitted: 5,
-        eventsJoined: 2,
-        points: 150,
-    },
-];
-
-// Mock volunteer tasks
 const volunteerTasks = [
     {
         id: 1,
@@ -134,16 +98,39 @@ const volunteerTasks = [
 ];
 
 export const AdminDashboard = () => {
+    const { user } = useAuth();
     const [activeTab, setActiveTab] = useState("overview");
-    const [selectedReport, setSelectedReport] = useState<any>(null);
+    const [selectedReport, setSelectedReport] = useState(null);
     const [showReportDialog, setShowReportDialog] = useState(false);
-
-    const [reports, setReports] = useState<any[]>([]);
+    const [reports, setReports] = useState([]);
     const [currentPage, setCurrentPage] = useState(1);
     const [totalPages, setTotalPages] = useState(1);
+    const [isConfirmDialogOpen, setIsConfirmDialogOpen] = useState(false);
+    const [pendingAction, setPendingAction] = useState('');
+    const [selectedReportId, setSelectedReportId] = useState(null);
+    const [users, setUsers] = useState([]);
+    const [currentUserPage, setCurrentUserPage] = useState(1);
+    const [totalUserPages, setTotalUserPages] = useState(1);
+    const [selectedUser, setSelectedUser] = useState(null);
+    const [showUserDialog, setShowUserDialog] = useState(false);
+    const [showEditUserDialog, setShowEditUserDialog] = useState(false);
+    const [showDeleteUserDialog, setShowDeleteUserDialog] = useState(false);
+    const [userToDelete, setUserToDelete] = useState(null);
+    const [editFormData, setEditFormData] = useState({
+        firstName: '',
+        lastName: '',
+        email: '',
+        phoneNumber: '',
+        role: '',
+        organization: '',
+        areaOfResponsibility: ''
+    });
+    const [isUpdating, setIsUpdating] = useState(false);
+    const [isDeleting, setIsDeleting] = useState(false);
+    const [errorMessage, setErrorMessage] = useState('');
+    const [successMessage, setSuccessMessage] = useState('');
 
-    // Fetch reports from the backend
-    const fetchReports = async (page: number) => {
+    const fetchReports = async (page) => {
         try {
             const response = await fetch(`/api/admin/reports/pending?page=${page}`, {
                 method: 'GET',
@@ -152,7 +139,6 @@ export const AdminDashboard = () => {
                 }
             });
             const data = await response.json();
-            console.log(data);
             setReports(data.data);
             setTotalPages(data.last_page);
         } catch (error) {
@@ -160,20 +146,76 @@ export const AdminDashboard = () => {
         }
     };
 
-    // Fetch reports when the "reports" tab is active or page changes
+    const fetchUsers = async (page) => {
+        try {
+            const response = await fetch(`/api/admin/users?page=${page}`, {
+                method: 'GET',
+                headers: {
+                    'Authorization': `Bearer ${localStorage.getItem('auth_token')}`,
+                }
+            });
+            if (!response.ok) {
+                throw new Error('Failed to fetch users');
+            }
+            const data = await response.json();
+            setUsers(data.data);
+            setTotalUserPages(data.last_page);
+        } catch (error) {
+            console.error('Error fetching users:', error);
+            setErrorMessage('Failed to load users. Please try again.');
+        }
+    };
+
     useEffect(() => {
         if (activeTab === 'reports') {
             fetchReports(currentPage);
+        } else if (activeTab === 'users') {
+            fetchUsers(currentUserPage);
         }
-    }, [activeTab, currentPage]);
+    }, [activeTab, currentPage, currentUserPage]);
 
+    const handleReportAction = async (reportId, action) => {
+        let status;
+        if (action === 'approve') {
+            status = 'verified';
+        } else if (action === 'reject') {
+            status = 'declined';
+        } else {
+            console.error('Invalid action');
+            return;
+        }
 
-    const handleReportAction = (reportId: number, action: string) => {
-        console.log(`${action} report ${reportId}`);
-        setShowReportDialog(false);
+        try {
+            const response = await fetch(`/api/admin/reports/${reportId}/status`, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${localStorage.getItem('auth_token')}`,
+                },
+                body: JSON.stringify({ status, verifiedBy: user?.id }),
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.message || 'Failed to update report status');
+            }
+
+            fetchReports(currentPage);
+            setShowReportDialog(false);
+            setIsConfirmDialogOpen(false);
+        } catch (error) {
+            console.error('Error updating report status:', error);
+            setErrorMessage(error.message || 'Failed to update report status');
+        }
     };
 
-    const getStatusColor = (status: string) => {
+    const openConfirmDialog = (reportId, action) => {
+        setSelectedReportId(reportId);
+        setPendingAction(action);
+        setIsConfirmDialogOpen(true);
+    };
+
+    const getStatusColor = (status) => {
         switch (status.toLowerCase()) {
             case "active":
                 return "bg-green-100 text-green-800";
@@ -190,25 +232,102 @@ export const AdminDashboard = () => {
         }
     };
 
-    const getSeverityColor = (severity: string) => {
+    const getSeverityColor = (severity) => {
         switch (severity.toLowerCase()) {
             case "high":
-                return "bg-red-500 text-white";
+                return "bg-orange-500 text-white";
             case "medium":
                 return "bg-yellow-500 text-black";
             case "low":
                 return "bg-green-500 text-white";
             default:
-                return "bg-gray-500 text-white";
+                return "bg-red-500 text-white";
         }
     };
+
+    const shouldShowOrganizationFields = (role) => {
+        return ['ngo', 'lgu', 'researcher'].includes(role);
+    };
+
+    const handleUpdateUser = async () => {
+        setIsUpdating(true);
+        setErrorMessage('');
+        try {
+            const response = await fetch(`/api/admin/users/${selectedUser.id}`, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${localStorage.getItem('auth_token')}`,
+                },
+                body: JSON.stringify(editFormData),
+            });
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.message || 'Failed to update user');
+            }
+            fetchUsers(currentUserPage);
+            setShowEditUserDialog(false);
+        } catch (error) {
+            console.error('Error updating user:', error);
+            setErrorMessage(error.message || 'Failed to update user. Please try again.');
+        } finally {
+            setIsUpdating(false);
+        }
+    };
+
+    const handleDeleteUser = async () => {
+        setIsDeleting(true);
+        try {
+            const response = await fetch(`/api/admin/users/${userToDelete.id}`, {
+                method: 'DELETE',
+                headers: {
+                    'Authorization': `Bearer ${localStorage.getItem('auth_token')}`,
+                },
+            });
+            if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(errorData.message || 'Failed to delete user');
+            }
+            fetchUsers(currentUserPage);
+            setShowDeleteUserDialog(false);
+            setSuccessMessage('User deleted successfully');
+            setTimeout(() => setSuccessMessage(''), 5000);
+        } catch (error) {
+            console.error('Error deleting user:', error);
+            setErrorMessage(error.message || 'Failed to delete user. Please try again.');
+        } finally {
+            setIsDeleting(false);
+        }
+    };
+
+    useEffect(() => {
+        if (selectedUser) {
+            setEditFormData({
+                firstName: selectedUser.firstName || '',
+                lastName: selectedUser.lastName || '',
+                email: selectedUser.email || '',
+                phoneNumber: selectedUser.phoneNumber || '',
+                role: selectedUser.role || '',
+                organization: selectedUser.organization || '',
+                areaOfResponsibility: selectedUser.areaOfResponsibility || ''
+            });
+        }
+    }, [selectedUser]);
 
     return (
         <div className="min-h-screen bg-gray-50">
             <Navigation />
-
             <div className="max-w-7xl mx-auto py-8 px-4 sm:px-6 lg:px-8">
-                {/* Header */}
+                {errorMessage && (
+                    <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-600">
+                        {errorMessage}
+                    </div>
+                )}
+                {successMessage && (
+                    <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded-lg text-sm text-green-600">
+                        {successMessage}
+                    </div>
+                )}
                 <div className="mb-6">
                     <div className="flex items-center justify-between">
                         <div>
@@ -232,7 +351,6 @@ export const AdminDashboard = () => {
                     </div>
                 </div>
 
-                {/* Stats Overview */}
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
                     <Card className="border-waterbase-200">
                         <CardContent className="p-4">
@@ -312,7 +430,6 @@ export const AdminDashboard = () => {
                     </Card>
                 </div>
 
-                {/* Main Content Tabs */}
                 <Tabs value={activeTab} onValueChange={setActiveTab}>
                     <TabsList className="grid w-full grid-cols-5 mb-4 h-8 bg-gray-100">
                         <TabsTrigger value="overview" className="text-xs px-2 py-1 data-[state=active]:bg-waterbase-500 data-[state=active]:text-white">Overview</TabsTrigger>
@@ -374,7 +491,7 @@ export const AdminDashboard = () => {
                                                     Medium
                                                 </Badge>
                                             </div>
-                                            <p className="text-xs text-yellow-600 mt-1">
+                                            <p className="text-xs text-yellow-600 derivative mt-1">
                                                 Suspicious activity detected on user account
                                             </p>
                                         </div>
@@ -418,7 +535,7 @@ export const AdminDashboard = () => {
                                             <TableRow>
                                                 <TableHead className="text-xs">Report Details</TableHead>
                                                 <TableHead className="text-xs">Submitter</TableHead>
-                                                <TableHead className="text-xs">Type & Severity</TableHead>
+                                                <TableHead className="text-xs">Type & AI Severity</TableHead>
                                                 <TableHead className="text-xs">AI Confidence</TableHead>
                                                 <TableHead className="text-xs">Submitted</TableHead>
                                                 <TableHead className="text-xs">Actions</TableHead>
@@ -434,11 +551,11 @@ export const AdminDashboard = () => {
                                                         </div>
                                                     </TableCell>
                                                     <TableCell className="py-2">
-                                                        <div className="text-xs">{report.user_id}</div>
+                                                        <div className="text-xs">{report.username}</div>
                                                     </TableCell>
                                                     <TableCell className="py-2">
                                                         <div className="space-y-1">
-                                                            <Badge variant="outline" className="text-xs h-5 px-1">
+                                                            <Badge variant="outline" className="text-xs h-5 px-1 mr-1">
                                                                 {report.pollutionType}
                                                             </Badge>
                                                             <Badge
@@ -487,7 +604,7 @@ export const AdminDashboard = () => {
                                                                         <Eye className="w-3 h-3" />
                                                                     </Button>
                                                                 </DialogTrigger>
-                                                                <DialogContent className="max-w-2xl">
+                                                                <DialogContent className="max-w-3xl">
                                                                     <DialogHeader>
                                                                         <DialogTitle>Report Validation</DialogTitle>
                                                                         <DialogDescription>
@@ -515,16 +632,14 @@ export const AdminDashboard = () => {
                                                                                 {selectedReport?.content}
                                                                             </div>
                                                                         </div>
-
-                                                                        {/* Added images section */}
                                                                         <div className="grid grid-cols-2 gap-4 my-4">
                                                                             <div className="flex flex-col items-center">
                                                                                 <Label className="mb-2">Submitted Image</Label>
                                                                                 {selectedReport?.image ? (
                                                                                     <img
-                                                                                        src={`/storage/${selectedReport.image}`}
+                                                                                        src={selectedReport.image}
                                                                                         alt="Submitted"
-                                                                                        className="max-h-48 rounded-md border border-gray-300"
+                                                                                        className="max-h-300 rounded-md border border-gray-300"
                                                                                     />
                                                                                 ) : (
                                                                                     <p className="text-xs text-gray-500">
@@ -533,12 +648,12 @@ export const AdminDashboard = () => {
                                                                                 )}
                                                                             </div>
                                                                             <div className="flex flex-col items-center">
-                                                                                <Label>AI Annotated Image</Label>
-                                                                                {selectedReport?.aiAnnotatedImage ? (
+                                                                                <Label className="mb-2">AI Annotated Image</Label>
+                                                                                {selectedReport?.ai_annotated_image ? (
                                                                                     <img
-                                                                                        src={selectedReport.aiAnnotatedImage}
+                                                                                        src={selectedReport.ai_annotated_image}
                                                                                         alt="AI Annotated"
-                                                                                        className="max-h-48 rounded-md border border-gray-300"
+                                                                                        className="max-h-300 rounded-md border border-gray-300"
                                                                                     />
                                                                                 ) : (
                                                                                     <p className="text-xs text-gray-500">
@@ -547,7 +662,6 @@ export const AdminDashboard = () => {
                                                                                 )}
                                                                             </div>
                                                                         </div>
-
                                                                         <div className="grid grid-cols-3 gap-4">
                                                                             <div>
                                                                                 <Label>Type</Label>
@@ -566,19 +680,17 @@ export const AdminDashboard = () => {
                                                                                         {selectedReport?.severityByUser}
                                                                                     </Badge>
                                                                                 </div>
-
                                                                                 <div>
                                                                                     <Label className="mr-5">AI Severity</Label>
                                                                                     <Badge
                                                                                         className={getSeverityColor(
-                                                                                            selectedReport?.severityByUser || "",
+                                                                                            selectedReport?.severityByAI || "",
                                                                                         )}
                                                                                     >
                                                                                         {selectedReport?.severityByAI}
                                                                                     </Badge>
                                                                                 </div>
                                                                             </div>
-
                                                                             <div>
                                                                                 <Label>AI Confidence</Label>
                                                                                 <div className="text-sm font-medium">
@@ -595,29 +707,29 @@ export const AdminDashboard = () => {
                                                                                         {selectedReport?.ai_confidence}%
                                                                                     </p>
                                                                                 </div>
-
                                                                             </div>
                                                                             <div>
                                                                                 <Label>Date Report Created</Label>
                                                                                 <div className="text-sm">
-                                                                                    {format(parseISO(report.created_at), 'dd MMM yyyy, h:mm a')}
+                                                                                    {selectedReport && format(parseISO(selectedReport.created_at), 'dd MMM yyyy, h:mm a')}
                                                                                 </div>
                                                                             </div>
                                                                             <div>
                                                                                 <Label>Date Report Modified</Label>
                                                                                 <div className="text-sm">
-                                                                                    {format(parseISO(report.updated_at), 'dd MMM yyyy, h:mm a')}
+                                                                                    {selectedReport && format(parseISO(selectedReport.updated_at), 'dd MMM yyyy, h:mm a')}
+                                                                                </div>
+                                                                            </div>
+                                                                            <div>
+                                                                                <Label>Report Submitted By</Label>
+                                                                                <div className="text-sm">
+                                                                                    {selectedReport?.username}
                                                                                 </div>
                                                                             </div>
                                                                         </div>
                                                                         <div className="flex space-x-2 pt-4">
                                                                             <Button
-                                                                                onClick={() =>
-                                                                                    handleReportAction(
-                                                                                        selectedReport?.id,
-                                                                                        "approve",
-                                                                                    )
-                                                                                }
+                                                                                onClick={() => openConfirmDialog(selectedReport.id, "approve")}
                                                                                 className="bg-green-600 hover:bg-green-700 h-8 text-xs"
                                                                                 size="sm"
                                                                             >
@@ -625,15 +737,9 @@ export const AdminDashboard = () => {
                                                                                 Approve Report
                                                                             </Button>
                                                                             <Button
-                                                                                variant="destructive"
+                                                                                className="bg-red-600 hover:bg-red-700 h-8 text-xs"
                                                                                 size="sm"
-                                                                                className="h-8 text-xs"
-                                                                                onClick={() =>
-                                                                                    handleReportAction(
-                                                                                        selectedReport?.id,
-                                                                                        "reject",
-                                                                                    )
-                                                                                }
+                                                                                onClick={() => openConfirmDialog(selectedReport.id, "reject")}
                                                                             >
                                                                                 <XCircle className="w-3 h-3 mr-1" />
                                                                                 Reject Report
@@ -649,9 +755,40 @@ export const AdminDashboard = () => {
                                                                                     )
                                                                                 }
                                                                             >
+                                                                                <Clock className="w-3 h-3 mr-1" />
                                                                                 Request More Info
                                                                             </Button>
                                                                         </div>
+                                                                    </div>
+                                                                </DialogContent>
+                                                            </Dialog>
+                                                            <Dialog open={isConfirmDialogOpen} onOpenChange={setIsConfirmDialogOpen}>
+                                                                <DialogContent>
+                                                                    <DialogHeader>
+                                                                        <DialogTitle>Confirm Action</DialogTitle>
+                                                                        <DialogDescription>
+                                                                            {pendingAction === 'approve' 
+                                                                                ? "Are you sure you want to approve this report?" 
+                                                                                : "Are you sure you want to reject this report?"}
+                                                                        </DialogDescription>
+                                                                    </DialogHeader>
+                                                                    <div className="flex justify-end space-x-2">
+                                                                        <Button
+                                                                            variant="outline"
+                                                                            onClick={() => setIsConfirmDialogOpen(false)}
+                                                                        >
+                                                                            No
+                                                                        </Button>
+                                                                        <Button
+                                                                            onClick={() => {
+                                                                                if (selectedReportId) {
+                                                                                    handleReportAction(selectedReportId, pendingAction);
+                                                                                }
+                                                                                setIsConfirmDialogOpen(false);
+                                                                            }}
+                                                                        >
+                                                                            Yes
+                                                                        </Button>
                                                                     </div>
                                                                 </DialogContent>
                                                             </Dialog>
@@ -662,7 +799,6 @@ export const AdminDashboard = () => {
                                         </TableBody>
                                     </Table>
                                 </div>
-                                {/* Pagination Controls */}
                                 <div className="flex items-center justify-between mt-4">
                                     <Button
                                         onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
@@ -722,12 +858,12 @@ export const AdminDashboard = () => {
                                             </TableRow>
                                         </TableHeader>
                                         <TableBody>
-                                            {systemUsers.map((user) => (
+                                            {users.map((user) => (
                                                 <TableRow key={user.id}>
                                                     <TableCell className="py-2">
                                                         <div>
                                                             <div className="font-medium text-xs">
-                                                                {user.name}
+                                                                {user.firstName} {user.lastName}
                                                             </div>
                                                             <div className="text-xs text-gray-600">
                                                                 {user.email}
@@ -746,33 +882,56 @@ export const AdminDashboard = () => {
                                                     </TableCell>
                                                     <TableCell className="py-2">
                                                         <div className="text-xs space-y-1">
-                                                            <div>Reports: {user.reportsSubmitted}</div>
-                                                            <div>Events: {user.eventsJoined}</div>
-                                                            {user.role === "Volunteer" && (
-                                                                <div>Points: {user.points}</div>
+                                                            {user.role === "volunteer" ? (
+                                                                <>
+                                                                    <div>Events Attended: {user.attended_events_count}</div>
+                                                                    <div>Points: {user.total_points}</div>
+                                                                </>
+                                                            ) : (
+                                                                <div>Events Created: {user.created_events_count}</div>
                                                             )}
                                                         </div>
                                                     </TableCell>
                                                     <TableCell className="py-2">
-                                                        <Badge className={cn("text-xs h-5 px-1", getStatusColor(user.status))}>
-                                                            {user.status}
+                                                        <Badge className={cn("text-xs h-5 px-1", getStatusColor("Active"))}>
+                                                            Active
                                                         </Badge>
                                                     </TableCell>
                                                     <TableCell className="py-2">
-                                                        <div className="text-xs">{user.joinDate}</div>
+                                                        <div className="text-xs">{format(parseISO(user.created_at), 'dd MMM yyyy')}</div>
                                                     </TableCell>
                                                     <TableCell className="py-2">
                                                         <div className="flex items-center space-x-1">
-                                                            <Button variant="outline" size="sm" className="h-7 w-7 p-0">
+                                                            <Button
+                                                                variant="outline"
+                                                                size="sm"
+                                                                className="h-7 w-7 p-0"
+                                                                onClick={() => {
+                                                                    setSelectedUser(user);
+                                                                    setShowEditUserDialog(true);
+                                                                }}
+                                                            >
                                                                 <Edit className="w-3 h-3" />
                                                             </Button>
-                                                            <Button variant="outline" size="sm" className="h-7 w-7 p-0">
+                                                            <Button
+                                                                variant="outline"
+                                                                size="sm"
+                                                                className="h-7 w-7 p-0"
+                                                                onClick={() => {
+                                                                    setSelectedUser(user);
+                                                                    setShowUserDialog(true);
+                                                                }}
+                                                            >
                                                                 <Eye className="w-3 h-3" />
                                                             </Button>
                                                             <Button
                                                                 variant="outline"
                                                                 size="sm"
                                                                 className="h-7 w-7 p-0 text-red-600"
+                                                                onClick={() => {
+                                                                    setUserToDelete(user);
+                                                                    setShowDeleteUserDialog(true);
+                                                                }}
                                                             >
                                                                 <Trash2 className="w-3 h-3" />
                                                             </Button>
@@ -783,9 +942,218 @@ export const AdminDashboard = () => {
                                         </TableBody>
                                     </Table>
                                 </div>
+                                <div className="flex items-center justify-between mt-4">
+                                    <Button
+                                        onClick={() => setCurrentUserPage(prev => Math.max(prev - 1, 1))}
+                                        disabled={currentUserPage === 1}
+                                        size="sm"
+                                        className="h-8 text-xs"
+                                    >
+                                        Previous
+                                    </Button>
+                                    <span className="text-xs">Page {currentUserPage} of {totalUserPages}</span>
+                                    <Button
+                                        onClick={() => setCurrentUserPage(prev => Math.min(prev + 1, totalUserPages))}
+                                        disabled={currentUserPage === totalUserPages}
+                                        size="sm"
+                                        className="h-8 text-xs"
+                                    >
+                                        Next
+                                    </Button>
+                                </div>
                             </CardContent>
                         </Card>
-                    </TabsContent>                    <TabsContent value="volunteers">
+                        {selectedUser && (
+                            <Dialog open={showEditUserDialog} onOpenChange={setShowEditUserDialog}>
+                                <DialogContent>
+                                    <DialogHeader>
+                                        <DialogTitle>Edit User</DialogTitle>
+                                    </DialogHeader>
+                                    <div className="space-y-4">
+                                        <div className="grid grid-cols-2 gap-3">
+                                            <div>
+                                                <Label htmlFor="firstName">First Name</Label>
+                                                <Input
+                                                    id="firstName"
+                                                    placeholder="Maria"
+                                                    value={editFormData.firstName}
+                                                    onChange={(e) => setEditFormData({ ...editFormData, firstName: e.target.value })}
+                                                    disabled={isUpdating}
+                                                />
+                                            </div>
+                                            <div>
+                                                <Label htmlFor="lastName">Last Name</Label>
+                                                <Input
+                                                    id="lastName"
+                                                    placeholder="Santos"
+                                                    value={editFormData.lastName}
+                                                    onChange={(e) => setEditFormData({ ...editFormData, lastName: e.target.value })}
+                                                    disabled={isUpdating}
+                                                />
+                                            </div>
+                                        </div>
+                                        <div>
+                                            <Label htmlFor="email">Email Address</Label>
+                                            <div className="relative">
+                                                <Mail className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
+                                                <Input
+                                                    id="email"
+                                                    type="email"
+                                                    placeholder="maria@example.com"
+                                                    className="pl-10"
+                                                    value={editFormData.email}
+                                                    onChange={(e) => setEditFormData({ ...editFormData, email: e.target.value })}
+                                                    disabled={isUpdating}
+                                                />
+                                            </div>
+                                        </div>
+                                        <div>
+                                            <Label htmlFor="phoneNumber">Phone Number</Label>
+                                            <div className="relative">
+                                                <Phone className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
+                                                <Input
+                                                    id="phoneNumber"
+                                                    type="tel"
+                                                    placeholder="+63 912 345 6789"
+                                                    className="pl-10"
+                                                    value={editFormData.phoneNumber}
+                                                    onChange={(e) => setEditFormData({ ...editFormData, phoneNumber: e.target.value })}
+                                                    disabled={isUpdating}
+                                                />
+                                            </div>
+                                        </div>
+                                        <div>
+                                            <Label htmlFor="role">User Type</Label>
+                                            <Select
+                                                value={editFormData.role}
+                                                onValueChange={(value) => setEditFormData({ ...editFormData, role: value })}
+                                                disabled={isUpdating}
+                                            >
+                                                <SelectTrigger>
+                                                    <SelectValue placeholder="Select user role" />
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                    <SelectItem value="user">Concerned Citizen</SelectItem>
+                                                    <SelectItem value="volunteer">Volunteer</SelectItem>
+                                                    <SelectItem value="ngo">NGO</SelectItem>
+                                                    <SelectItem value="lgu">Local Government Unit</SelectItem>
+                                                    <SelectItem value="researcher">Researcher</SelectItem>
+                                                    <SelectItem value="admin">Admin</SelectItem>
+                                                </SelectContent>
+                                            </Select>
+                                        </div>
+                                        {shouldShowOrganizationFields(editFormData.role) && (
+                                            <div>
+                                                <Label htmlFor="organization">Organization</Label>
+                                                <div className="relative">
+                                                    <MapPin className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
+                                                    <Input
+                                                        id="organization"
+                                                        placeholder="Environmental Watch PH"
+                                                        className="pl-10"
+                                                        value={editFormData.organization}
+                                                        onChange={(e) => setEditFormData({ ...editFormData, organization: e.target.value })}
+                                                        disabled={isUpdating}
+                                                    />
+                                                </div>
+                                            </div>
+                                        )}
+                                        {shouldShowOrganizationFields(editFormData.role) && (
+                                            <div>
+                                                <Label htmlFor="areaOfResponsibility">Area of Responsibility</Label>
+                                                <SearchableSelect
+                                                    value={editFormData.areaOfResponsibility}
+                                                    onValueChange={(value) => setEditFormData({ ...editFormData, areaOfResponsibility: value })}
+                                                    placeholder="Search for region, province, city, or barangay..."
+                                                    disabled={isUpdating}
+                                                />
+                                                <p className="text-xs text-gray-500 mt-1">
+                                                    Type at least 2 characters to search for locations
+                                                </p>
+                                            </div>
+                                        )}
+                                    </div>
+                                    <div className="flex justify-end space-x-2 mt-6">
+                                        <Button variant="outline" onClick={() => setShowEditUserDialog(false)} disabled={isUpdating}>
+                                            Cancel
+                                        </Button>
+                                        <Button onClick={handleUpdateUser} disabled={isUpdating}>
+                                            {isUpdating ? 'Saving...' : 'Save'}
+                                        </Button>
+                                    </div>
+                                </DialogContent>
+                            </Dialog>
+                        )}
+                        {selectedUser && (
+                            <Dialog open={showUserDialog} onOpenChange={setShowUserDialog}>
+                                <DialogContent>
+                                    <DialogHeader>
+                                        <DialogTitle>User Details</DialogTitle>
+                                    </DialogHeader>
+                                    <div className="space-y-4">
+                                        <div>
+                                            <Label>Name</Label>
+                                            <div className="text-sm">{selectedUser.firstName} {selectedUser.lastName}</div>
+                                        </div>
+                                        <div>
+                                            <Label>Email</Label>
+                                            <div className="text-sm">{selectedUser.email}</div>
+                                        </div>
+                                        <div>
+                                            <Label>Phone Number</Label>
+                                            <div className="text-sm">{selectedUser.phoneNumber}</div>
+                                        </div>
+                                        <div>
+                                            <Label>Role</Label>
+                                            <div className="text-sm">{selectedUser.role}</div>
+                                        </div>
+                                        {shouldShowOrganizationFields(selectedUser.role) && (
+                                            <>
+                                                <div>
+                                                    <Label>Organization</Label>
+                                                    <div className="text-sm">{selectedUser.organization}</div>
+                                                </div>
+                                                <div>
+                                                    <Label>Area of Responsibility</Label>
+                                                    <div className="text-sm">{selectedUser.areaOfResponsibility}</div>
+                                                </div>
+                                            </>
+                                        )}
+                                    </div>
+                                </DialogContent>
+                            </Dialog>
+                        )}
+                        {userToDelete && (
+                            <Dialog open={showDeleteUserDialog} onOpenChange={setShowDeleteUserDialog}>
+                                <DialogContent>
+                                    <DialogHeader>
+                                        <DialogTitle>Confirm Delete</DialogTitle>
+                                        <DialogDescription>
+                                            Are you sure you want to delete {userToDelete.firstName} {userToDelete.lastName}?
+                                        </DialogDescription>
+                                    </DialogHeader>
+                                    <div className="flex justify-end space-x-2">
+                                        <Button 
+                                            variant="outline" 
+                                            onClick={() => setShowDeleteUserDialog(false)}
+                                            disabled={isDeleting}
+                                        >
+                                            Cancel
+                                        </Button>
+                                        <Button 
+                                            variant="destructive"
+                                            onClick={handleDeleteUser}
+                                            disabled={isDeleting}
+                                        >
+                                            {isDeleting ? 'Deleting...' : 'Delete'}
+                                        </Button>
+                                    </div>
+                                </DialogContent>
+                            </Dialog>
+                        )}
+                    </TabsContent>
+
+                    <TabsContent value="volunteers">
                         <Card className="border-waterbase-200">
                             <CardHeader>
                                 <div className="flex items-center justify-between">
@@ -924,7 +1292,6 @@ export const AdminDashboard = () => {
                                     </div>
                                 </CardContent>
                             </Card>
-
                             <Card className="border-waterbase-200">
                                 <CardHeader>
                                     <CardTitle>System Maintenance</CardTitle>

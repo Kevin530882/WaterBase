@@ -253,9 +253,14 @@ def main(image_path):
         annotated_image = visualize_masks(resized_image, results_list, ["water_model", "trash_model", "pollution_model"], class_colors, class_labels, (new_h, new_w))
         
         # Save annotated image
-        base, ext = os.path.splitext(image_path)
-        annotated_path = f"{base}_annotated{ext}"
-        cv2.imwrite(annotated_path, annotated_image)
+        # base, ext = os.path.splitext(image_path)
+        # annotated_path = f"{base}_annotated{ext}"
+        # cv2.imwrite(annotated_path, annotated_image)
+        base, _ = os.path.splitext(image_path)  # Ignore the original extension
+        annotated_path = f"{base}_annotated.jpg"  # Use .jpg extension
+        success = cv2.imwrite(annotated_path, annotated_image)
+        if not success:
+            print(json.dumps({"error": f"Failed to save annotated image to {annotated_path}"}))
         
        #add severity level and pollution percentage
         
