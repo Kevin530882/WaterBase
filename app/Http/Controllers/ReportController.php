@@ -7,6 +7,7 @@ use Exception;
 use App\Models\Report;
 use App\Enums\ReportStatus;
 use App\Enums\SeverityLevel;
+use App\Services\GeographicService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\Rules\Enum;
@@ -16,6 +17,12 @@ use Illuminate\Validation\ValidationException;
 
 class ReportController extends Controller
 {
+    protected GeographicService $geographicService;
+
+    public function __construct(GeographicService $geographicService)
+    {
+        $this->geographicService = $geographicService;
+    }
 
     public function index(Request $request)
     {
@@ -36,7 +43,15 @@ class ReportController extends Controller
                 'total_reports_before_filter' => Report::count()
             ]);
 
-            $query = $this->filterByAreaOfResponsibility($query, $user->areaOfResponsibility);
+            // Use geographic filtering if bounding box data is available
+            if ($this->hasGeographicBounds($user)) {
+                $query = $this->filterByGeographicBounds($query, $user);
+                \Log::info('Using geographic bounds filtering');
+            } else {
+                // Fallback to text-based filtering
+                $query = $this->filterByAreaOfResponsibility($query, $user->areaOfResponsibility);
+                \Log::info('Using text-based area filtering (fallback)');
+            }
 
             // Get count after filtering for debugging
             $filteredCount = clone $query;
@@ -263,12 +278,19 @@ class ReportController extends Controller
 
         // If user has area of responsibility and is not admin, filter by area
         if ($user->areaOfResponsibility && $user->role !== 'admin') {
-            $userArea = $user->areaOfResponsibility;
-
-            $query->where(function ($q) use ($userArea) {
-                $q->where('address', 'LIKE', "%{$userArea}%")
-                    ->orWhere('address', 'LIKE', "%" . explode(',', $userArea)[0] . "%");
-            });
+            // Use geographic filtering if bounding box data is available
+            if ($this->hasGeographicBounds($user)) {
+                $query = $this->filterByGeographicBounds($query, $user);
+                \Log::info('getReportsByArea: Using geographic bounds filtering');
+            } else {
+                // Fallback to text-based filtering
+                $userArea = $user->areaOfResponsibility;
+                $query->where(function ($q) use ($userArea) {
+                    $q->where('address', 'LIKE', "%{$userArea}%")
+                        ->orWhere('address', 'LIKE', "%" . explode(',', $userArea)[0] . "%");
+                });
+                \Log::info('getReportsByArea: Using text-based area filtering (fallback)');
+            }
         }
 
         $reports = $query->orderBy('created_at', 'desc')->get();
@@ -328,6 +350,61 @@ class ReportController extends Controller
             ], 500);
         }
 
+    }
+
+    /**
+     * Check if user has geographic bounding box data
+     */
+    private function hasGeographicBounds($user): bool
+    {
+        return !is_null($user->bbox_south) &&
+            !is_null($user->bbox_north) &&
+            !is_null($user->bbox_west) &&
+            !is_null($user->bbox_east);
+    }
+
+    /**
+     * Filter reports using geographic bounding box
+     */
+    private function filterByGeographicBounds($query, $user)
+    {
+        return $query->where('latitude', '>=', $user->bbox_south)
+            ->where('latitude', '<=', $user->bbox_north)
+            ->where('longitude', '>=', $user->bbox_west)
+            ->where('longitude', '<=', $user->bbox_east);
+    }
+
+    /**
+     * Enhanced method to get organizations that should see a specific report
+     */
+    public function getOrganizationsForReport(Request $request)
+    {
+        try {
+            $validated = $request->validate([
+                'address' => 'required|string|max:500'
+            ]);
+
+            $result = $this->geographicService->findOrgsForReport($validated['address']);
+
+            return response()->json($result);
+
+        } catch (ValidationException $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Validation failed',
+                'errors' => $e->errors()
+            ], 422);
+        } catch (\Exception $e) {
+            Log::error('Error getting organizations for report', [
+                'error' => $e->getMessage(),
+                'request' => $request->all()
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'An unexpected error occurred'
+            ], 500);
+        }
     }
 
     /**

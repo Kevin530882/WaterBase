@@ -4,13 +4,23 @@ namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
 use App\Models\User;
+use App\Services\GeographicService;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\ValidationException;
 
 class UserController extends Controller
 {
-    public function register(Request $request) {
+    protected GeographicService $geographicService;
+
+    public function __construct(GeographicService $geographicService)
+    {
+        $this->geographicService = $geographicService;
+    }
+
+    public function register(Request $request)
+    {
         try {
             $request->validate([
                 'firstName' => 'required|string|max:255',
@@ -34,6 +44,36 @@ class UserController extends Controller
                 'areaOfResponsibility' => $request->areaOfResponsibility,
             ]);
 
+            // If user is an organization (NGO, LGU, researcher) and has an area of responsibility,
+            // automatically geocode and populate bounding boxes
+            if (in_array($request->role, ['ngo', 'lgu', 'researcher']) && $request->areaOfResponsibility) {
+                Log::info('Registering area of responsibility for new organization', [
+                    'user_id' => $user->id,
+                    'organization' => $request->organization,
+                    'area' => $request->areaOfResponsibility
+                ]);
+
+                $geoResult = $this->geographicService->registerAreaOfResponsibility(
+                    $user->id,
+                    $request->areaOfResponsibility
+                );
+
+                if (!$geoResult['success']) {
+                    Log::warning('Failed to geocode area during registration', [
+                        'user_id' => $user->id,
+                        'area' => $request->areaOfResponsibility,
+                        'error' => $geoResult['error']
+                    ]);
+                    // Note: We don't fail the registration if geocoding fails
+                    // The user can update their area later via the geographic API
+                } else {
+                    Log::info('Successfully geocoded area during registration', [
+                        'user_id' => $user->id,
+                        'bounding_box' => $geoResult['bounding_box']
+                    ]);
+                }
+            }
+
             return response()->json([
                 'message' => 'User registered successfully',
                 'user' => $user
@@ -52,7 +92,8 @@ class UserController extends Controller
         }
     }
 
-    public function login(Request $request) {
+    public function login(Request $request)
+    {
         $request->validate([
             'email' => 'required|email',
             'password' => 'required|string',
@@ -75,7 +116,8 @@ class UserController extends Controller
         ]);
     }
 
-    public function logout(Request $request) {
+    public function logout(Request $request)
+    {
         $request->user()->currentAccessToken()->delete();
         return response()->json([
             'message' => 'Successfully logged out'
@@ -86,7 +128,7 @@ class UserController extends Controller
     {
         try {
             $user = Auth::user();
-            
+
             $validated = $request->validate([
                 'firstName' => 'sometimes|string|max:255',
                 'lastName' => 'sometimes|string|max:255',
@@ -119,49 +161,49 @@ class UserController extends Controller
     {
         try {
             $user = Auth::user();
-            
+
             if (!$user) {
                 return response()->json([
                     'message' => 'User not authenticated'
                 ], 401);
             }
-            
+
             $role = strtolower($user->role);
-            
+
             $stats = [];
-            
+
             switch ($role) {
                 case 'volunteer':
                     // Count reports submitted by user
                     $reportsCount = \App\Models\Report::where('user_id', $user->id)->count();
-                    
+
                     // Get events joined by user
                     $eventsJoined = 0;
                     $badgesEarned = 0;
                     $communityPoints = 0;
                     $userBadges = [];
-                    
+
                     if (class_exists('\App\Models\Event')) {
                         // Count events the user has joined
                         $eventsJoined = $user->attendedEvents()->count();
-                        
+
                         // Get completed events and their badges
                         $completedEvents = $user->attendedEvents()
                             ->where('status', 'completed')
                             ->whereNotNull('badge')
                             ->get();
-                        
+
                         // Count unique badges earned
                         $userBadges = $completedEvents->pluck('badge')->unique()->values()->toArray();
                         $badgesEarned = count($userBadges);
-                        
+
                         // Calculate community points from completed events
                         $communityPoints = $completedEvents->sum('points') ?? 0;
-                        
+
                         // Add points from reports
                         $communityPoints += ($reportsCount * 10);
                     }
-                    
+
                     $stats = [
                         'reportsSubmitted' => $reportsCount,
                         'eventsJoined' => $eventsJoined,
@@ -176,7 +218,7 @@ class UserController extends Controller
                     $eventsCreated = 0;
                     $eventsCompleted = 0;
                     $volunteersManaged = 0;
-                    
+
                     // Check if Event model exists
                     if (class_exists('\App\Models\Event')) {
                         $eventsCreated = \App\Models\Event::where('user_id', $user->id)->count();
@@ -185,10 +227,10 @@ class UserController extends Controller
                         $volunteersManaged = \App\Models\Event::where('user_id', $user->id)
                             ->sum('currentVolunteers') ?? 0;
                     }
-                    
+
                     // Calculate success rate
                     $successRate = $eventsCreated > 0 ? round(($eventsCompleted / $eventsCreated) * 100) : 0;
-                    
+
                     $stats = [
                         'eventsCreated' => $eventsCreated,
                         'eventsCompleted' => $eventsCompleted,
@@ -196,11 +238,11 @@ class UserController extends Controller
                         'accuracyRate' => $successRate
                     ];
                     break;
-                    
+
                 case 'researcher':
                     // Count reports submitted by researcher
                     $reportsSubmitted = \App\Models\Report::where('user_id', $user->id)->count();
-                    
+
                     $stats = [
                         'dataAnalyzed' => $reportsSubmitted * 2,
                         'researchPublished' => max(1, intval($reportsSubmitted / 5)),
@@ -208,24 +250,24 @@ class UserController extends Controller
                         'accuracyRate' => 95
                     ];
                     break;
-                    
+
                 default:
                     // Default stats for basic users
                     $reportsSubmitted = \App\Models\Report::where('user_id', $user->id)->count();
-                    
+
                     $stats = [
                         'reportsSubmitted' => $reportsSubmitted,
                         'communityPoints' => $reportsSubmitted * 10
                     ];
                     break;
             }
-            
+
             return response()->json($stats);
-            
+
         } catch (\Exception $e) {
             \Log::error('Error in getStats: ' . $e->getMessage());
             \Log::error('Stack trace: ' . $e->getTraceAsString());
-            
+
             return response()->json([
                 'message' => 'Failed to fetch stats',
                 'error' => $e->getMessage()
