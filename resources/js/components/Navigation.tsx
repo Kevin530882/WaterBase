@@ -105,14 +105,14 @@ const Navigation = () => {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between items-center h-16">
           {/* Logo */}
-          <Link to="/" className="flex items-center space-x-2">
+          <div className="flex items-center space-x-2">
             <div className="w-8 h-8 bg-gradient-to-br from-waterbase-500 to-enviro-500 rounded-lg flex items-center justify-center">
               <MapPin className="w-5 h-5 text-white" />
             </div>
             <span className="text-xl font-bold text-waterbase-950">
               WaterBase
             </span>
-          </Link>
+          </div>
 
           {/* Desktop Navigation */}
           <div className="hidden md:flex items-center space-x-1">
@@ -253,7 +253,7 @@ const Navigation = () => {
               {/* Show full navigation only if NOT on auth pages */}
               {!isAuthPage && (
                 <>
-                  {navItems.map((item) => {
+                  {navigationItems.map((item) => {
                     const Icon = item.icon;
                     const isActive = location.pathname === item.href;
 
@@ -267,9 +267,9 @@ const Navigation = () => {
                       };
 
                       const getCommunityPath = () => {
-                        if (user.role === 'admin') return '/admin';
-                        if (user.role === 'ngo' || user.role === 'lgu') return '/organizer';
-                        if (user.role === 'volunteer') return '/volunteer';
+                        if (user.role === 'admin') return '/admin/dashboard';
+                        if (user.role === 'ngo' || user.role === 'lgu') return '/portal/organizer';
+                        if (user.role === 'volunteer') return '/portal/volunteer';
                         return '/community';
                       };
 
