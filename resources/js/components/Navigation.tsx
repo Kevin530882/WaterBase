@@ -278,14 +278,7 @@ const Navigation = () => {
                       const isActiveRoute = location.pathname === communityPath;
 
                       return (
-                        <button
-                          key={item.href}
-                          onClick={(e) => {
-                            e.preventDefault();
-                            handleCommunityClick(e);
-                            setIsMobileMenuOpen(false);
-                          }}
-                        >
+                        <div key={item.href}>
                           <Button
                             variant={isActiveRoute ? "default" : "ghost"}
                             className={cn(
@@ -294,11 +287,16 @@ const Navigation = () => {
                                 ? "bg-waterbase-500 text-white"
                                 : "text-waterbase-700 hover:text-waterbase-900 hover:bg-waterbase-50",
                             )}
+                            onClick={(e) => {
+                              e.preventDefault();
+                              handleCommunityClick(e);
+                              setIsMobileMenuOpen(false);
+                            }}
                           >
                             <Icon className="w-4 h-4" />
                             <span>{communityLabel}</span>
                           </Button>
-                        </button>
+                        </div>
                       );
                     }
 

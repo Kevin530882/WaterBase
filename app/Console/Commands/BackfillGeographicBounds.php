@@ -2,27 +2,7 @@
 
 namespace App\Console\Commands;
 
-use Ill        // Find organizations without bounding boxes
-        $query = User::whereIn('role', ['ngo', 'lgu', 'researcher'])
-            ->whereNotNull('areaOfResponsibility')
-            ->where('areaOfResponsibility', '!=', '');
-
-        // If force option is used, include organizations that already have bounds
-        if (!$this->option('force')) {
-            $query->where(function($q) {
-                $q->whereNull('bbox_south')
-                  ->orWhereNull('bbox_north')
-                  ->orWhereNull('bbox_west')
-                  ->orWhereNull('bbox_east');
-            });
-        }
-
-        // If specific organization ID is provided
-        if ($orgId = $this->option('org')) {
-            $query->where('id', $orgId);
-        }
-
-        $organizations = $query->get(['id', 'organization', 'areaOfResponsibility', 'role']);sole\Command;
+use Illuminate\Console\Command;
 use App\Models\User;
 use App\Services\GeographicService;
 use Illuminate\Support\Facades\Log;
@@ -72,11 +52,11 @@ class BackfillGeographicBounds extends Command
 
         // If force option is used, include organizations that already have bounds
         if (!$this->option('force')) {
-            $query->where(function($q) {
+            $query->where(function ($q) {
                 $q->whereNull('bbox_south')
-                  ->orWhereNull('bbox_north')
-                  ->orWhereNull('bbox_west')
-                  ->orWhereNull('bbox_east');
+                    ->orWhereNull('bbox_north')
+                    ->orWhereNull('bbox_west')
+                    ->orWhereNull('bbox_east');
             });
         }
 
