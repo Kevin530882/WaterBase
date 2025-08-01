@@ -838,9 +838,6 @@ export const AdminDashboard = () => {
                                                 className="pl-8 h-9 text-sm w-64 border-gray-300 focus:border-waterbase-500"
                                             />
                                         </div>
-                                        <Button className="h-9 px-4 text-sm bg-waterbase-500 hover:bg-waterbase-600 text-white">
-                                            Add User
-                                        </Button>
                                     </div>
                                 </div>
                             </CardHeader>
