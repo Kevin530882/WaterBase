@@ -15,15 +15,6 @@ const Navigation = () => {
   // Check if we're on auth pages
   const isAuthPage = location.pathname === '/login' || location.pathname === '/register';
 
-  // Navigation items excluding profile (since it's now in dropdown)
-  const navItems = [
-    { href: "/", label: "Home", icon: Home },
-    { href: "/map", label: "Live Map", icon: MapPin },
-    { href: "/report", label: "Report Pollution", icon: Upload },
-    { href: "/community", label: "Community", icon: Users },
-    { href: "/dashboard", label: "Dashboard", icon: BarChart3 },
-  ];
-
   const getNavigationItems = () => {
     const baseItems = [
       { href: "/", label: "Home", icon: Home },
