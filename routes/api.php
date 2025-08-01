@@ -5,6 +5,7 @@ use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\UserController;
 use App\Http\Controllers\EventController;
 use App\Http\Controllers\ReportController;
+use App\Http\Controllers\GeographicController;
 use App\Http\Controllers\DetectPollutionController;
 
 Route::post('/login', [UserController::class, 'login']);
@@ -24,6 +25,15 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::patch('/reports/bulk-status', [ReportController::class, 'bulkUpdateStatus']);
     Route::get('/reports/area/{area}', [ReportController::class, 'getReportsByArea']);
     Route::post('/reports/verify-image', [ReportController::class, 'verifyImage']);
+    Route::post('/reports/organizations', [ReportController::class, 'getOrganizationsForReport']);
+
+    // Geographic routes
+    Route::post('/geographic/register-area', [GeographicController::class, 'registerAreaOfResponsibility']);
+    Route::post('/geographic/update-my-area', [GeographicController::class, 'updateMyArea']);
+    Route::post('/geographic/find-orgs', [GeographicController::class, 'findOrgsForReport']);
+    Route::get('/geographic/organizations', [GeographicController::class, 'getAllOrgsWithBoundaries']);
+    Route::post('/geographic/test-point', [GeographicController::class, 'testPointInArea']);
+    Route::post('/geographic/geocode', [GeographicController::class, 'geocodeAddress']);
 
     Route::get('/user', function (Request $request) {
         return $request->user();

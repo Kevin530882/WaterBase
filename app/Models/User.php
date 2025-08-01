@@ -21,6 +21,10 @@ class User extends Authenticatable
         'role',
         'organization',
         'areaOfResponsibility',
+        'bbox_south',
+        'bbox_north',
+        'bbox_west',
+        'bbox_east',
     ];
 
     public function reports()
@@ -30,7 +34,7 @@ class User extends Authenticatable
 
     public function attendedEvents()
     {
-        return $this->belongsToMany( Event::class);
+        return $this->belongsToMany(Event::class);
     }
 
     public function createdEvents()

@@ -51,8 +51,8 @@ export function SearchableSelect({
     const [isSearching, setIsSearching] = useState(false);
     const [philippineData, setPhilippineData] = useState<PhilippineData | null>(null);
     const [dataLoaded, setDataLoaded] = useState(false);
-    
-    const searchTimeoutRef = useRef<NodeJS.Timeout>();
+
+    const searchTimeoutRef = useRef<number | null>(null);
 
     // Load Philippine data once when component mounts
     useEffect(() => {
@@ -80,86 +80,109 @@ export function SearchableSelect({
             return [];
         }
 
-        const results: AreaOption[] = [];
-        const lowerQuery = query.toLowerCase();
-        const maxResults = 50; // Limit results for performance
+        try {
+            const results: AreaOption[] = [];
+            const lowerQuery = query.toLowerCase();
+            const maxResults = 50; // Limit results for performance
 
-        // Search through all levels
-        Object.entries(philippineData).forEach(([regionCode, regionData]) => {
-            if (results.length >= maxResults) return;
-
-            // Search regions
-            if (regionData.region_name.toLowerCase().includes(lowerQuery)) {
-                results.push({
-                    value: regionData.region_name,
-                    label: regionData.region_name,
-                    type: 'Region'
-                });
-            }
-
-            // Search provinces
-            Object.entries(regionData.province_list).forEach(([provinceName, provinceData]) => {
+            // Search through all levels
+            Object.entries(philippineData).forEach(([, regionData]) => {
                 if (results.length >= maxResults) return;
 
-                if (provinceName.toLowerCase().includes(lowerQuery)) {
+                // Ensure regionData exists and has required properties
+                if (!regionData || !regionData.region_name) return;
+
+                // Search regions
+                if (regionData.region_name.toLowerCase().includes(lowerQuery)) {
                     results.push({
-                        value: `${provinceName}, ${regionData.region_name}`,
-                        label: `${provinceName}`,
-                        type: 'Province'
+                        value: regionData.region_name,
+                        label: regionData.region_name,
+                        type: 'Region'
                     });
                 }
 
-                // Search municipalities/cities
-                Object.entries(provinceData.municipality_list).forEach(([municipalityName, municipalityData]) => {
-                    if (results.length >= maxResults) return;
-
-                    if (municipalityName.toLowerCase().includes(lowerQuery)) {
-                        results.push({
-                            value: `${municipalityName}, ${provinceName}`,
-                            label: `${municipalityName}`,
-                            type: 'Municipality/City'
-                        });
-                    }
-
-                    // Search barangays
-                    municipalityData.barangay_list.forEach((barangayName) => {
+                // Search provinces
+                if (regionData.province_list) {
+                    Object.entries(regionData.province_list).forEach(([provinceName, provinceData]) => {
                         if (results.length >= maxResults) return;
 
-                        if (barangayName.toLowerCase().includes(lowerQuery)) {
+                        // Ensure province name exists
+                        if (!provinceName) return;
+
+                        if (provinceName.toLowerCase().includes(lowerQuery)) {
                             results.push({
-                                value: `${barangayName}, ${municipalityName}, ${provinceName}`,
-                                label: `${barangayName}`,
-                                type: 'Barangay'
+                                value: `${provinceName}, ${regionData.region_name}`,
+                                label: `${provinceName}`,
+                                type: 'Province'
+                            });
+                        }
+
+                        // Search municipalities/cities
+                        if (provinceData && provinceData.municipality_list) {
+                            Object.entries(provinceData.municipality_list).forEach(([municipalityName, municipalityData]) => {
+                                if (results.length >= maxResults) return;
+
+                                // Ensure municipality name exists
+                                if (!municipalityName) return;
+
+                                if (municipalityName.toLowerCase().includes(lowerQuery)) {
+                                    results.push({
+                                        value: `${municipalityName}, ${provinceName}, ${regionData.region_name}`,
+                                        label: `${municipalityName}`,
+                                        type: 'Municipality/City'
+                                    });
+                                }
+
+                                // Search barangays
+                                if (municipalityData && municipalityData.barangay_list && Array.isArray(municipalityData.barangay_list)) {
+                                    municipalityData.barangay_list.forEach((barangayName) => {
+                                        if (results.length >= maxResults) return;
+
+                                        // Ensure barangay name exists and is a string
+                                        if (!barangayName || typeof barangayName !== 'string') return;
+
+                                        if (barangayName.toLowerCase().includes(lowerQuery)) {
+                                            results.push({
+                                                value: `${barangayName}, ${municipalityName}, ${provinceName}, ${regionData.region_name}`,
+                                                label: `${barangayName}`,
+                                                type: 'Barangay'
+                                            });
+                                        }
+                                    });
+                                }
                             });
                         }
                     });
-                });
+                }
             });
-        });
 
-        // Sort results by relevance and type
-        return results.sort((a, b) => {
-            // Exact matches first
-            const aExact = a.label.toLowerCase() === lowerQuery;
-            const bExact = b.label.toLowerCase() === lowerQuery;
-            if (aExact && !bExact) return -1;
-            if (!aExact && bExact) return 1;
+            // Sort results by relevance and type
+            return results.sort((a, b) => {
+                // Exact matches first
+                const aExact = a.label.toLowerCase() === lowerQuery;
+                const bExact = b.label.toLowerCase() === lowerQuery;
+                if (aExact && !bExact) return -1;
+                if (!aExact && bExact) return 1;
 
-            // Then by type priority
-            const typeOrder = { 'Region': 1, 'Province': 2, 'Municipality/City': 3, 'Barangay': 4 };
-            const aOrder = typeOrder[a.type];
-            const bOrder = typeOrder[b.type];
-            if (aOrder !== bOrder) return aOrder - bOrder;
+                // Then by type priority
+                const typeOrder = { 'Region': 1, 'Province': 2, 'Municipality/City': 3, 'Barangay': 4 };
+                const aOrder = typeOrder[a.type];
+                const bOrder = typeOrder[b.type];
+                if (aOrder !== bOrder) return aOrder - bOrder;
 
-            // Finally by name
-            return a.label.localeCompare(b.label);
-        });
+                // Finally by name
+                return a.label.localeCompare(b.label);
+            });
+        } catch (error) {
+            console.error('Error searching areas:', error);
+            return [];
+        }
     };
 
     // Debounced search effect
     useEffect(() => {
         // Clear previous timeout
-        if (searchTimeoutRef.current) {
+        if (searchTimeoutRef.current !== null) {
             clearTimeout(searchTimeoutRef.current);
         }
 
@@ -174,7 +197,7 @@ export function SearchableSelect({
         setIsSearching(true);
 
         // Set new timeout
-        searchTimeoutRef.current = setTimeout(() => {
+        searchTimeoutRef.current = window.setTimeout(() => {
             if (philippineData) {
                 const results = searchAreas(searchValue);
                 setSearchResults(results);
@@ -184,7 +207,7 @@ export function SearchableSelect({
 
         // Cleanup timeout on component unmount
         return () => {
-            if (searchTimeoutRef.current) {
+            if (searchTimeoutRef.current !== null) {
                 clearTimeout(searchTimeoutRef.current);
             }
         };
@@ -192,8 +215,8 @@ export function SearchableSelect({
 
     // Find selected option for display
     const selectedOption = searchResults.find((option) => option.value === value);
-    const displayValue = value && !selectedOption ? 
-        { label: value.split(',')[0], type: 'Selected', value } : 
+    const displayValue = value && !selectedOption ?
+        { label: value.split(',')[0], type: 'Selected', value } :
         selectedOption;
 
     const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
