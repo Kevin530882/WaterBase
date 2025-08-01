@@ -6,6 +6,7 @@ use App\Http\Controllers\UserController;
 use App\Http\Controllers\EventController;
 use App\Http\Controllers\ReportController;
 use App\Http\Controllers\DetectPollutionController;
+use App\Http\Controllers\AdminDashboardController;
 
 Route::post('/login', [UserController::class, 'login']);
 Route::post('/register', [UserController::class, 'register']);
@@ -36,4 +37,6 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/user/stats', [UserController::class, 'getStats']);
 
     Route::post('/predict', [DetectPollutionController::class, 'predict']);
+
+    Route::get('/admin/reports/pending',[AdminDashboardController::class,'getPendingReports']);
 });

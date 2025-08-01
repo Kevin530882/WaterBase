@@ -1,5 +1,6 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
+import { format, parseISO } from 'date-fns';
 import {
 Card,
 CardContent,
@@ -72,40 +73,7 @@ rejectedReports: 158,
 monthlyGrowth: 18,
 };
 
-const pendingReports = [
-{
-    id: 1,
-    title: "Industrial Waste in Pasig River",
-    location: "Pasig River, Metro Manila",
-    submittedBy: "Maria Santos",
-    submittedAt: "2024-01-15 14:30",
-    type: "Industrial Waste",
-    severity: "High",
-    photos: 3,
-    aiConfidence: 0.94,
-    description: "Heavy oil contamination with visible plastic debris",
-    coordinates: { lat: 14.5995, lng: 121.0008 },
-    status: "pending",
-    submittedImage: "https://example.com/images/pasig_river_submitted.jpg",
-    aiAnnotatedImage: "https://example.com/images/pasig_river_ai_annotated.jpg",
-},
-{
-    id: 2,
-    title: "Plastic Pollution in Manila Bay",
-    location: "Manila Bay, Manila",
-    submittedBy: "Juan dela Cruz",
-    submittedAt: "2024-01-15 13:45",
-    type: "Plastic Pollution",
-    severity: "Medium",
-    photos: 5,
-    aiConfidence: 0.87,
-    description: "Large amount of plastic bottles floating",
-    coordinates: { lat: 14.5794, lng: 120.9647 },
-    status: "pending",
-    submittedImage: "https://example.com/images/manila_bay_submitted.jpg",
-    aiAnnotatedImage: "https://example.com/images/manila_bay_ai_annotated.jpg",
-},
-];
+
 
 // Mock user management data
 const systemUsers = [
@@ -174,6 +142,36 @@ const [selectedReport, setSelectedReport] = useState<any>(null);
 const [showReportDialog, setShowReportDialog] = useState(false);
 const [showUserDialog, setShowUserDialog] = useState(false);
 const [showTaskDialog, setShowTaskDialog] = useState(false);
+
+ const [reports, setReports] = useState([]);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+
+  // Fetch reports from the backend
+  const fetchReports = async (page) => {
+    try {
+      const response = await fetch(`/api/admin/reports/pending?page=${page}`,{
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('auth_token')}`,
+        }
+    });
+      const data = await response.json();
+      console.log(data);
+      setReports(data.data);
+      setTotalPages(data.last_page);
+    } catch (error) {
+      console.error('Error fetching reports:', error);
+    }
+  };
+
+  // Fetch reports when the "reports" tab is active or page changes
+  useEffect(() => {
+    if (activeTab === 'reports') {
+      fetchReports(currentPage);
+    }
+  }, [activeTab, currentPage]);
+
 
 const handleReportAction = (reportId: number, action: string) => {
     console.log(`${action} report ${reportId}`);
@@ -404,93 +402,84 @@ return (
             </div>
         </TabsContent>
 
-        <TabsContent value="reports">
+          <TabsContent value="reports">
             <Card className="border-waterbase-200">
-            <CardHeader>
+              <CardHeader>
                 <div className="flex items-center justify-between">
-                <CardTitle className="flex items-center">
+                  <CardTitle className="flex items-center">
                     <FileText className="w-5 h-5 mr-2" />
                     Report Validation Queue
-                </CardTitle>
-                <div className="flex items-center space-x-2">
+                  </CardTitle>
+                  <div className="flex items-center space-x-2">
                     <Button variant="outline" size="sm">
-                    <Filter className="w-4 h-4 mr-2" />
-                    Filter
+                      <Filter className="w-4 h-4 mr-2" />
+                      Filter
                     </Button>
                     <Button variant="outline" size="sm">
-                    <Download className="w-4 h-4 mr-2" />
-                    Export
+                      <Download className="w-4 h-4 mr-2" />
+                      Export
                     </Button>
+                  </div>
                 </div>
-                </div>
-            </CardHeader>
-            <CardContent>
+              </CardHeader>
+              <CardContent>
                 <Table>
-                <TableHeader>
+                  <TableHeader>
                     <TableRow>
-                    <TableHead>Report Details</TableHead>
-                    <TableHead>Submitter</TableHead>
-                    <TableHead>Type & Severity</TableHead>
-                    <TableHead>AI Confidence</TableHead>
-                    <TableHead>Submitted</TableHead>
-                    <TableHead>Actions</TableHead>
+                      <TableHead>Report Details</TableHead>
+                      <TableHead>Submitter</TableHead>
+                      <TableHead>Type & Severity</TableHead>
+                      <TableHead>AI Confidence</TableHead>
+                      <TableHead>Submitted</TableHead>
+                      <TableHead>Actions</TableHead>
                     </TableRow>
-                </TableHeader>
-                <TableBody>
-                    {pendingReports.map((report) => (
-                    <TableRow key={report.id}>
+                  </TableHeader>
+                  <TableBody>
+                    {reports.map((report) => (
+                      <TableRow key={report.id}>
                         <TableCell>
-                        <div>
-                            <div className="font-medium text-sm">
-                            {report.title}
-                            </div>
-                            <div className="text-xs text-gray-600">
-                            {report.location}
-                            </div>
-                        </div>
+                          <div>
+                            <div className="font-medium text-sm">{report.title}</div>
+                            <div className="text-xs text-gray-600">{report.address}</div>
+                          </div>
                         </TableCell>
                         <TableCell>
-                        <div className="text-sm">{report.submittedBy}</div>
+                          <div className="text-sm">{report.user_id}</div>
                         </TableCell>
                         <TableCell>
-                        <div className="space-y-1">
-                            <Badge variant="outline" className="text-xs mr-1">
-                            {report.type}
+                          <div className="space-y-1">
+                            <Badge variant="outline" className="text-xs mr-1 ults">
+                                {report.pollutionType}
                             </Badge>
                             <Badge
-                            className={cn(
-                                "text-xs",
-                                getSeverityColor(report.severity),
-                            )}
+                              className={cn("text-xs", getSeverityColor(report.severityByAI))}
                             >
-                            {report.severity}
+                              {report.severityByAI}
                             </Badge>
-                        </div>
+                          </div>
                         </TableCell>
                         <TableCell>
-                        <div className="flex items-center">
+                          <div className="flex items-center">
                             <div className="text-sm font-medium">
-                            {Math.round(report.aiConfidence * 100)}%
+                              {report.ai_confidence}%
                             </div>
                             <div
-                            className={cn(
+                              className={cn(
                                 "ml-2 w-2 h-2 rounded-full",
-                                report.aiConfidence > 0.9
-                                ? "bg-green-500"
-                                : report.aiConfidence > 0.7
-                                    ? "bg-yellow-500"
-                                    : "bg-red-500",
-                            )}
+                                report.ai_confidence > 90
+                                  ? "bg-green-500"
+                                  : report.ai_confidence > 70
+                                  ? "bg-yellow-500"
+                                  : "bg-red-500"
+                              )}
                             />
-                        </div>
+                          </div>
                         </TableCell>
                         <TableCell>
-                        <div className="text-xs text-gray-600">
-                            {report.submittedAt}
-                        </div>
+                          <div className="text-xs text-gray-600">{format(parseISO(report.created_at), 'dd MMM yyyy, h:mm a')}</div>
                         </TableCell>
                         <TableCell>
-                        <div className="flex items-center space-x-1">
+                          <div className="flex items-center space-x-1">
                             <Dialog
                             open={
                                 showReportDialog &&
@@ -525,24 +514,24 @@ return (
                                     <div>
                                     <Label>Location</Label>
                                     <div className="text-sm">
-                                        {selectedReport?.location}
+                                        {selectedReport?.address}
                                     </div>
                                     </div>
                                 </div>
                                 <div>
                                     <Label>Description</Label>
                                     <div className="text-sm">
-                                    {selectedReport?.description}
+                                    {selectedReport?.content}
                                     </div>
                                 </div>
 
                                 {/* Added images section */}
                                 <div className="grid grid-cols-2 gap-4 my-4">
                                     <div className="flex flex-col items-center">
-                                    <Label>Submitted Image</Label>
-                                    {selectedReport?.submittedImage ? (
+                                    <Label className="mb-2">Submitted Image</Label>
+                                    {selectedReport?.image ? (
                                         <img
-                                        src={selectedReport.submittedImage}
+                                        src={`/storage/${selectedReport.image}`}
                                         alt="Submitted"
                                         className="max-h-48 rounded-md border border-gray-300"
                                         />
@@ -572,29 +561,63 @@ return (
                                     <div>
                                     <Label>Type</Label>
                                     <Badge variant="outline" className="ml-1">
-                                        {selectedReport?.type}
+                                        {selectedReport?.pollutionType}
                                     </Badge>
                                     </div>
                                     <div>
-                                    <Label className="mr-1">Severity</Label>
+                                    <div>
+                                    <Label className="mr-1">User Severity</Label>
                                     <Badge
                                         className={getSeverityColor(
-                                        selectedReport?.severity || "",
+                                        selectedReport?.severityByUser || "",
                                         )}
                                     >
-                                        {selectedReport?.severity}
+                                        {selectedReport?.severityByUser}
                                     </Badge>
                                     </div>
+
+                                    <div>
+                                    <Label className="mr-5">AI Severity</Label>
+                                    <Badge
+                                        className={getSeverityColor(
+                                        selectedReport?.severityByUser || "",
+                                        )}
+                                    >
+                                        {selectedReport?.severityByAI}
+                                    </Badge>                                        
+                                    </div>
+                                    </div>
+                                    
                                     <div>
                                     <Label>AI Confidence</Label>
                                     <div className="text-sm font-medium">
-                                        {Math.round(
-                                        (selectedReport?.aiConfidence || 0) *
-                                            100,
+                                        <p
+                                        className={cn(
+                                            "text-sm font-medium",
+                                            selectedReport?.ai_confidence > 90
+                                            ? "text-green-500"
+                                            : selectedReport?.ai_confidence > 70
+                                            ? "text-yellow-500"
+                                            : "text-red-500"
                                         )}
-                                        %
+                                        >
+                                        {selectedReport?.ai_confidence}%
+                                        </p>
                                     </div>
+
                                     </div>
+                                <div>
+                                    <Label>Date Report Created</Label>
+                                    <div className= "text-sm">
+                                    {format(parseISO(report.created_at), 'dd MMM yyyy, h:mm a')}
+                                    </div>
+                                </div>
+                                <div>
+                                    <Label>Date Report Modified</Label>
+                                    <div className= "text-sm">
+                                    {format(parseISO(report.updated_at), 'dd MMM yyyy, h:mm a')}
+                                    </div>
+                                </div>
                                 </div>
                                 <div className="flex space-x-2 pt-4">
                                     <Button
@@ -636,15 +659,31 @@ return (
                                 </div>
                             </DialogContent>
                             </Dialog>
-                        </div>
+                          </div>
                         </TableCell>
-                    </TableRow>
+                      </TableRow>
                     ))}
-                </TableBody>
+                  </TableBody>
                 </Table>
-            </CardContent>
+                {/* Pagination Controls */}
+                <div className="flex items-center justify-between mt-4">
+                  <Button
+                    onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
+                    disabled={currentPage === 1}
+                  >
+                    Previous
+                  </Button>
+                  <span>Page {currentPage} of {totalPages}</span>
+                  <Button
+                    onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
+                    disabled={currentPage === totalPages}
+                  >
+                    Next
+                  </Button>
+                </div>
+              </CardContent>
             </Card>
-        </TabsContent>
+          </TabsContent>
 
         <TabsContent value="users">
             <Card className="border-waterbase-200">
