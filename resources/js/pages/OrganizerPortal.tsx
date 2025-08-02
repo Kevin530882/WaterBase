@@ -54,6 +54,7 @@ interface AreaReport {
     estimatedCleanupEffort: string;
     priority: string;
     reports: Report[];
+    hasAssociatedEvent?: boolean; // Track if this specific group has an event
 }
 
 export const OrganizerPortal = () => {
@@ -104,7 +105,7 @@ export const OrganizerPortal = () => {
                 console.log('ALL REPORTS FROM API:', allReports);
 
                 // Filter for verified reports only (for cleanup events)
-                const verifiedReports = allReports.filter(r => r.status === 'verified');
+                const verifiedReports = allReports.filter((r: Report) => r.status === 'verified');
                 console.log('VERIFIED REPORTS:', verifiedReports);
                 console.log('USER AREA:', user?.areaOfResponsibility);
 
@@ -170,6 +171,53 @@ export const OrganizerPortal = () => {
         }
     };
 
+    // Helper functions to check event-location relationships
+    const areLocationsMatching = (coord1: { lat: number; lng: number }, coord2: { lat: number; lng: number }) => {
+        const latDiff = Math.abs(coord1.lat - coord2.lat);
+        const lngDiff = Math.abs(coord1.lng - coord2.lng);
+        const distance = Math.sqrt(latDiff * latDiff + lngDiff * lngDiff);
+
+        return distance <= 0.001; // approximately 100m threshold
+    };
+
+    const checkIfLocationHasEvent = (coordinates: { lat: number; lng: number }) => {
+        if (!createdEvents || createdEvents.length === 0) return false;
+
+        return createdEvents.some(event => {
+            const eventCoords = { lat: event.latitude, lng: event.longitude };
+            return areLocationsMatching(eventCoords, coordinates);
+        });
+    };
+
+    const getMostRecentEventDateForLocation = (coordinates: { lat: number; lng: number }) => {
+        if (!createdEvents || createdEvents.length === 0) return new Date(0);
+
+        const eventsAtLocation = createdEvents.filter(event => {
+            const eventCoords = { lat: event.latitude, lng: event.longitude };
+            return areLocationsMatching(eventCoords, coordinates);
+        });
+
+        if (eventsAtLocation.length === 0) return new Date(0);
+
+        // Find the most recent event date
+        const mostRecentEvent = eventsAtLocation.sort((a, b) =>
+            new Date(b.created_at || b.createdAt || b.date).getTime() - new Date(a.created_at || a.createdAt || a.date).getTime()
+        )[0];
+
+        return new Date(mostRecentEvent.created_at || mostRecentEvent.createdAt || mostRecentEvent.date);
+    };
+
+    // Helper function to get location string from report
+    const getLocationString = (report: Report) => {
+        return report.barangay_name
+            ? `${report.barangay_name}, ${report.municipality_name}, ${report.province_name}`
+            : report.municipality_name
+                ? `${report.municipality_name}, ${report.province_name}`
+                : report.province_name
+                    ? report.province_name
+                    : report.address || `Location ${report.latitude?.toFixed(4)}, ${report.longitude?.toFixed(4)}`;
+    };
+
     // Process areas using the new report groups system
     const processAreasFromReportGroups = (reports: Report[]) => {
         // Group reports by report_group_id
@@ -184,38 +232,110 @@ export const OrganizerPortal = () => {
             }
         });
 
-        // Convert groups to eligible areas with declined report filtering
-        const areas: AreaReport[] = Object.entries(groupedReports)
-            .map(([groupId, groupReports]) => {
-                // Filter out declined reports from the group
-                const activeReports = groupReports.filter(report => report.status !== 'declined');
+        // Convert groups to eligible areas with event-aware splitting
+        const areas: AreaReport[] = [];
+        let areaIdCounter = 1;
 
-                // If all reports in the group are declined, exclude this group entirely
-                if (activeReports.length === 0) {
-                    return null;
+        Object.entries(groupedReports).forEach(([, groupReports]) => {
+            // Filter out declined reports from the group
+            const activeReports = groupReports.filter(report => report.status !== 'declined');
+
+            // If all reports in the group are declined, skip this group entirely
+            if (activeReports.length === 0) {
+                return;
+            }
+
+            const mostRecentReport = activeReports.sort((a, b) =>
+                new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+            )[0];
+
+            const locationCoords = { lat: mostRecentReport.latitude, lng: mostRecentReport.longitude };
+            const hasExistingEvent = checkIfLocationHasEvent(locationCoords);
+
+            if (hasExistingEvent) {
+                const mostRecentEventDate = getMostRecentEventDateForLocation(locationCoords);
+
+                // Split reports into those before and after the most recent event
+                const reportsBeforeEvent = activeReports.filter(report =>
+                    new Date(report.created_at) <= mostRecentEventDate
+                );
+                const reportsAfterEvent = activeReports.filter(report =>
+                    new Date(report.created_at) > mostRecentEventDate
+                );
+
+                // Create area for old reports (with existing event) - but mark as having event
+                if (reportsBeforeEvent.length > 0) {
+                    const oldestReportWithEvent = reportsBeforeEvent.sort((a, b) =>
+                        new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+                    )[0];
+
+                    const location = getLocationString(oldestReportWithEvent);
+
+                    const pollutionTypes = [...new Set(reportsBeforeEvent.map(r => r.pollutionType))];
+                    const description = reportsBeforeEvent.length === 1
+                        ? `${pollutionTypes[0]} pollution reported`
+                        : `Multiple pollution types: ${pollutionTypes.join(', ')} (${reportsBeforeEvent.length} reports)`;
+
+                    areas.push({
+                        id: areaIdCounter++,
+                        location: location,
+                        coordinates: {
+                            lat: oldestReportWithEvent.latitude,
+                            lng: oldestReportWithEvent.longitude
+                        },
+                        reportCount: reportsBeforeEvent.length,
+                        severityLevel: calculateSeverityLevel(reportsBeforeEvent),
+                        lastReported: formatDistanceToNow(new Date(oldestReportWithEvent.created_at), { addSuffix: true }),
+                        description,
+                        estimatedCleanupEffort: estimateCleanupEffort(reportsBeforeEvent),
+                        priority: calculatePriority(reportsBeforeEvent),
+                        reports: reportsBeforeEvent,
+                        hasAssociatedEvent: true, // This group has an associated event
+                    });
                 }
 
-                const mostRecentReport = activeReports.sort((a, b) =>
-                    new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-                )[0];
+                // Create separate area for new reports (after the event)
+                if (reportsAfterEvent.length > 0) {
+                    const newestReport = reportsAfterEvent.sort((a, b) =>
+                        new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+                    )[0];
 
-                // Use the most specific location available
-                const location = mostRecentReport.barangay_name
-                    ? `${mostRecentReport.barangay_name}, ${mostRecentReport.municipality_name}, ${mostRecentReport.province_name}`
-                    : mostRecentReport.municipality_name
-                        ? `${mostRecentReport.municipality_name}, ${mostRecentReport.province_name}`
-                        : mostRecentReport.province_name
-                            ? mostRecentReport.province_name
-                            : mostRecentReport.address || `Location ${mostRecentReport.latitude?.toFixed(4)}, ${mostRecentReport.longitude?.toFixed(4)}`;
+                    const location = getLocationString(newestReport);
+
+                    const pollutionTypes = [...new Set(reportsAfterEvent.map(r => r.pollutionType))];
+                    const description = reportsAfterEvent.length === 1
+                        ? `${pollutionTypes[0]} pollution reported`
+                        : `Multiple pollution types: ${pollutionTypes.join(', ')} (${reportsAfterEvent.length} reports)`;
+
+                    areas.push({
+                        id: areaIdCounter++,
+                        location: `${location} (New Reports)`,
+                        coordinates: {
+                            lat: newestReport.latitude,
+                            lng: newestReport.longitude
+                        },
+                        reportCount: reportsAfterEvent.length,
+                        severityLevel: calculateSeverityLevel(reportsAfterEvent),
+                        lastReported: formatDistanceToNow(new Date(newestReport.created_at), { addSuffix: true }),
+                        description,
+                        estimatedCleanupEffort: estimateCleanupEffort(reportsAfterEvent),
+                        priority: calculatePriority(reportsAfterEvent),
+                        reports: reportsAfterEvent,
+                        hasAssociatedEvent: false, // This group does NOT have an associated event
+                    });
+                }
+            } else {
+                // No existing event - create single area for all reports
+                const location = getLocationString(mostRecentReport);
 
                 const pollutionTypes = [...new Set(activeReports.map(r => r.pollutionType))];
                 const description = activeReports.length === 1
                     ? `${pollutionTypes[0]} pollution reported`
                     : `Multiple pollution types: ${pollutionTypes.join(', ')} (${activeReports.length} reports)`;
 
-                return {
-                    id: parseInt(groupId),
-                    location,
+                areas.push({
+                    id: areaIdCounter++,
+                    location: location,
                     coordinates: {
                         lat: mostRecentReport.latitude,
                         lng: mostRecentReport.longitude
@@ -227,9 +347,10 @@ export const OrganizerPortal = () => {
                     estimatedCleanupEffort: estimateCleanupEffort(activeReports),
                     priority: calculatePriority(activeReports),
                     reports: activeReports,
-                };
-            })
-            .filter(area => area !== null);
+                    hasAssociatedEvent: false, // No existing event for this group
+                });
+            }
+        });
 
         console.log('Areas from report groups:', areas);
         setEligibleAreas(areas);
@@ -277,32 +398,111 @@ export const OrganizerPortal = () => {
             }
         });
 
-        // Convert groups to eligible areas
-        const areas: AreaReport[] = Object.entries(locationGroups)
+        // Convert groups to eligible areas with event-aware splitting
+        const areas: AreaReport[] = [];
+        let areaIdCounter = 1;
+
+        Object.entries(locationGroups)
             .filter(([_, groupReports]) => groupReports.length >= 1)
-            .map(([locationKey, groupReports], index) => {
+            .forEach(([locationKey, groupReports]) => {
                 const [lat, lng] = locationKey.split(',').map(Number);
-                const mostRecentReport = groupReports.sort((a, b) =>
-                    new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-                )[0];
 
-                const pollutionTypes = [...new Set(groupReports.map(r => r.pollutionType))];
-                const description = groupReports.length === 1
-                    ? `${pollutionTypes[0]} pollution reported`
-                    : `Multiple pollution types: ${pollutionTypes.join(', ')} (${groupReports.length} reports)`;
+                // Check if this location already has a cleanup event
+                const locationCoords = { lat, lng };
+                const hasExistingEvent = checkIfLocationHasEvent(locationCoords);
 
-                return {
-                    id: index + 1,
-                    location: mostRecentReport.address || `Location ${lat.toFixed(4)}, ${lng.toFixed(4)}`,
-                    coordinates: { lat, lng },
-                    reportCount: groupReports.length,
-                    severityLevel: calculateSeverityLevel(groupReports),
-                    lastReported: formatDistanceToNow(new Date(mostRecentReport.created_at), { addSuffix: true }),
-                    description,
-                    estimatedCleanupEffort: estimateCleanupEffort(groupReports),
-                    priority: calculatePriority(groupReports),
-                    reports: groupReports,
-                };
+                if (hasExistingEvent) {
+                    const mostRecentEventDate = getMostRecentEventDateForLocation(locationCoords);
+
+                    // Split reports into those before and after the most recent event
+                    const reportsBeforeEvent = groupReports.filter(report =>
+                        new Date(report.created_at) <= mostRecentEventDate
+                    );
+                    const reportsAfterEvent = groupReports.filter(report =>
+                        new Date(report.created_at) > mostRecentEventDate
+                    );
+
+                    // Create area for old reports (with existing event)
+                    if (reportsBeforeEvent.length > 0) {
+                        const oldestReportWithEvent = reportsBeforeEvent.sort((a, b) =>
+                            new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+                        )[0];
+
+                        const pollutionTypes = [...new Set(reportsBeforeEvent.map(r => r.pollutionType))];
+                        const description = reportsBeforeEvent.length === 1
+                            ? `${pollutionTypes[0]} pollution reported`
+                            : `Multiple pollution types: ${pollutionTypes.join(', ')} (${reportsBeforeEvent.length} reports)`;
+
+                        const baseLocation = oldestReportWithEvent.address || `Location ${lat.toFixed(4)}, ${lng.toFixed(4)}`;
+
+                        areas.push({
+                            id: areaIdCounter++,
+                            location: baseLocation,
+                            coordinates: { lat, lng },
+                            reportCount: reportsBeforeEvent.length,
+                            severityLevel: calculateSeverityLevel(reportsBeforeEvent),
+                            lastReported: formatDistanceToNow(new Date(oldestReportWithEvent.created_at), { addSuffix: true }),
+                            description,
+                            estimatedCleanupEffort: estimateCleanupEffort(reportsBeforeEvent),
+                            priority: calculatePriority(reportsBeforeEvent),
+                            reports: reportsBeforeEvent,
+                            hasAssociatedEvent: true, // This group has an associated event
+                        });
+                    }
+
+                    // Create separate area for new reports (after the event)
+                    if (reportsAfterEvent.length > 0) {
+                        const newestReport = reportsAfterEvent.sort((a, b) =>
+                            new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+                        )[0];
+
+                        const pollutionTypes = [...new Set(reportsAfterEvent.map(r => r.pollutionType))];
+                        const description = reportsAfterEvent.length === 1
+                            ? `${pollutionTypes[0]} pollution reported`
+                            : `Multiple pollution types: ${pollutionTypes.join(', ')} (${reportsAfterEvent.length} reports)`;
+
+                        const baseLocation = newestReport.address || `Location ${lat.toFixed(4)}, ${lng.toFixed(4)}`;
+
+                        areas.push({
+                            id: areaIdCounter++,
+                            location: `${baseLocation} (New Reports)`,
+                            coordinates: { lat, lng },
+                            reportCount: reportsAfterEvent.length,
+                            severityLevel: calculateSeverityLevel(reportsAfterEvent),
+                            lastReported: formatDistanceToNow(new Date(newestReport.created_at), { addSuffix: true }),
+                            description,
+                            estimatedCleanupEffort: estimateCleanupEffort(reportsAfterEvent),
+                            priority: calculatePriority(reportsAfterEvent),
+                            reports: reportsAfterEvent,
+                            hasAssociatedEvent: false, // This group does NOT have an associated event
+                        });
+                    }
+                } else {
+                    // No existing event - create single area for all reports
+                    const mostRecentReport = groupReports.sort((a, b) =>
+                        new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+                    )[0];
+
+                    const pollutionTypes = [...new Set(groupReports.map(r => r.pollutionType))];
+                    const description = groupReports.length === 1
+                        ? `${pollutionTypes[0]} pollution reported`
+                        : `Multiple pollution types: ${pollutionTypes.join(', ')} (${groupReports.length} reports)`;
+
+                    const baseLocation = mostRecentReport.address || `Location ${lat.toFixed(4)}, ${lng.toFixed(4)}`;
+
+                    areas.push({
+                        id: areaIdCounter++,
+                        location: baseLocation,
+                        coordinates: { lat, lng },
+                        reportCount: groupReports.length,
+                        severityLevel: calculateSeverityLevel(groupReports),
+                        lastReported: formatDistanceToNow(new Date(mostRecentReport.created_at), { addSuffix: true }),
+                        description,
+                        estimatedCleanupEffort: estimateCleanupEffort(groupReports),
+                        priority: calculatePriority(groupReports),
+                        reports: groupReports,
+                    });
+                }
             });
 
         setEligibleAreas(areas);

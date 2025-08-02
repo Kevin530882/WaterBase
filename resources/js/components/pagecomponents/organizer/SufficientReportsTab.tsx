@@ -53,6 +53,7 @@ interface AreaReport {
     estimatedCleanupEffort: string;
     priority: string;
     reports: Report[];
+    hasAssociatedEvent: boolean;
 }
 
 export const SufficientReportsTab = ({
@@ -241,12 +242,12 @@ export const SufficientReportsTab = ({
 
     // Add statistics for areas with events
     const areasWithEvents = useMemo(() => {
-        return eligibleAreas.filter(area => hasExistingEvent(area));
-    }, [eligibleAreas, createdEvents]);
+        return eligibleAreas.filter(area => area.hasAssociatedEvent);
+    }, [eligibleAreas]);
 
     const areasWithoutEvents = useMemo(() => {
-        return eligibleAreas.filter(area => !hasExistingEvent(area));
-    }, [eligibleAreas, createdEvents]);
+        return eligibleAreas.filter(area => !area.hasAssociatedEvent);
+    }, [eligibleAreas]);
 
     return (
         <div className="space-y-6">
@@ -329,7 +330,7 @@ export const SufficientReportsTab = ({
             ) : (
                 <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
                     {filteredAreas.map((area) => {
-                        const hasEvent = hasExistingEvent(area);
+                        const hasEvent = area.hasAssociatedEvent;
 
                         return (
                             <Card key={area.id} className={cn(
