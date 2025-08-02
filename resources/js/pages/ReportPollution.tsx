@@ -24,7 +24,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Zap, AlertCircle, CheckCircle } from "lucide-react";
+import { Zap, AlertCircle, CheckCircle, Loader2 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { MapPin, Upload } from "lucide-react";
@@ -149,19 +149,19 @@ export const ReportPollution = () => {
       setErrorMessage('A valid image file is required');
       return false;
     }
-    
+
     const lat = parseFloat(newReport.latitude);
     const lng = parseFloat(newReport.longitude);
     if (isNaN(lat) || isNaN(lng)) {
       setErrorMessage('Please enter valid latitude and longitude values');
       return false;
     }
-    
+
     if (lat < -90 || lat > 90 || lng < -180 || lng > 180) {
       setErrorMessage('Please enter valid coordinate values');
       return false;
     }
-    
+
     return true;
   };
 
@@ -178,7 +178,7 @@ export const ReportPollution = () => {
     try {
       // Step 1: Call /api/predict with FormData
       const predictFormData = new FormData();
-      
+
       // Debug: Check if the image is still valid
       console.log('Image file before prediction:', {
         name: newReport.image?.name,
@@ -186,7 +186,7 @@ export const ReportPollution = () => {
         size: newReport.image?.size,
         isFile: newReport.image instanceof File
       });
-      
+
       predictFormData.append('image', newReport.image);
       predictFormData.append('severityByUser', newReport.severityByUser);
 
@@ -361,7 +361,7 @@ export const ReportPollution = () => {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <Button 
+              <Button
                 className="w-full bg-waterbase-500 hover:bg-waterbase-600"
                 onClick={() => setShowCameraModal(true)}
               >
@@ -536,7 +536,7 @@ export const ReportPollution = () => {
               >
                 {isSubmitting ? (
                   <>
-                    <div className="w-4 h-4 mr-2 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
                     Submitting...
                   </>
                 ) : (
@@ -564,7 +564,7 @@ export const ReportPollution = () => {
                 Use your device's camera or upload an image of the pollution.
               </DialogDescription>
             </DialogHeader>
-            
+
             <div className="space-y-4 max-h-[70vh] overflow-y-auto">
               <Input
                 type="file"
@@ -573,21 +573,21 @@ export const ReportPollution = () => {
                 onChange={handleImageSelect}
                 className="w-full"
               />
-              
+
               {verificationStatus === 'verifying' && (
                 <div className="text-center py-4">
-                  <div className="w-8 h-8 mx-auto animate-spin rounded-full border-4 border-waterbase-500 border-t-transparent" />
+                  <Loader2 className="w-8 h-8 mx-auto animate-spin text-waterbase-500" />
                   <p className="mt-2 text-waterbase-600">Verifying image metadata...</p>
                 </div>
               )}
-              
+
               {(verificationStatus === 'failed' || errorMessage) && (
                 <Alert variant="destructive">
                   <AlertCircle className="h-4 w-4" />
                   <AlertDescription>{errorMessage}</AlertDescription>
                 </Alert>
               )}
-              
+
               {newReport.image && verificationStatus !== 'verifying' && (
                 <div className="flex justify-center">
                   <img
@@ -597,7 +597,7 @@ export const ReportPollution = () => {
                   />
                 </div>
               )}
-              
+
               {showLocationFields && (
                 <>
                   <div>
@@ -616,7 +616,7 @@ export const ReportPollution = () => {
                       disabled={verificationStatus === 'verifying'}
                     />
                   </div>
-                  
+
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                     <div>
                       <label className="text-sm font-medium mb-1 block">Latitude *</label>
@@ -637,7 +637,7 @@ export const ReportPollution = () => {
                       />
                     </div>
                   </div>
-                  
+
                   <div className="flex justify-center">
                     <Button
                       type="button"
@@ -652,7 +652,7 @@ export const ReportPollution = () => {
                   </div>
                 </>
               )}
-              
+
             </div>
           </DialogContent>
         </Dialog>
@@ -673,7 +673,7 @@ export const ReportPollution = () => {
             </DialogHeader>
             {isSubmitting ? (
               <div className="text-center">
-                <div className="w-8 h-8 mx-auto animate-spin rounded-full border-4 border-waterbase-500 border-t-transparent" />
+                <Loader2 className="w-8 h-8 mx-auto animate-spin text-waterbase-500" />
                 <p className="mt-2 text-waterbase-600">Processing...</p>
               </div>
             ) : submitStatus === 'success' ? (
