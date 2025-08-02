@@ -27,6 +27,7 @@ import {
     DialogHeader,
     DialogTitle,
     DialogTrigger,
+    DialogClose
 } from "@/components/ui/dialog";
 import {
     Select,
@@ -59,43 +60,10 @@ import {
     Mail,
     Phone,
     MapPin,
+    X
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { SearchableSelect } from "@/components/pagecomponents/searchable-select";
-
-const adminStats = {
-    totalUsers: 2450,
-    totalReports: 1234,
-    pendingValidation: 89,
-    activeVolunteers: 156,
-    activeEvents: 12,
-    verifiedReports: 987,
-    rejectedReports: 158,
-    monthlyGrowth: 18,
-};
-
-const volunteerTasks = [
-    {
-        id: 1,
-        taskName: "Manila Bay Cleanup",
-        assignedTo: "Maria Santos",
-        assignedBy: "Manila Bay Coalition",
-        dueDate: "2024-02-15",
-        status: "In Progress",
-        priority: "High",
-        description: "Lead volunteer coordination for beach cleanup",
-    },
-    {
-        id: 2,
-        taskName: "Water Quality Data Collection",
-        assignedTo: "Environmental Team",
-        assignedBy: "Admin",
-        dueDate: "2024-02-20",
-        status: "Pending",
-        priority: "Medium",
-        description: "Collect water samples from 5 monitoring stations",
-    },
-];
 
 export const AdminDashboard = () => {
     const { user } = useAuth();
@@ -129,6 +97,65 @@ export const AdminDashboard = () => {
     const [isDeleting, setIsDeleting] = useState(false);
     const [errorMessage, setErrorMessage] = useState('');
     const [successMessage, setSuccessMessage] = useState('');
+    const [events, setEvents] = useState([]);
+    const [currentEventPage, setCurrentEventPage] = useState(1);
+    const [totalEventPages, setTotalEventPages] = useState(1);
+    const [showEventDialog, setShowEventDialog] = useState(false);
+    const [selectedEvent, setSelectedEvent] = useState(null);
+    const [adminStats, setAdminStats] = useState({
+        totalUsers: 0,
+        totalReports: 0,
+        pendingValidation: 0,
+        activeEvents: 0,
+        activeVolunteers: 0,
+        verifiedReports: 0,
+        rejectedReports: 0,
+        monthlyGrowth: 0,
+    });
+    const [refreshKey, setRefreshKey] = useState(0);
+
+    const refreshData = () => {
+        setRefreshKey(prev => prev + 1); // Triggers useEffect hooks to re-fetch data
+    };
+
+    const fetchAdminStats = async () => {
+        try {
+            const response = await fetch('/api/admin/stats', {
+                method: 'GET',
+                headers: {
+                    'Authorization': `Bearer ${localStorage.getItem('auth_token')}`,
+                },
+            });
+            if (!response.ok) {
+                throw new Error('Failed to fetch admin stats');
+            }
+            const data = await response.json();
+            setAdminStats(data);
+        } catch (error) {
+            console.error('Error fetching admin stats:', error);
+            setErrorMessage('Failed to load admin statistics. Please try again.');
+        }
+    };
+
+    const fetchEvents = async (page) => {
+        try {
+            const response = await fetch(`/api/admin/events?page=${page}`, {
+                method: 'GET',
+                headers: {
+                    'Authorization': `Bearer ${localStorage.getItem('auth_token')}`,
+                }
+            });
+            if (!response.ok) {
+                throw new Error('Failed to fetch events');
+            }
+            const data = await response.json();
+            setEvents(data.data);
+            setTotalEventPages(data.last_page);
+        } catch (error) {
+            console.error('Error fetching events:', error);
+            setErrorMessage('Failed to load events. Please try again.');
+        }
+    };
 
     const fetchReports = async (page) => {
         try {
@@ -171,8 +198,10 @@ export const AdminDashboard = () => {
             fetchReports(currentPage);
         } else if (activeTab === 'users') {
             fetchUsers(currentUserPage);
+        } else if (activeTab === 'volunteers') {
+            fetchEvents(currentEventPage);
         }
-    }, [activeTab, currentPage, currentUserPage]);
+    }, [activeTab, currentPage, currentUserPage, currentEventPage, refreshKey]);
 
     const handleReportAction = async (reportId, action) => {
         let status;
@@ -192,7 +221,7 @@ export const AdminDashboard = () => {
                     'Content-Type': 'application/json',
                     'Authorization': `Bearer ${localStorage.getItem('auth_token')}`,
                 },
-                body: JSON.stringify({ status, verifiedBy: user?.id }),
+                body: JSON.stringify({  status, verifiedBy: user?.id }),
             });
 
             if (!response.ok) {
@@ -213,6 +242,16 @@ export const AdminDashboard = () => {
         setSelectedReportId(reportId);
         setPendingAction(action);
         setIsConfirmDialogOpen(true);
+    };
+
+    const getEventStatusColor = (eventStatus) => {
+        switch (eventStatus.toLowerCase()) {
+            case "recruiting": return "bg-blue-100 text-blue-800";
+            case "active": return "bg-green-100 text-green-800";
+            case "completed": return "bg-gray-100 text-gray-800";
+            case "cancelled": return "bg-red-100 text-red-800";
+            default: return "bg-gray-100 text-gray-800";
+        }
     };
 
     const getStatusColor = (status) => {
@@ -314,6 +353,10 @@ export const AdminDashboard = () => {
         }
     }, [selectedUser]);
 
+    useEffect(() => {
+        fetchAdminStats();
+    }, [refreshKey]);
+
     return (
         <div className="min-h-screen bg-gray-50">
             <Navigation />
@@ -343,7 +386,7 @@ export const AdminDashboard = () => {
                                 <Shield className="w-3 h-3 mr-1" />
                                 Admin
                             </Badge>
-                            <Button variant="outline" size="sm" className="h-8 text-xs">
+                            <Button variant="outline" size="sm" className="h-8 text-xs" onClick={refreshData}>
                                 <RefreshCw className="w-3 h-3 mr-1" />
                                 Refresh Data
                             </Button>
@@ -366,7 +409,7 @@ export const AdminDashboard = () => {
                                 <Users className="w-6 h-6 text-waterbase-600" />
                             </div>
                             <p className="text-xs text-gray-600 mt-1">
-                                +{adminStats.monthlyGrowth}% from last month
+                                {adminStats.monthlyGrowth >= 0 ? '+' : ''}{adminStats.monthlyGrowth}% from last month
                             </p>
                         </CardContent>
                     </Card>
@@ -385,8 +428,7 @@ export const AdminDashboard = () => {
                                 <FileText className="w-6 h-6 text-enviro-600" />
                             </div>
                             <p className="text-xs text-gray-600 mt-1">
-                                {adminStats.verifiedReports} verified,{" "}
-                                {adminStats.rejectedReports} rejected
+                                {adminStats.verifiedReports} verified, {adminStats.rejectedReports} rejected
                             </p>
                         </CardContent>
                     </Card>
@@ -1026,7 +1068,7 @@ export const AdminDashboard = () => {
                                                 onValueChange={(value) => setEditFormData({ ...editFormData, role: value })}
                                                 disabled={isUpdating}
                                             >
-                                                <SelectTrigger>
+                                                оно <SelectTrigger>
                                                     <SelectValue placeholder="Select user role" />
                                                 </SelectTrigger>
                                                 <SelectContent>
@@ -1155,75 +1197,55 @@ export const AdminDashboard = () => {
                             <CardHeader>
                                 <div className="flex items-center justify-between">
                                     <CardTitle className="flex items-center">
-                                        <Award className="w-5 h-5 mr-2" />
-                                        Volunteer Task Management
+                                        <Calendar className="w-5 h-5 mr-2" />
+                                        Event Management
                                     </CardTitle>
-                                    <Button>
-                                        <Plus className="w-4 h-4 mr-2" />
-                                        Assign Task
-                                    </Button>
                                 </div>
                             </CardHeader>
                             <CardContent>
                                 <Table>
                                     <TableHeader>
                                         <TableRow>
-                                            <TableHead>Task Details</TableHead>
-                                            <TableHead>Assigned To</TableHead>
-                                            <TableHead>Assigned By</TableHead>
-                                            <TableHead>Priority</TableHead>
-                                            <TableHead>Due Date</TableHead>
+                                            <TableHead>Title</TableHead>
+                                            <TableHead>Date</TableHead>
+                                            <TableHead>Time</TableHead>
+                                            <TableHead>Location</TableHead>
+                                            <TableHead>Volunteers</TableHead>
                                             <TableHead>Status</TableHead>
                                             <TableHead>Actions</TableHead>
                                         </TableRow>
                                     </TableHeader>
                                     <TableBody>
-                                        {volunteerTasks.map((task) => (
-                                            <TableRow key={task.id}>
+                                        {events.map((event) => (
+                                            <TableRow key={event.id}>
+                                                <TableCell>{event.title}</TableCell>
+                                                <TableCell>{format(parseISO(event.date), 'dd MMM yyyy')}</TableCell>
+                                                <TableCell>{event.time}</TableCell>
+                                                <TableCell>{event.address}</TableCell>
+                                                <TableCell>{event.attendees_count} / {event.maxVolunteers}</TableCell>
                                                 <TableCell>
-                                                    <div>
-                                                        <div className="font-medium text-sm">
-                                                            {task.taskName}
-                                                        </div>
-                                                        <div className="text-xs text-gray-600">
-                                                            {task.description}
-                                                        </div>
-                                                    </div>
-                                                </TableCell>
-                                                <TableCell>
-                                                    <div className="text-sm">{task.assignedTo}</div>
-                                                </TableCell>
-                                                <TableCell>
-                                                    <div className="text-sm">{task.assignedBy}</div>
-                                                </TableCell>
-                                                <TableCell>
-                                                    <Badge
-                                                        className={
-                                                            task.priority === "High"
-                                                                ? "bg-red-100 text-red-800"
-                                                                : task.priority === "Medium"
-                                                                    ? "bg-yellow-100 text-yellow-800"
-                                                                    : "bg-green-100 text-green-800"
-                                                        }
-                                                    >
-                                                        {task.priority}
-                                                    </Badge>
-                                                </TableCell>
-                                                <TableCell>
-                                                    <div className="text-xs">{task.dueDate}</div>
-                                                </TableCell>
-                                                <TableCell>
-                                                    <Badge className={getStatusColor(task.status)}>
-                                                        {task.status}
+                                                    <Badge className={getEventStatusColor(event.status)}>
+                                                        {event.status}
                                                     </Badge>
                                                 </TableCell>
                                                 <TableCell>
                                                     <div className="flex items-center space-x-1">
-                                                        <Button variant="outline" size="sm">
-                                                            <Edit className="w-3 h-3" />
-                                                        </Button>
-                                                        <Button variant="outline" size="sm">
+                                                        <Button 
+                                                            variant="outline" 
+                                                            size="sm" 
+                                                            onClick={() => {
+                                                                setSelectedEvent(event);
+                                                                setShowEventDialog(true);
+                                                            }}
+                                                        >
                                                             <Eye className="w-3 h-3" />
+                                                        </Button>
+                                                        <Button 
+                                                            variant="outline" 
+                                                            size="sm" 
+                                                            onClick={() => {/* TODO: Implement delete event */}}
+                                                        >
+                                                            <Trash2 className="w-3 h-3" />
                                                         </Button>
                                                     </div>
                                                 </TableCell>
@@ -1231,8 +1253,110 @@ export const AdminDashboard = () => {
                                         ))}
                                     </TableBody>
                                 </Table>
+                                <div className="flex items-center justify-between mt-4">
+                                    <Button
+                                        onClick={() => setCurrentEventPage(prev => Math.max(prev - 1, 1))}
+                                        disabled={currentEventPage === 1}
+                                        size="sm"
+                                        className="h-8 text-xs"
+                                    >
+                                        Previous
+                                    </Button>
+                                    <span className="text-xs">Page {currentEventPage} of {totalEventPages}</span>
+                                    <Button
+                                        onClick={() => setCurrentEventPage(prev => Math.min(prev + 1, totalEventPages))}
+                                        disabled={currentEventPage === totalEventPages}
+                                        size="sm"
+                                        className="h-8 text-xs"
+                                    >
+                                        Next
+                                    </Button>
+                                </div>
                             </CardContent>
                         </Card>
+                        <Dialog open={showEventDialog} onOpenChange={setShowEventDialog}>
+                            <DialogContent className="max-w-3xl">
+                                <DialogHeader>
+                                    <DialogTitle>Event Details</DialogTitle>
+                                    <DialogDescription>View all information about this event</DialogDescription>
+                                    <DialogClose asChild>
+                                    </DialogClose>
+                                </DialogHeader>
+                                {selectedEvent && (
+                                    <div className="grid grid-cols-2 gap-4 mt-4">
+                                        {/* Basic Information */}
+                                        <div>
+                                            <Label className="font-bold">Title</Label>
+                                            <div className="text-sm">{selectedEvent.title}</div>
+                                        </div>
+                                        <div>
+                                            <Label className="font-bold">Date</Label>
+                                            <div className="text-sm">
+                                                {format(parseISO(selectedEvent.date), 'dd MMM yyyy')}
+                                            </div>
+                                        </div>
+                                        <div>
+                                            <Label className="font-bold">Time</Label>
+                                            <div className="text-sm">{selectedEvent.time}</div>
+                                        </div>
+                                        <div>
+                                            <Label className="font-bold">Duration</Label>
+                                            <div className="text-sm">{selectedEvent.duration} hours</div>
+                                        </div>
+                                        <div className="col-span-2">
+                                            <Label className="font-bold">Description</Label>
+                                            <div className="text-sm">{selectedEvent.description}</div>
+                                        </div>
+
+                                        {/* Location Information */}
+                                        <div>
+                                            <Label className="font-bold">Address</Label>
+                                            <div className="text-sm">{selectedEvent.address}</div>
+                                        </div>
+                                        <div>
+                                            <Label className="font-bold">Coordinates</Label>
+                                            <div className="text-sm">
+                                                {selectedEvent.latitude}, {selectedEvent.longitude}
+                                            </div>
+                                        </div>
+
+                                        {/* Volunteer Information */}
+                                        <div>
+                                            <Label className="font-bold">Volunteers</Label>
+                                            <div className="text-sm">
+                                                {selectedEvent.currentVolunteers} / {selectedEvent.maxVolunteers}
+                                            </div>
+                                        </div>
+
+                                        {/* Event Status */}
+                                        <div>
+                                            <Label className="font-bold mr-2">Status</Label>
+                                            <Badge className={getEventStatusColor(selectedEvent.status)}>
+                                                {selectedEvent.status}
+                                            </Badge>
+                                        </div>
+
+                                        {/* Rewards */}
+                                        <div>
+                                            <Label className="font-bold">Points</Label>
+                                            <div className="text-sm">{selectedEvent.points}</div>
+                                        </div>
+                                        <div>
+                                            <Label className="font-bold">Badge</Label>
+                                            <div className="text-sm">{selectedEvent.badge}</div>
+                                        </div>
+
+                                        {/* Creator Information */}
+                                        <div>
+                                            <Label className="font-bold">Created By</Label>
+                                            <div className="text-sm">
+                                                {selectedEvent.creator.firstName} {selectedEvent.creator.lastName}
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+                            </DialogContent>
+                        </Dialog>
                     </TabsContent>
 
                     <TabsContent value="settings">

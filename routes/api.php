@@ -62,4 +62,8 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/admin/users', [AdminDashboardController::class, 'getExistingUsers']);
     Route::put('/admin/users/{user}', [AdminDashboardController::class, 'editExistingUser']);
     Route::delete('/admin/users/{user}', [AdminDashboardController::class, 'deleteUser']);
+
+    Route::get("/admin/events", [AdminDashboardController::class,"getEvents"]);
+
+    Route::get('/admin/stats', [AdminDashboardController::class, 'getAdminStats']);
 });

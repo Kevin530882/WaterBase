@@ -79,7 +79,7 @@ export const ReportPollution = () => {
         setVerificationStatus('success');
         setShowLocationFields(false);
         return true;
-      } else if (response.ok === false && data.tampered === true && data.gps != null) {
+      } else if (response.ok === true && data.tampered === true && data.gps != null) {
         setVerificationStatus('failed');
         setShowLocationFields(false);
         setErrorMessage('Error: Image flagged as tampered. Please upload an original, unedited camera photo.');

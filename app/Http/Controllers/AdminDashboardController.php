@@ -2,14 +2,16 @@
 
 namespace App\Http\Controllers;
 
+use Carbon\Carbon;
 use App\Models\User;
+use App\Models\Event;
 use App\Models\Report;
-use App\Services\GeographicService;
 use Illuminate\Http\Request;
+use App\Services\GeographicService;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Validation\ValidationException;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
-use Illuminate\Support\Facades\Auth;
 
 class AdminDashboardController extends Controller
 {
@@ -147,48 +149,74 @@ class AdminDashboardController extends Controller
     /**
      * Show the form for creating a new resource.
      */
-    public function create()
+    public function getEvents(Request $request)
     {
-        //
+    try {
+            $query = Event::query();
+            if ($request->has('user_id')) {
+                $query->where('user_id', $request->user_id);
+            }
+            $events = $query->with(['creator' => function ($query) {
+                $query->select('id', 'firstName', 'lastName');
+            }])->withCount('attendees')->orderBy('created_at', 'desc')->paginate(10);
+            return response()->json($events);
+        } catch (ModelNotFoundException $e) {
+            return response()->json(['message' => 'No events found'], 404);
+        }
     }
 
-    /**
-     * Store a newly created resource in storage.
-     */
-    public function store(Request $request)
+    public function getAdminStats()
     {
-        //
+        // Ensure only admin users can access this endpoint
+        if (Auth::user()->role !== 'admin') {
+            return response()->json(['message' => 'Unauthorized'], 403);
+        }
+
+        // Calculate total users
+        $totalUsers = User::count();
+
+        // Calculate total reports
+        $totalReports = Report::count();
+
+        // Calculate pending validation reports
+        $pendingValidation = Report::where('status', 'pending')->count();
+
+        // Calculate active events
+        $activeEvents = Event::where('status', 'active')->count();
+
+        // Calculate verified reports
+        $verifiedReports = Report::where('status', 'verified')->count();
+
+        // Calculate declined reports (mapped to 'rejectedReports' for frontend compatibility)
+        $declinedReports = Report::where('status', 'declined')->count();
+
+        // Calculate active volunteers (unique users attending active events)
+        $activeVolunteers = User::whereHas('attendedEvents', function ($query) {
+            $query->where('status', 'active');
+        })->count();
+
+        // Calculate monthly growth for users
+        $currentMonthUsers = User::whereMonth('created_at', Carbon::now()->month)
+            ->whereYear('created_at', Carbon::now()->year)
+            ->count();
+        $previousMonthUsers = User::whereMonth('created_at', Carbon::now()->subMonth()->month)
+            ->whereYear('created_at', Carbon::now()->subMonth()->year)
+            ->count();
+        $monthlyGrowth = $previousMonthUsers > 0
+            ? round((($currentMonthUsers - $previousMonthUsers) / $previousMonthUsers) * 100, 2)
+            : ($currentMonthUsers > 0 ? 100 : 0);
+
+        // Return all statistics in a JSON response
+        return response()->json([
+            'totalUsers' => $totalUsers,
+            'totalReports' => $totalReports,
+            'pendingValidation' => $pendingValidation,
+            'activeEvents' => $activeEvents,
+            'activeVolunteers' => $activeVolunteers,
+            'verifiedReports' => $verifiedReports,
+            'rejectedReports' => $declinedReports, // Using 'rejectedReports' to match frontend
+            'monthlyGrowth' => $monthlyGrowth,
+        ]);
     }
 
-    /**
-     * Display the specified resource.
-     */
-    public function show(string $id)
-    {
-        //
-    }
-
-    /**
-     * Show the form for editing the specified resource.
-     */
-    public function edit(string $id)
-    {
-        //
-    }
-
-    /**
-     * Update the specified resource in storage.
-     */
-    public function update(Request $request, string $id)
-    {
-        //
-    }
-
-    /**
-     * Remove the specified resource from storage.
-     */
-    public function destroy(string $id)
-    {
-        //
-    }
 }
