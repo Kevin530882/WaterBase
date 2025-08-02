@@ -168,7 +168,7 @@ const Navigation = () => {
                         <ChevronDown className="w-3 h-3" />
                       </Button>
                     </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end" className="w-48">
+                    <DropdownMenuContent align="end" className="w-48 z-[9999]">
                       <DropdownMenuItem asChild>
                         <Link to="/profile" className="flex items-center space-x-2 cursor-pointer">
                           <User className="w-4 h-4" />

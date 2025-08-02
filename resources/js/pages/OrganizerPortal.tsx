@@ -54,7 +54,6 @@ interface AreaReport {
     estimatedCleanupEffort: string;
     priority: string;
     reports: Report[];
-    hasAssociatedEvent?: boolean; // Track if this specific group has an event
 }
 
 export const OrganizerPortal = () => {
@@ -269,44 +268,13 @@ export const OrganizerPortal = () => {
             if (hasExistingEvent) {
                 const mostRecentEventDate = getMostRecentEventDateForLocation(locationCoords);
 
-                // Split reports into those before and after the most recent event
-                const reportsBeforeEvent = activeReports.filter(report =>
-                    new Date(report.created_at) <= mostRecentEventDate
-                );
+                // Only get reports after the most recent event (skip older reports with existing events)
                 const reportsAfterEvent = activeReports.filter(report =>
                     new Date(report.created_at) > mostRecentEventDate
                 );
 
-                // Create area for old reports (with existing event) - but mark as having event
-                if (reportsBeforeEvent.length > 0) {
-                    const oldestReportWithEvent = reportsBeforeEvent.sort((a, b) =>
-                        new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-                    )[0];
-
-                    const location = getLocationString(oldestReportWithEvent);
-
-                    const pollutionTypes = [...new Set(reportsBeforeEvent.map(r => r.pollutionType))];
-                    const description = reportsBeforeEvent.length === 1
-                        ? `${pollutionTypes[0]} pollution reported`
-                        : `Multiple pollution types: ${pollutionTypes.join(', ')} (${reportsBeforeEvent.length} reports)`;
-
-                    areas.push({
-                        id: areaIdCounter++,
-                        location: location,
-                        coordinates: {
-                            lat: oldestReportWithEvent.latitude,
-                            lng: oldestReportWithEvent.longitude
-                        },
-                        reportCount: reportsBeforeEvent.length,
-                        severityLevel: calculateSeverityLevel(reportsBeforeEvent),
-                        lastReported: formatDistanceToNow(new Date(oldestReportWithEvent.created_at), { addSuffix: true }),
-                        description,
-                        estimatedCleanupEffort: estimateCleanupEffort(reportsBeforeEvent),
-                        priority: calculatePriority(reportsBeforeEvent),
-                        reports: reportsBeforeEvent,
-                        hasAssociatedEvent: true, // This group has an associated event
-                    });
-                }
+                // Skip creating area for old reports (with existing event) - we don't want to show these
+                // if (reportsBeforeEvent.length > 0) { ... } - REMOVED
 
                 // Create separate area for new reports (after the event)
                 if (reportsAfterEvent.length > 0) {
@@ -335,7 +303,6 @@ export const OrganizerPortal = () => {
                         estimatedCleanupEffort: estimateCleanupEffort(reportsAfterEvent),
                         priority: calculatePriority(reportsAfterEvent),
                         reports: reportsAfterEvent,
-                        hasAssociatedEvent: false, // This group does NOT have an associated event
                     });
                 }
             } else {
@@ -361,7 +328,6 @@ export const OrganizerPortal = () => {
                     estimatedCleanupEffort: estimateCleanupEffort(activeReports),
                     priority: calculatePriority(activeReports),
                     reports: activeReports,
-                    hasAssociatedEvent: false, // No existing event for this group
                 });
             }
         });
@@ -428,41 +394,13 @@ export const OrganizerPortal = () => {
                 if (hasExistingEvent) {
                     const mostRecentEventDate = getMostRecentEventDateForLocation(locationCoords);
 
-                    // Split reports into those before and after the most recent event
-                    const reportsBeforeEvent = groupReports.filter(report =>
-                        new Date(report.created_at) <= mostRecentEventDate
-                    );
+                    // Only get reports after the most recent event (skip older reports with existing events)
                     const reportsAfterEvent = groupReports.filter(report =>
                         new Date(report.created_at) > mostRecentEventDate
                     );
 
-                    // Create area for old reports (with existing event)
-                    if (reportsBeforeEvent.length > 0) {
-                        const oldestReportWithEvent = reportsBeforeEvent.sort((a, b) =>
-                            new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-                        )[0];
-
-                        const pollutionTypes = [...new Set(reportsBeforeEvent.map(r => r.pollutionType))];
-                        const description = reportsBeforeEvent.length === 1
-                            ? `${pollutionTypes[0]} pollution reported`
-                            : `Multiple pollution types: ${pollutionTypes.join(', ')} (${reportsBeforeEvent.length} reports)`;
-
-                        const baseLocation = oldestReportWithEvent.address || `Location ${lat.toFixed(4)}, ${lng.toFixed(4)}`;
-
-                        areas.push({
-                            id: areaIdCounter++,
-                            location: baseLocation,
-                            coordinates: { lat, lng },
-                            reportCount: reportsBeforeEvent.length,
-                            severityLevel: calculateSeverityLevel(reportsBeforeEvent),
-                            lastReported: formatDistanceToNow(new Date(oldestReportWithEvent.created_at), { addSuffix: true }),
-                            description,
-                            estimatedCleanupEffort: estimateCleanupEffort(reportsBeforeEvent),
-                            priority: calculatePriority(reportsBeforeEvent),
-                            reports: reportsBeforeEvent,
-                            hasAssociatedEvent: true, // This group has an associated event
-                        });
-                    }
+                    // Skip creating area for old reports (with existing event) - we don't want to show these
+                    // if (reportsBeforeEvent.length > 0) { ... } - REMOVED
 
                     // Create separate area for new reports (after the event)
                     if (reportsAfterEvent.length > 0) {
@@ -488,7 +426,6 @@ export const OrganizerPortal = () => {
                             estimatedCleanupEffort: estimateCleanupEffort(reportsAfterEvent),
                             priority: calculatePriority(reportsAfterEvent),
                             reports: reportsAfterEvent,
-                            hasAssociatedEvent: false, // This group does NOT have an associated event
                         });
                     }
                 } else {
@@ -774,7 +711,6 @@ export const OrganizerPortal = () => {
                     <TabsContent value="areas">
                         <SufficientReportsTab
                             eligibleAreas={eligibleAreas}
-                            onCreateEvent={() => console.log('Create event triggered')}
                             onSelectArea={(area) => {
                                 setSelectedArea(area);
                                 setShowAreaDetails(true);
@@ -783,7 +719,6 @@ export const OrganizerPortal = () => {
                                 fetchReports();
                                 fetchCreatedEvents();
                             }}
-                            createdEvents={createdEvents}
                         />
                     </TabsContent>
 

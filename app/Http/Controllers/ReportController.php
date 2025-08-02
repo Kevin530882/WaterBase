@@ -86,6 +86,21 @@ class ReportController extends Controller
         return $this->index($request);
     }
 
+    public function all(Request $request)
+    {
+        // Get all reports without area filtering for map view
+        $reports = Report::with(['user:id,firstName,lastName,email'])
+            ->orderBy('created_at', 'desc')
+            ->get();
+
+        \Log::info('Fetched all reports for map view', [
+            'count' => $reports->count(),
+            'user_id' => $request->user()->id
+        ]);
+
+        return response()->json($reports);
+    }
+
     public function store(Request $request)
     {
         try {

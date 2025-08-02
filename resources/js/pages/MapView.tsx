@@ -33,118 +33,122 @@ import {
   Eye,
   Target,
   Droplets,
+  Loader2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Link } from "react-router-dom";
+import { useAuth } from "@/contexts/AuthContext";
 import 'leaflet/dist/leaflet.css';
 import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
 import L from 'leaflet';
 import { renderToStaticMarkup } from 'react-dom/server';
+// @ts-ignore
+import 'leaflet.heat';
 
-// Mock data for pollution reports
-const mockReports = [
-  {
-    id: 1,
-    location: "Pasig River, Metro Manila",
-    address: "Brgy. Kapitolyo, Pasig City, Metro Manila",
-    coordinates: { lat: 14.5995, lng: 121.0008 },
-    type: "Industrial Waste",
-    severity: "High",
-    status: "Verified",
-    reportedBy: "Maria Santos",
-    reportedAt: "2024-01-15",
-    description:
-      "Heavy oil contamination with visible plastic debris along the riverbank",
-    images: 3,
-    verificationScore: 0.94,
-    priority: "high",
-  },
-  {
-    id: 2,
-    location: "Marikina River, Quezon City",
-    address: "Brgy. Bagumbayan, Quezon City",
-    coordinates: { lat: 14.6349, lng: 121.1076 },
-    type: "Plastic Pollution",
-    severity: "Medium",
-    status: "Under Review",
-    reportedBy: "Juan dela Cruz",
-    reportedAt: "2024-01-14",
-    description:
-      "Large amount of plastic bottles and containers floating downstream",
-    images: 5,
-    verificationScore: 0.87,
-    priority: "medium",
-  },
-  {
-    id: 3,
-    location: "Laguna Lake, Laguna",
-    address: "Brgy. San Pedro, Bay, Laguna",
-    coordinates: { lat: 14.3591, lng: 121.2663 },
-    type: "Sewage Discharge",
-    severity: "High",
-    status: "Cleanup Initiated",
-    reportedBy: "Environmental Watch PH",
-    reportedAt: "2024-01-13",
-    description:
-      "Raw sewage discharge affecting local fish population and water quality",
-    images: 7,
-    verificationScore: 0.91,
-    priority: "high",
-  },
-  {
-    id: 4,
-    location: "Manila Bay, Manila",
-    address: "Roxas Boulevard, Manila",
-    coordinates: { lat: 14.5794, lng: 120.9647 },
-    type: "Chemical Pollution",
-    severity: "Critical",
-    status: "Verified",
-    reportedBy: "Bay Area Coalition",
-    reportedAt: "2024-01-12",
-    description:
-      "Chemical runoff causing visible water discoloration and fish deaths",
-    images: 4,
-    verificationScore: 0.96,
-    priority: "critical",
-  },
-];
+// Real Report interface based on API structure
+interface Report {
+  id: number;
+  title: string;
+  content: string;
+  address: string;
+  latitude: number;
+  longitude: number;
+  pollutionType: string;
+  severityByUser: string;
+  severityByAI?: string;
+  ai_confidence?: number;
+  status: string;
+  user_id: number;
+  verifiedBy?: number;
+  created_at: string;
+  updated_at: string;
+  image?: string;
+  user?: {
+    firstName: string;
+    lastName: string;
+  };
+}
 
-// Priority zones for visualization
-const priorityZones = [
-  {
-    name: "Manila Bay Industrial Zone",
-    severity: "critical",
-    coordinates: { lat: 14.5794, lng: 120.9647 },
-  },
-  {
-    name: "Pasig River Central",
-    severity: "high",
-    coordinates: { lat: 14.5995, lng: 121.0008 },
-  },
-  {
-    name: "Laguna Lake East",
-    severity: "high",
-    coordinates: { lat: 14.3591, lng: 121.2663 },
-  },
-];
+// Custom hook for fetching and filtering reports
+const useReportsData = () => {
+  const { token } = useAuth();
+  const [reports, setReports] = useState<Report[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const fetchReports = async () => {
+    if (!token) return;
+
+    try {
+      setLoading(true);
+      const response = await fetch('/api/reports/all', {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Accept': 'application/json',
+        },
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        const reportsArray = Array.isArray(data) ? data : data.data || [];
+
+        const validReports = reportsArray
+          .map((r: any) => ({
+            ...r,
+            latitude: parseFloat(r.latitude),
+            longitude: parseFloat(r.longitude),
+          }))
+          .filter((report: Report) =>
+            !isNaN(report.latitude) &&
+            !isNaN(report.longitude)
+          );
+        setReports(validReports);
+      } else {
+        throw new Error('Failed to fetch reports');
+      }
+    } catch (err) {
+      console.error('Error fetching reports:', err);
+      setError(err instanceof Error ? err.message : 'Failed to fetch reports');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchReports();
+  }, [token]);
+
+  return { reports, loading, error, refetch: fetchReports };
+};
 
 export const MapView = () => {
-  const [selectedReport, setSelectedReport] = useState<
-    (typeof mockReports)[0] | null
-  >(null);
+  const { user } = useAuth();
+  const { reports, loading, error } = useReportsData();
+  const [selectedReport, setSelectedReport] = useState<Report | null>(null);
   const [filterType, setFilterType] = useState<string>("all");
   const [filterStatus, setFilterStatus] = useState<string>("all");
   const [searchQuery, setSearchQuery] = useState("");
-  const [filteredReports, setFilteredReports] = useState(mockReports);
+  const [filteredReports, setFilteredReports] = useState<Report[]>([]);
   const [viewMode, setViewMode] = useState<"standard" | "priority">("standard");
 
+  // Debug selectedReport changes
   useEffect(() => {
-    let filtered = mockReports;
+    console.log('selectedReport state changed:', selectedReport);
+  }, [selectedReport]);
+
+  // Simplified report selection handler
+  const handleReportSelect = (report: Report) => {
+    console.log('Selecting report:', report.id, report.address);
+    setSelectedReport(report);
+  };
+
+  useEffect(() => {
+    let filtered = reports;
 
     // Filter by type
     if (filterType !== "all") {
       filtered = filtered.filter((report) =>
-        report.type.toLowerCase().includes(filterType.toLowerCase()),
+        report.pollutionType.toLowerCase().includes(filterType.toLowerCase()),
       );
     }
 
@@ -159,38 +163,53 @@ export const MapView = () => {
     if (searchQuery) {
       filtered = filtered.filter(
         (report) =>
-          report.location.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          report.description
-            .toLowerCase()
-            .includes(searchQuery.toLowerCase()) ||
-          report.reportedBy.toLowerCase().includes(searchQuery.toLowerCase()),
+          report.address.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          report.content.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          (report.user?.firstName + " " + report.user?.lastName).toLowerCase().includes(searchQuery.toLowerCase()),
       );
     }
 
+    // Priority mode: only show high and critical severity reports
+    if (viewMode === "priority") {
+      filtered = filtered.filter((report) => {
+        const priority = getPriority(getReportSeverity(report));
+        return priority === 'high' || priority === 'critical';
+      });
+    }
+
     setFilteredReports(filtered);
-  }, [filterType, filterStatus, searchQuery]);
+  }, [reports, filterType, filterStatus, searchQuery, viewMode]);
+
+  // Helper function to get severity from report
+  const getReportSeverity = (report: Report): string => {
+    return report.severityByAI || report.severityByUser || 'low';
+  };
+
+  // Helper function to get priority level based on severity
+  const getPriority = (severity: string): string => {
+    const sev = severity.toLowerCase();
+    if (sev.includes('critical')) return 'critical';
+    if (sev.includes('high')) return 'high';
+    if (sev.includes('medium')) return 'medium';
+    return 'low';
+  };
 
   const getSeverityColor = (severity: string) => {
-    switch (severity.toLowerCase()) {
-      case "critical":
-        return "bg-red-500";
-      case "high":
-        return "bg-orange-500";
-      case "medium":
-        return "bg-yellow-500";
-      case "low":
-        return "bg-green-500";
-      default:
-        return "bg-gray-500";
-    }
+    const sev = severity.toLowerCase();
+    if (sev.includes('critical')) return "bg-red-500";
+    if (sev.includes('high')) return "bg-orange-500";
+    if (sev.includes('medium')) return "bg-yellow-500";
+    if (sev.includes('low')) return "bg-green-500";
+    return "bg-gray-500";
   };
 
   // Add this function before the component
-  const createPollutionIcon = (report: typeof mockReports[0]) => {
+  const createPollutionIcon = (report: Report) => {
+    const severity = getReportSeverity(report);
     const dropletHtml = renderToStaticMarkup(
       <div className={cn(
         "w-8 h-8 flex items-center justify-center rounded-full border-2 shadow-lg bg-white",
-        getSeverityColor(report.severity)
+        getSeverityColor(severity)
       )}>
         <Droplets className="w-5 h-5 text-white" />
       </div>
@@ -205,31 +224,138 @@ export const MapView = () => {
     });
   };
 
-  const getPriorityZoneColor = (severity: string) => {
-    switch (severity.toLowerCase()) {
-      case "critical":
-        return "bg-red-500/20 border-red-500";
-      case "high":
-        return "bg-orange-500/20 border-orange-500";
-      case "medium":
-        return "bg-yellow-500/20 border-yellow-500";
-      default:
-        return "bg-gray-500/20 border-gray-500";
-    }
-  };
+  // Heatmap component with error handling
+  const HeatmapLayer = ({ reports }: { reports: Report[] }) => {
+    useEffect(() => {
+      try {
+        const mapElement = document.querySelector('.leaflet-container') as HTMLElement;
+        if (!mapElement) return;
 
-  const getStatusIcon = (status: string) => {
+        // Get the Leaflet map instance
+        const mapInstance = (window as any).mapInstance;
+        if (!mapInstance) return;
+
+        // Clear existing heatmap layers
+        mapInstance.eachLayer((layer: any) => {
+          if (layer.options && layer.options.heatmapLayer) {
+            mapInstance.removeLayer(layer);
+          }
+        });
+
+        // Only add heatmap if we have leaflet.heat and reports
+        if (!reports || reports.length === 0) return;
+        if (!(L as any).heatLayer) {
+          console.warn('Leaflet heatmap plugin not available');
+          return;
+        }
+
+        // Prepare heatmap data with severity-based intensity
+        const heatmapData = reports.map(report => {
+          const severity = getReportSeverity(report);
+          let intensity = 0.3; // default intensity
+
+          // Set intensity based on severity
+          switch (severity.toLowerCase()) {
+            case 'critical':
+              intensity = 1.0;
+              break;
+            case 'high':
+              intensity = 0.8;
+              break;
+            case 'medium':
+              intensity = 0.6;
+              break;
+            case 'low':
+              intensity = 0.4;
+              break;
+          }
+
+          return [report.latitude, report.longitude, intensity];
+        });
+
+        if (heatmapData.length > 0) {
+          const heatLayer = (L as any).heatLayer(heatmapData, {
+            radius: 25,
+            blur: 20,
+            maxZoom: 18,
+            gradient: {
+              0.2: '#00ff00', // green for low
+              0.4: '#ffff00', // yellow for medium
+              0.6: '#ff8000', // orange for high
+              1.0: '#ff0000'  // red for critical
+            },
+            heatmapLayer: true, // Custom flag to identify our heatmap layers
+          });
+
+          heatLayer.addTo(mapInstance);
+        }
+      } catch (error) {
+        console.error('Error in HeatmapLayer:', error);
+      }
+    }, [reports]);
+
+    return null;
+  }; const getStatusIcon = (status: string) => {
     switch (status.toLowerCase()) {
       case "verified":
         return <CheckCircle className="w-4 h-4 text-green-600" />;
-      case "under review":
+      case "pending":
         return <Clock className="w-4 h-4 text-yellow-600" />;
-      case "cleanup initiated":
-        return <AlertTriangle className="w-4 h-4 text-blue-600" />;
+      case "declined":
+        return <X className="w-4 h-4 text-red-600" />;
       default:
         return <Clock className="w-4 h-4 text-gray-600" />;
     }
   };
+
+  // Helper function to format report display data
+  const formatReportForDisplay = (report: Report) => {
+    const severity = getReportSeverity(report);
+    return {
+      ...report,
+      location: report.address || 'Unknown Location',
+      type: report.pollutionType || 'Unknown Type',
+      severity,
+      reportedBy: report.user
+        ? `${report.user.firstName} ${report.user.lastName}`
+        : 'Anonymous',
+      reportedAt: new Date(report.created_at).toLocaleDateString(),
+      description: report.content || 'No description provided',
+      coordinates: { lat: report.latitude, lng: report.longitude },
+      images: 1, // Default to 1 if image exists
+      verificationScore: report.ai_confidence || 0,
+      priority: getPriority(severity),
+    };
+  };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gray-50">
+        <Navigation />
+        <div className="flex items-center justify-center h-[calc(100vh-64px)]">
+          <div className="text-center">
+            <Loader2 className="w-8 h-8 animate-spin mx-auto mb-4 text-waterbase-500" />
+            <p className="text-waterbase-600">Loading pollution reports...</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="min-h-screen bg-gray-50">
+        <Navigation />
+        <div className="flex items-center justify-center h-[calc(100vh-64px)]">
+          <div className="text-center">
+            <AlertTriangle className="w-16 h-16 text-red-500 mx-auto mb-4" />
+            <h2 className="text-xl font-semibold text-gray-900 mb-2">Error Loading Reports</h2>
+            <p className="text-gray-600">{error}</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -274,15 +400,18 @@ export const MapView = () => {
                   Submit New Report
                 </Button>
               </Link>
-              <Link to="/research-map">
-                <Button
-                  variant="outline"
-                  className="w-full border-enviro-300 text-enviro-700 hover:bg-enviro-50"
-                >
-                  <BarChart3 className="w-4 h-4 mr-2" />
-                  Research Analysis
-                </Button>
-              </Link>
+              {/* Only show Research Analysis button for researchers */}
+              {user?.role === 'researcher' && (
+                <Link to="/research-map">
+                  <Button
+                    variant="outline"
+                    className="w-full border-enviro-300 text-enviro-700 hover:bg-enviro-50"
+                  >
+                    <BarChart3 className="w-4 h-4 mr-2" />
+                    Research Analysis
+                  </Button>
+                </Link>
+              )}
             </div>
 
             {/* Search */}
@@ -312,6 +441,10 @@ export const MapView = () => {
                     <SelectItem value="plastic">Plastic Pollution</SelectItem>
                     <SelectItem value="sewage">Sewage Discharge</SelectItem>
                     <SelectItem value="chemical">Chemical Pollution</SelectItem>
+                    <SelectItem value="trash">Trash/Debris</SelectItem>
+                    <SelectItem value="oil">Oil Spill</SelectItem>
+                    <SelectItem value="algae">Algae Bloom</SelectItem>
+                    <SelectItem value="clean">Clean</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -327,10 +460,8 @@ export const MapView = () => {
                   <SelectContent>
                     <SelectItem value="all">All Status</SelectItem>
                     <SelectItem value="verified">Verified</SelectItem>
-                    <SelectItem value="under review">Under Review</SelectItem>
-                    <SelectItem value="cleanup initiated">
-                      Cleanup Initiated
-                    </SelectItem>
+                    <SelectItem value="pending">Pending</SelectItem>
+                    <SelectItem value="declined">Declined</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -340,22 +471,9 @@ export const MapView = () => {
           {/* Priority Zone Highlights */}
           {viewMode === "priority" && (
             <div className="p-4 border-b border-gray-200 bg-red-50">
-              <h3 className="text-sm font-semibold text-red-900 mb-3">
-                High-Priority Zones
+              <h3 className="text-sm font-semibold text-red-900">
+                High-Priority Areas
               </h3>
-              <div className="space-y-2">
-                {priorityZones.map((zone, index) => (
-                  <div
-                    key={index}
-                    className="flex items-center justify-between text-xs"
-                  >
-                    <span className="text-red-800">{zone.name}</span>
-                    <Badge variant="destructive" className="text-xs">
-                      {zone.severity}
-                    </Badge>
-                  </div>
-                ))}
-              </div>
             </div>
           )}
 
@@ -368,74 +486,74 @@ export const MapView = () => {
               </div>
             ) : (
               <div className="p-4 space-y-3">
-                {filteredReports.map((report) => (
-                  <Card
-                    key={report.id}
-                    className={cn(
-                      "cursor-pointer transition-all hover:shadow-md",
-                      selectedReport?.id === report.id
-                        ? "ring-2 ring-waterbase-500"
-                        : "",
-                      viewMode === "priority" && report.priority === "critical"
-                        ? "border-red-300 bg-red-50"
-                        : viewMode === "priority" && report.priority === "high"
-                          ? "border-orange-300 bg-orange-50"
-                          : "",
-                    )}
-                    onClick={() => setSelectedReport(report)}
-                  >
-                    <CardHeader className="pb-2">
-                      <div className="flex items-start justify-between">
-                        <div className="flex-1">
-                          <CardTitle className="text-sm font-medium text-waterbase-950">
-                            {report.location}
-                          </CardTitle>
-                          <CardDescription className="text-xs text-gray-600 mt-1">
-                            {report.type}
-                          </CardDescription>
-                          <CardDescription className="text-xs text-gray-500 mt-1">
-                            {report.address}
-                          </CardDescription>
-                        </div>
-                        <div className="flex items-center space-x-1">
-                          {viewMode === "priority" && (
-                            <Badge
-                              variant={
-                                report.priority === "critical"
-                                  ? "destructive"
-                                  : "secondary"
-                              }
-                              className="text-xs"
-                            >
-                              {report.priority}
-                            </Badge>
-                          )}
-                          <div
-                            className={cn(
-                              "w-3 h-3 rounded-full",
-                              getSeverityColor(report.severity),
-                            )}
-                          />
-                        </div>
-                      </div>
-                    </CardHeader>
-                    <CardContent className="pt-0">
-                      <div className="flex items-center justify-between text-xs text-gray-600">
-                        <div className="flex items-center space-x-1">
-                          {getStatusIcon(report.status)}
-                          <span>{report.status}</span>
-                        </div>
-                        <div className="flex items-center space-x-1">
-                          <Camera className="w-3 h-3" />
-                          <span>{report.images}</span>
-                        </div>
-                      </div>
-                      <p className="text-xs text-gray-600 mt-2 line-clamp-2">
-                        {report.description}
-                      </p>
-                    </CardContent>
-                  </Card>
-                ))}
+                {filteredReports.map((report) => {
+                  try {
+                    const formatted = formatReportForDisplay(report);
+                    return (
+                      <Card
+                        key={report.id}
+                        className={cn(
+                          "cursor-pointer transition-all hover:shadow-md",
+                          selectedReport?.id === report.id
+                            ? "ring-2 ring-waterbase-500"
+                            : "",
+                          viewMode === "priority" && formatted.priority === "critical"
+                            ? "border-red-300 bg-red-50"
+                            : viewMode === "priority" && formatted.priority === "high"
+                              ? "border-orange-300 bg-orange-50"
+                              : "",
+                        )}
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          handleReportSelect(report);
+                        }}
+                      >
+                        <CardHeader className="pb-2">
+                          <div className="flex items-start justify-between">
+                            <div className="flex-1">
+                              <CardTitle className="text-sm font-medium text-waterbase-950">
+                                {formatted.location}
+                              </CardTitle>
+                              <CardDescription className="text-xs text-gray-600 mt-1">
+                                {formatted.type}
+                              </CardDescription>
+                              <CardDescription className="text-xs text-gray-500 mt-1">
+                                {report.address}
+                              </CardDescription>
+                            </div>
+                            <div className="flex items-center space-x-1">
+                              <div
+                                className={cn(
+                                  "w-3 h-3 rounded-full",
+                                  getSeverityColor(formatted.severity),
+                                )}
+                              />
+                            </div>
+                          </div>
+                        </CardHeader>
+                        <CardContent className="pt-0">
+                          <div className="flex items-center justify-between text-xs text-gray-600">
+                            <div className="flex items-center space-x-1">
+                              {getStatusIcon(report.status)}
+                              <span>{report.status}</span>
+                            </div>
+                            <div className="flex items-center space-x-1">
+                              <Calendar className="w-3 h-3" />
+                              <span>{formatted.reportedAt}</span>
+                            </div>
+                          </div>
+                          <p className="text-xs text-gray-600 mt-2 line-clamp-2">
+                            {formatted.description}
+                          </p>
+                        </CardContent>
+                      </Card>
+                    );
+                  } catch (error) {
+                    console.error('Error rendering card for report:', report.id, error);
+                    return null;
+                  }
+                })}
               </div>
             )}
           </div>
@@ -448,57 +566,77 @@ export const MapView = () => {
             {/* Background map simulation */}
             <div className="w-full h-full relative overflow-hidden">
               {/* Simulated map background */}
-              <MapContainer 
-                center={[14.4793, 120.9106]} 
-                zoom={10} 
+              <MapContainer
+                center={[14.4793, 120.9106]}
+                zoom={10}
                 className="w-full h-full"
                 style={{ height: "100%", width: "100%" }}
+                ref={(mapInstance) => {
+                  if (mapInstance) {
+                    (window as any).mapInstance = mapInstance;
+                  }
+                }}
               >
                 <TileLayer
                   attribution='&copy; OpenStreetMap'
                   url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
                 />
-                
+
+                {/* Add heatmap layer */}
+                <HeatmapLayer reports={filteredReports} />
+
                 {/* Pollution report markers */}
-                {filteredReports.map((report) => (
-                  <Marker 
-                    key={report.id}
-                    position={[report.coordinates.lat, report.coordinates.lng]}
-                    icon={createPollutionIcon(report)}
-                    eventHandlers={{
-                      click: () => setSelectedReport(report),
-                    }}
-                  >
-                    <Popup>
-                      <div className="text-center min-w-[200px]">
-                        <div className="flex items-center justify-center mb-2">
-                          <Droplets className="w-4 h-4 mr-1 text-waterbase-600" />
-                          <span className="font-semibold">{report.location}</span>
-                        </div>
-                        <div className={cn("p-2 rounded mb-2", getSeverityColor(report.severity))}>
-                          <div className="text-sm font-bold text-white">{report.type}</div>
-                          <div className="text-xs text-white">{report.severity} Severity</div>
-                        </div>
-                        <div className="text-xs text-gray-600 mb-2">
-                          <div className="flex items-center justify-center space-x-1 mb-1">
-                            {getStatusIcon(report.status)}
-                            <span>{report.status}</span>
+                {filteredReports.map((report) => {
+                  try {
+                    return (
+                      <Marker
+                        key={report.id}
+                        position={[report.latitude, report.longitude]}
+                        icon={createPollutionIcon(report)}
+                        eventHandlers={{
+                          click: () => {
+                            handleReportSelect(report);
+                          },
+                        }}
+                      >
+                        <Popup>
+                          <div className="text-center min-w-[200px]">
+                            <div className="flex items-center justify-center mb-2">
+                              <Droplets className="w-4 h-4 mr-1 text-waterbase-600" />
+                              <span className="font-semibold">{report.address || 'Unknown Location'}</span>
+                            </div>
+                            <div className={cn("p-2 rounded mb-2", getSeverityColor(getReportSeverity(report)))}>
+                              <div className="text-sm font-bold text-white">{report.pollutionType || 'Unknown Type'}</div>
+                              <div className="text-xs text-white">{getReportSeverity(report)} Severity</div>
+                            </div>
+                            <div className="text-xs text-gray-600 mb-2">
+                              <div className="flex items-center justify-center space-x-1 mb-1">
+                                {getStatusIcon(report.status)}
+                                <span>{report.status}</span>
+                              </div>
+                              <div>Reported by: {report.user ? `${report.user.firstName} ${report.user.lastName}` : 'Anonymous'}</div>
+                              <div>Date: {report.created_at ? new Date(report.created_at).toLocaleDateString() : 'Unknown'}</div>
+                            </div>
+                            <p className="text-xs text-gray-700">{report.content || 'No description available'}</p>
                           </div>
-                          <div>Reported by: {report.reportedBy}</div>
-                          <div>Date: {report.reportedAt}</div>
-                        </div>
-                        <p className="text-xs text-gray-700">{report.description}</p>
-                      </div>
-                    </Popup>
-                  </Marker>
-                ))}
+                        </Popup>
+                      </Marker>
+                    );
+                  } catch (error) {
+                    console.error('Error rendering marker for report:', report.id, error);
+                    return null;
+                  }
+                })}
               </MapContainer>
             </div>
           </div>
 
           {/* Selected report details overlay */}
           {selectedReport && (
-            <div className="absolute top-4 right-4 w-80 bg-white rounded-lg shadow-lg border border-gray-200 z-20" style={{ zIndex: 10000 }}>
+            <div
+              className="fixed top-20 right-4 w-80 bg-white rounded-lg shadow-2xl border border-gray-200"
+              style={{ zIndex: 50000 }}
+            >
               <div className="p-4">
                 <div className="flex items-start justify-between mb-3">
                   <h3 className="font-semibold text-waterbase-950">
@@ -519,48 +657,49 @@ export const MapView = () => {
                     <div className="flex items-center space-x-2 mb-1">
                       <MapPin className="w-4 h-4 text-waterbase-600" />
                       <span className="font-medium text-sm">
-                        {selectedReport.location}
+                        {selectedReport.address}
                       </span>
                     </div>
-                    <p className="text-xs text-gray-500 ml-6 mb-2">
-                      {selectedReport.address}
-                    </p>
-                    <p className="text-sm text-gray-600 ml-6">
-                      {selectedReport.description}
+                    <p className="text-sm text-gray-600 ml-6 mb-2">
+                      {selectedReport.content}
                     </p>
                   </div>
 
                   <div className="flex items-center justify-between">
                     <Badge variant="outline" className="text-xs">
-                      {selectedReport.type}
+                      {selectedReport.pollutionType}
                     </Badge>
                     <div className="flex items-center space-x-1">
                       <div
                         className={cn(
                           "w-2 h-2 rounded-full",
-                          getSeverityColor(selectedReport.severity),
+                          getSeverityColor(getReportSeverity(selectedReport)),
                         )}
                       />
                       <span className="text-xs text-gray-600">
-                        {selectedReport.severity}
+                        {getReportSeverity(selectedReport)}
                       </span>
                     </div>
                   </div>
 
                   <div className="text-xs text-gray-600">
                     <strong>Coordinates:</strong>{" "}
-                    {selectedReport.coordinates.lat},{" "}
-                    {selectedReport.coordinates.lng}
+                    {selectedReport.latitude.toFixed(6)},{" "}
+                    {selectedReport.longitude.toFixed(6)}
                   </div>
 
                   <div className="flex items-center space-x-4 text-xs text-gray-600">
                     <div className="flex items-center space-x-1">
                       <User className="w-3 h-3" />
-                      <span>{selectedReport.reportedBy}</span>
+                      <span>
+                        {selectedReport.user
+                          ? `${selectedReport.user.firstName} ${selectedReport.user.lastName}`
+                          : 'Anonymous'}
+                      </span>
                     </div>
                     <div className="flex items-center space-x-1">
                       <Calendar className="w-3 h-3" />
-                      <span>{selectedReport.reportedAt}</span>
+                      <span>{new Date(selectedReport.created_at).toLocaleDateString()}</span>
                     </div>
                   </div>
 
@@ -571,17 +710,21 @@ export const MapView = () => {
                         {selectedReport.status}
                       </span>
                     </div>
-                    <div className="flex items-center space-x-1 text-xs text-gray-600">
-                      <Camera className="w-3 h-3" />
-                      <span>{selectedReport.images} photos</span>
-                    </div>
+                    {selectedReport.image && (
+                      <div className="flex items-center space-x-1 text-xs text-gray-600">
+                        <Camera className="w-3 h-3" />
+                        <span>Has photo</span>
+                      </div>
+                    )}
                   </div>
 
-                  <div className="text-xs text-gray-600">
-                    AI Verification:{" "}
-                    {Math.round(selectedReport.verificationScore * 100)}%
-                    confidence
-                  </div>
+                  {selectedReport.ai_confidence && (
+                    <div className="text-xs text-gray-600">
+                      AI Verification:{" "}
+                      {Math.round(selectedReport.ai_confidence * 100)}%
+                      confidence
+                    </div>
+                  )}
                 </div>
               </div>
             </div>

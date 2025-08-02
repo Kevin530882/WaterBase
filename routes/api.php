@@ -23,6 +23,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/user/events', [EventController::class, 'getUserEvents']);
 
     // Report routes - specific routes MUST come before resourceful routes
+    Route::get('/reports/all', [ReportController::class, 'all']);
     Route::get('/reports/accessible', [ReportController::class, 'accessible']);
     Route::patch('/reports/{report}/status', [ReportController::class, 'updateStatus']);
     Route::patch('/reports/bulk-status', [ReportController::class, 'bulkUpdateStatus']);
