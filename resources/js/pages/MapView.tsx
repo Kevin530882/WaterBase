@@ -721,7 +721,7 @@ export const MapView = () => {
                   {selectedReport.ai_confidence && (
                     <div className="text-xs text-gray-600">
                       AI Verification:{" "}
-                      {Math.round(selectedReport.ai_confidence * 100)}%
+                      {selectedReport.ai_confidence}%
                       confidence
                     </div>
                   )}
