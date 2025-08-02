@@ -22,12 +22,43 @@ class AdminDashboardController extends Controller
         $this->geographicService = $geographicService;
     }
 
-    public function getPendingReports()
+    public function getPendingReports(Request $request)
     {
         try 
         {
+            $query = Report::where('status', 'pending');
+
+            // Apply filters
+            
+            if ($request->has('pollutionType') && !($request->pollutionType == "all")) {
+                $query->where('pollutionType', $request->pollutionType);
+            }
+            if ($request->has('severityByUser')  && !($request->severityByUser == "all")) {
+                $query->where('severityByUser', $request->severityByUser);
+            }
+            if ($request->has('severityByAI') && !($request->severityByAI == "all")) {
+                $query->where('severityByAI', $request->severityByAI);
+            }
+            if ($request->has('aiConfidenceMin')) {
+                $query->where('ai_confidence', '>=', $request->aiConfidenceMin);
+            }
+            if ($request->has('aiConfidenceMax')) {
+                $query->where('ai_confidence', '<=', $request->aiConfidenceMax);
+            }
+            if ($request->has('dateFrom')) {
+                $query->whereDate('created_at', '>=', $request->dateFrom);
+            }
+            if ($request->has('dateTo')) {
+                $query->whereDate('created_at', '<=', $request->dateTo);
+            }
+            if ($request->has('submitter')) {
+                $query->whereHas('user', function ($q) use ($request) {
+                    $q->whereRaw("CONCAT(firstName, ' ', lastName) LIKE ?", ['%' . $request->submitter . '%']);
+                });
+            }
+
             // Fetch paginated reports with their related users
-            $reports = Report::where('status', 'pending')->latest()->paginate(20);
+            $reports = $query->with('user')->latest()->paginate(10);
 
             // Map the reports to include the username
             $reports->getCollection()->transform(function ($report) {
@@ -48,9 +79,13 @@ class AdminDashboardController extends Controller
         $validated = $request->validate([
             'status' => 'required|in:verified,declined',
             'verifiedBy'=> 'required',
+            'admin_notes'=> 'required',
         ]);
 
         $report->status = $validated['status'];
+        $report->admin_notes = $validated['admin_notes'];
+        $report->verifiedBy = $validated['verifiedBy'];
+        $report->verified_at = Carbon::now();
         $report->save();
 
         return response()->json(['message' => 'Report status updated successfully']);
@@ -58,15 +93,53 @@ class AdminDashboardController extends Controller
     /**
      * Display a listing of the resource.
      */
-    public function getExistingUsers(){
-        $users = User::latest()->paginate(20);
-        $users->getCollection()->transform(function ($users) {
-                $users->attended_events_count = $users->attendedEvents->count();
-                $users->created_events_count = $users->createdEvents->count();
-                $users->total_points = $users->attendedEvents->sum('points');
-                return $users;
+    public function getExistingUsers(Request $request)
+    {
+        try 
+        {
+            $query = User::query();
+
+            // Apply filters
+            if ($request->has('role') && !($request->role == "all")) {
+                $query->where('role', $request->role);
+            }
+            if ($request->has('organization')) {
+                $query->where('organization', 'LIKE', '%' . $request->organization . '%');
+            }
+            if ($request->has('area')) {
+                $query->where('areaOfResponsibility', 'LIKE', '%' . $request->area . '%');
+            }
+            if ($request->has('joinDateFrom')) {
+                $query->whereDate('created_at', '>=', $request->joinDateFrom);
+            }
+            if ($request->has('joinDateTo')) {
+                $query->whereDate('created_at', '<=', $request->joinDateTo);
+            }
+            if ($request->has('minReports')) {
+                $query->has('reports', '>=', $request->minReports);
+            }
+            if ($request->has('minEvents')) {
+                $query->has('createdEvents', '>=', $request->minEvents);
+            }
+
+            // Fetch paginated users with counts
+            $users = $query->withCount(['attendedEvents', 'createdEvents', 'reports'])
+                ->latest()->paginate(10);
+
+            // Transform to include additional data
+            $users->getCollection()->transform(function ($user) {
+                $user->attended_events_count = $user->attendedEvents()->count();
+                $user->created_events_count = $user->createdEvents()->count();
+                $user->total_points = $user->attendedEvents()->sum('points');
+                return $user;
             });
-        return response()->json($users, 200);
+
+            return response()->json($users, 200);
+        } 
+        catch (ModelNotFoundException $e) 
+        {
+            return response()->json(['message' => 'No users found'], 404);
+        }
     }
     public function editExistingUser(Request $request, User $user)
     {
@@ -151,16 +224,44 @@ class AdminDashboardController extends Controller
      */
     public function getEvents(Request $request)
     {
-    try {
+        try 
+        {
             $query = Event::query();
-            if ($request->has('user_id')) {
-                $query->where('user_id', $request->user_id);
+
+            // Apply filters
+            if ($request->has('status') && !($request->status == "all")) {
+                $query->where('status', $request->status);
             }
+            if ($request->has('dateFrom')) {
+                $query->whereDate('date', '>=', $request->dateFrom);
+            }
+            if ($request->has('dateTo')) {
+                $query->whereDate('date', '<=', $request->dateTo);
+            }
+            if ($request->has('location')) {
+                $query->where('address', 'LIKE', '%' . $request->location . '%');
+            }
+            if ($request->has('creator')) {
+                $query->whereHas('creator', function ($q) use ($request) {
+                    $q->whereRaw("CONCAT(firstName, ' ', lastName) LIKE ?", ['%' . $request->creator . '%']);
+                });
+            }
+            if ($request->has('volunteersMin')) {
+                $query->where('currentVolunteers', '>=', $request->volunteersMin);
+            }
+            if ($request->has('volunteersMax')) {
+                $query->where('currentVolunteers', '<=', $request->volunteersMax);
+            }
+
+            // Fetch paginated events with creator and attendees count
             $events = $query->with(['creator' => function ($query) {
                 $query->select('id', 'firstName', 'lastName');
             }])->withCount('attendees')->orderBy('created_at', 'desc')->paginate(10);
-            return response()->json($events);
-        } catch (ModelNotFoundException $e) {
+
+            return response()->json($events, 200);
+        } 
+        catch (ModelNotFoundException $e) 
+        {
             return response()->json(['message' => 'No events found'], 404);
         }
     }

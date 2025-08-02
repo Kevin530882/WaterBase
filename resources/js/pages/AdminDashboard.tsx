@@ -114,8 +114,37 @@ export const AdminDashboard = () => {
     });
     const [refreshKey, setRefreshKey] = useState(0);
 
+    // Filter states for Reports Validation Queue
+    const [filterPollutionType, setFilterPollutionType] = useState('');
+    const [filterSeverityByUser, setFilterSeverityByUser] = useState('');
+    const [filterSeverityByAI, setFilterSeverityByAI] = useState('');
+    const [filterAIConfidenceMin, setFilterAIConfidenceMin] = useState('');
+    const [filterAIConfidenceMax, setFilterAIConfidenceMax] = useState('');
+    const [filterDateFrom, setFilterDateFrom] = useState('');
+    const [filterDateTo, setFilterDateTo] = useState('');
+    const [filterSubmitter, setFilterSubmitter] = useState('');
+
+    // Filter states for Users Management
+    const [filterRole, setFilterRole] = useState('');
+    const [filterOrganization, setFilterOrganization] = useState('');
+    const [filterArea, setFilterArea] = useState('');
+    const [filterJoinDateFrom, setFilterJoinDateFrom] = useState('');
+    const [filterJoinDateTo, setFilterJoinDateTo] = useState('');
+    const [filterMinReports, setFilterMinReports] = useState('');
+    const [filterMinEvents, setFilterMinEvents] = useState('');
+
+    // Filter states for Task Management (Events)
+    const [filterStatus, setFilterStatus] = useState('');
+    const [filterEventDateFrom, setFilterEventDateFrom] = useState('');
+    const [filterEventDateTo, setFilterEventDateTo] = useState('');
+    const [filterLocation, setFilterLocation] = useState('');
+    const [filterCreator, setFilterCreator] = useState('');
+    const [filterVolunteersMin, setFilterVolunteersMin] = useState('');
+    const [filterVolunteersMax, setFilterVolunteersMax] = useState('');
+    const [adminNotes, setAdminNotes] = useState('');
+
     const refreshData = () => {
-        setRefreshKey(prev => prev + 1); // Triggers useEffect hooks to re-fetch data
+        setRefreshKey(prev => prev + 1);
     };
 
     const fetchAdminStats = async () => {
@@ -126,9 +155,7 @@ export const AdminDashboard = () => {
                     'Authorization': `Bearer ${localStorage.getItem('auth_token')}`,
                 },
             });
-            if (!response.ok) {
-                throw new Error('Failed to fetch admin stats');
-            }
+            if (!response.ok) throw new Error('Failed to fetch admin stats');
             const data = await response.json();
             setAdminStats(data);
         } catch (error) {
@@ -137,59 +164,85 @@ export const AdminDashboard = () => {
         }
     };
 
-    const fetchEvents = async (page) => {
-        try {
-            const response = await fetch(`/api/admin/events?page=${page}`, {
-                method: 'GET',
-                headers: {
-                    'Authorization': `Bearer ${localStorage.getItem('auth_token')}`,
-                }
-            });
-            if (!response.ok) {
-                throw new Error('Failed to fetch events');
-            }
-            const data = await response.json();
-            setEvents(data.data);
-            setTotalEventPages(data.last_page);
-        } catch (error) {
-            console.error('Error fetching events:', error);
-            setErrorMessage('Failed to load events. Please try again.');
-        }
-    };
-
     const fetchReports = async (page) => {
         try {
-            const response = await fetch(`/api/admin/reports/pending?page=${page}`, {
+            let url = `/api/admin/reports/pending?page=${page}`;
+            if (filterPollutionType) url += `&pollutionType=${filterPollutionType}`;
+            if (filterSeverityByUser) url += `&severityByUser=${filterSeverityByUser}`;
+            if (filterSeverityByAI) url += `&severityByAI=${filterSeverityByAI}`;
+            if (filterAIConfidenceMin) url += `&aiConfidenceMin=${filterAIConfidenceMin}`;
+            if (filterAIConfidenceMax) url += `&aiConfidenceMax=${filterAIConfidenceMax}`;
+            if (filterDateFrom) url += `&dateFrom=${filterDateFrom}`;
+            if (filterDateTo) url += `&dateTo=${filterDateTo}`;
+            if (filterSubmitter) url += `&submitter=${filterSubmitter}`;
+
+            const response = await fetch(url, {
                 method: 'GET',
                 headers: {
                     'Authorization': `Bearer ${localStorage.getItem('auth_token')}`,
                 }
             });
+            if (!response.ok) throw new Error('Failed to fetch reports');
             const data = await response.json();
             setReports(data.data);
             setTotalPages(data.last_page);
         } catch (error) {
             console.error('Error fetching reports:', error);
+            setErrorMessage('Failed to load reports. Please try again.');
         }
     };
 
     const fetchUsers = async (page) => {
         try {
-            const response = await fetch(`/api/admin/users?page=${page}`, {
+            let url = `/api/admin/users?page=${page}`;
+            if (filterRole) url += `&role=${filterRole}`;
+            if (filterOrganization) url += `&organization=${filterOrganization}`;
+            if (filterArea) url += `&area=${filterArea}`;
+            if (filterJoinDateFrom) url += `&joinDateFrom=${filterJoinDateFrom}`;
+            if (filterJoinDateTo) url += `&joinDateTo=${filterJoinDateTo}`;
+            if (filterMinReports) url += `&minReports=${filterMinReports}`;
+            if (filterMinEvents) url += `&minEvents=${filterMinEvents}`;
+
+            const response = await fetch(url, {
                 method: 'GET',
                 headers: {
                     'Authorization': `Bearer ${localStorage.getItem('auth_token')}`,
                 }
             });
-            if (!response.ok) {
-                throw new Error('Failed to fetch users');
-            }
+            if (!response.ok) throw new Error('Failed to fetch users');
             const data = await response.json();
             setUsers(data.data);
             setTotalUserPages(data.last_page);
         } catch (error) {
             console.error('Error fetching users:', error);
             setErrorMessage('Failed to load users. Please try again.');
+        }
+    };
+
+    const fetchEvents = async (page) => {
+        try {
+            let url = `/api/admin/events?page=${page}`;
+            if (filterStatus) url += `&status=${filterStatus}`;
+            if (filterEventDateFrom) url += `&dateFrom=${filterEventDateFrom}`;
+            if (filterEventDateTo) url += `&dateTo=${filterEventDateTo}`;
+            if (filterLocation) url += `&location=${filterLocation}`;
+            if (filterCreator) url += `&creator=${filterCreator}`;
+            if (filterVolunteersMin) url += `&volunteersMin=${filterVolunteersMin}`;
+            if (filterVolunteersMax) url += `&volunteersMax=${filterVolunteersMax}`;
+
+            const response = await fetch(url, {
+                method: 'GET',
+                headers: {
+                    'Authorization': `Bearer ${localStorage.getItem('auth_token')}`,
+                }
+            });
+            if (!response.ok) throw new Error('Failed to fetch events');
+            const data = await response.json();
+            setEvents(data.data);
+            setTotalEventPages(data.last_page);
+        } catch (error) {
+            console.error('Error fetching events:', error);
+            setErrorMessage('Failed to load events. Please try again.');
         }
     };
 
@@ -203,13 +256,11 @@ export const AdminDashboard = () => {
         }
     }, [activeTab, currentPage, currentUserPage, currentEventPage, refreshKey]);
 
-    const handleReportAction = async (reportId, action) => {
+    const handleReportAction = async (reportId, action, adminNotes) => {
         let status;
-        if (action === 'approve') {
-            status = 'verified';
-        } else if (action === 'reject') {
-            status = 'declined';
-        } else {
+        if (action === 'approve') status = 'verified';
+        else if (action === 'reject') status = 'declined';
+        else {
             console.error('Invalid action');
             return;
         }
@@ -221,26 +272,22 @@ export const AdminDashboard = () => {
                     'Content-Type': 'application/json',
                     'Authorization': `Bearer ${localStorage.getItem('auth_token')}`,
                 },
-                body: JSON.stringify({  status, verifiedBy: user?.id }),
+                body: JSON.stringify({ status: status, verifiedBy: user?.id, admin_notes: adminNotes }),
             });
-
-            if (!response.ok) {
-                const errorData = await response.json();
-                throw new Error(errorData.message || 'Failed to update report status');
-            }
-
+            if (!response.ok) throw new Error('Failed to update report status');
             fetchReports(currentPage);
             setShowReportDialog(false);
             setIsConfirmDialogOpen(false);
         } catch (error) {
             console.error('Error updating report status:', error);
-            setErrorMessage(error.message || 'Failed to update report status');
+            setErrorMessage('Failed to update report status');
         }
     };
 
     const openConfirmDialog = (reportId, action) => {
         setSelectedReportId(reportId);
         setPendingAction(action);
+        setAdminNotes(''); // Reset notes when opening dialog
         setIsConfirmDialogOpen(true);
     };
 
@@ -254,33 +301,12 @@ export const AdminDashboard = () => {
         }
     };
 
-    const getStatusColor = (status) => {
-        switch (status.toLowerCase()) {
-            case "active":
-                return "bg-green-100 text-green-800";
-            case "pending":
-                return "bg-yellow-100 text-yellow-800";
-            case "suspended":
-                return "bg-red-100 text-red-800";
-            case "completed":
-                return "bg-blue-100 text-blue-800";
-            case "in progress":
-                return "bg-purple-100 text-purple-800";
-            default:
-                return "bg-gray-100 text-gray-800";
-        }
-    };
-
     const getSeverityColor = (severity) => {
         switch (severity.toLowerCase()) {
-            case "high":
-                return "bg-orange-500 text-white";
-            case "medium":
-                return "bg-yellow-500 text-black";
-            case "low":
-                return "bg-green-500 text-white";
-            default:
-                return "bg-red-500 text-white";
+            case "high": return "bg-orange-500 text-white";
+            case "medium": return "bg-yellow-500 text-black";
+            case "low": return "bg-green-500 text-white";
+            default: return "bg-red-500 text-white";
         }
     };
 
@@ -300,15 +326,12 @@ export const AdminDashboard = () => {
                 },
                 body: JSON.stringify(editFormData),
             });
-            if (!response.ok) {
-                const errorData = await response.json();
-                throw new Error(errorData.message || 'Failed to update user');
-            }
+            if (!response.ok) throw new Error('Failed to update user');
             fetchUsers(currentUserPage);
             setShowEditUserDialog(false);
         } catch (error) {
             console.error('Error updating user:', error);
-            setErrorMessage(error.message || 'Failed to update user. Please try again.');
+            setErrorMessage('Failed to update user. Please try again.');
         } finally {
             setIsUpdating(false);
         }
@@ -323,17 +346,14 @@ export const AdminDashboard = () => {
                     'Authorization': `Bearer ${localStorage.getItem('auth_token')}`,
                 },
             });
-            if (!response.ok) {
-                const errorData = await response.json();
-                throw new Error(errorData.message || 'Failed to delete user');
-            }
+            if (!response.ok) throw new Error('Failed to delete user');
             fetchUsers(currentUserPage);
             setShowDeleteUserDialog(false);
             setSuccessMessage('User deleted successfully');
             setTimeout(() => setSuccessMessage(''), 5000);
         } catch (error) {
             console.error('Error deleting user:', error);
-            setErrorMessage(error.message || 'Failed to delete user. Please try again.');
+            setErrorMessage('Failed to delete user. Please try again.');
         } finally {
             setIsDeleting(false);
         }
@@ -399,75 +419,48 @@ export const AdminDashboard = () => {
                         <CardContent className="p-4">
                             <div className="flex items-center justify-between">
                                 <div>
-                                    <p className="text-xs font-medium text-gray-600">
-                                        Total Users
-                                    </p>
-                                    <p className="text-2xl font-bold text-waterbase-950">
-                                        {adminStats.totalUsers.toLocaleString()}
-                                    </p>
+                                    <p className="text-xs font-medium text-gray-600">Total Users</p>
+                                    <p className="text-2xl font-bold text-waterbase-950">{adminStats.totalUsers.toLocaleString()}</p>
                                 </div>
                                 <Users className="w-6 h-6 text-waterbase-600" />
                             </div>
-                            <p className="text-xs text-gray-600 mt-1">
-                                {adminStats.monthlyGrowth >= 0 ? '+' : ''}{adminStats.monthlyGrowth}% from last month
-                            </p>
+                            <p className="text-xs text-gray-600 mt-1">{adminStats.monthlyGrowth >= 0 ? '+' : ''}{adminStats.monthlyGrowth}% from last month</p>
                         </CardContent>
                     </Card>
-
                     <Card className="border-waterbase-200">
                         <CardContent className="p-4">
                             <div className="flex items-center justify-between">
                                 <div>
-                                    <p className="text-xs font-medium text-gray-600">
-                                        Total Reports
-                                    </p>
-                                    <p className="text-2xl font-bold text-waterbase-950">
-                                        {adminStats.totalReports.toLocaleString()}
-                                    </p>
+                                    <p className="text-xs font-medium text-gray-600">Total Reports</p>
+                                    <p className="text-2xl font-bold text-waterbase-950">{adminStats.totalReports.toLocaleString()}</p>
                                 </div>
                                 <FileText className="w-6 h-6 text-enviro-600" />
                             </div>
-                            <p className="text-xs text-gray-600 mt-1">
-                                {adminStats.verifiedReports} verified, {adminStats.rejectedReports} rejected
-                            </p>
+                            <p className="text-xs text-gray-600 mt-1">{adminStats.verifiedReports} verified, {adminStats.rejectedReports} rejected</p>
                         </CardContent>
                     </Card>
-
                     <Card className="border-waterbase-200">
                         <CardContent className="p-4">
                             <div className="flex items-center justify-between">
                                 <div>
-                                    <p className="text-xs font-medium text-gray-600">
-                                        Pending Validation
-                                    </p>
-                                    <p className="text-2xl font-bold text-orange-600">
-                                        {adminStats.pendingValidation}
-                                    </p>
+                                    <p className="text-xs font-medium text-gray-600">Pending Validation</p>
+                                    <p className="text-2xl font-bold text-orange-600">{adminStats.pendingValidation}</p>
                                 </div>
                                 <Clock className="w-6 h-6 text-orange-600" />
                             </div>
-                            <p className="text-xs text-gray-600 mt-1">
-                                Requires immediate attention
-                            </p>
+                            <p className="text-xs text-gray-600 mt-1">Requires immediate attention</p>
                         </CardContent>
                     </Card>
-
                     <Card className="border-waterbase-200">
                         <CardContent className="p-4">
                             <div className="flex items-center justify-between">
                                 <div>
-                                    <p className="text-xs font-medium text-gray-600">
-                                        Active Events
-                                    </p>
-                                    <p className="text-2xl font-bold text-waterbase-950">
-                                        {adminStats.activeEvents}
-                                    </p>
+                                    <p className="text-xs font-medium text-gray-600">Active Events</p>
+                                    <p className="text-2xl font-bold text-waterbase-950">{adminStats.activeEvents}</p>
                                 </div>
                                 <Calendar className="w-6 h-6 text-purple-600" />
                             </div>
-                            <p className="text-xs text-gray-600 mt-1">
-                                {adminStats.activeVolunteers} volunteers participating
-                            </p>
+                            <p className="text-xs text-gray-600 mt-1">{adminStats.activeVolunteers} volunteers participating</p>
                         </CardContent>
                     </Card>
                 </div>
@@ -494,14 +487,11 @@ export const AdminDashboard = () => {
                                     <div className="h-64 bg-gradient-to-br from-waterbase-50 to-enviro-50 rounded-lg flex items-center justify-center">
                                         <div className="text-center">
                                             <BarChart3 className="w-12 h-12 text-waterbase-500 mx-auto mb-4" />
-                                            <p className="text-waterbase-600">
-                                                Activity charts and analytics
-                                            </p>
+                                            <p className="text-waterbase-600">Activity charts and analytics</p>
                                         </div>
                                     </div>
                                 </CardContent>
                             </Card>
-
                             <Card className="border-waterbase-200">
                                 <CardHeader>
                                     <CardTitle className="flex items-center">
@@ -513,42 +503,24 @@ export const AdminDashboard = () => {
                                     <div className="space-y-3">
                                         <div className="p-3 bg-red-50 border border-red-200 rounded-lg">
                                             <div className="flex items-center justify-between">
-                                                <span className="text-sm font-medium text-red-800">
-                                                    High Priority Report
-                                                </span>
-                                                <Badge variant="destructive" className="text-xs">
-                                                    Critical
-                                                </Badge>
+                                                <span className="text-sm font-medium text-red-800">High Priority Report</span>
+                                                <Badge variant="destructive" className="text-xs">Critical</Badge>
                                             </div>
-                                            <p className="text-xs text-red-600 mt-1">
-                                                Industrial waste report requires immediate validation
-                                            </p>
+                                            <p className="text-xs text-red-600 mt-1">Industrial waste report requires immediate validation</p>
                                         </div>
                                         <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
                                             <div className="flex items-center justify-between">
-                                                <span className="text-sm font-medium text-yellow-800">
-                                                    User Account Issue
-                                                </span>
-                                                <Badge variant="secondary" className="text-xs">
-                                                    Medium
-                                                </Badge>
+                                                <span className="text-sm font-medium text-yellow-800">User Account Issue</span>
+                                                <Badge variant="secondary" className="text-xs">Medium</Badge>
                                             </div>
-                                            <p className="text-xs text-yellow-600 derivative mt-1">
-                                                Suspicious activity detected on user account
-                                            </p>
+                                            <p className="text-xs text-yellow-600 mt-1">Suspicious activity detected on user account</p>
                                         </div>
                                         <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
                                             <div className="flex items-center justify-between">
-                                                <span className="text-sm font-medium text-blue-800">
-                                                    System Update
-                                                </span>
-                                                <Badge variant="outline" className="text-xs">
-                                                    Info
-                                                </Badge>
+                                                <span className="text-sm font-medium text-blue-800">System Update</span>
+                                                <Badge variant="outline" className="text-xs">Info</Badge>
                                             </div>
-                                            <p className="text-xs text-blue-600 mt-1">
-                                                New features deployed successfully
-                                            </p>
+                                            <p className="text-xs text-blue-600 mt-1">New features deployed successfully</p>
                                         </div>
                                     </div>
                                 </CardContent>
@@ -564,10 +536,78 @@ export const AdminDashboard = () => {
                                         <FileText className="w-4 h-4 mr-2" />
                                         Report Validation Queue
                                     </CardTitle>
-                                    <Button variant="outline" size="sm" className="h-8 text-xs">
-                                        <Filter className="w-3 h-3 mr-1" />
-                                        Filter
-                                    </Button>
+                                    <div className="flex flex-wrap gap-4">
+                                        <Select value={filterPollutionType} onValueChange={setFilterPollutionType}>
+                                            <SelectTrigger className="w-[180px]">
+                                                <SelectValue placeholder="Pollution Type" />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                <SelectItem value="All">All</SelectItem>
+                                                <SelectItem value="Industrial Waste">Industrial Waste</SelectItem>
+                                                <SelectItem value="Plastic Pollution">Plastic Pollution</SelectItem>
+                                                <SelectItem value="Sewage Discharge">Sewage Discharge</SelectItem>
+                                                <SelectItem value="Chemical Pollution">Chemical Pollution</SelectItem>
+                                                <SelectItem value="Oil Spill">Oil Spillage</SelectItem>
+                                            </SelectContent>
+                                        </Select>
+                                        <Select value={filterSeverityByUser} onValueChange={setFilterSeverityByUser}>
+                                            <SelectTrigger className="w-[180px]">
+                                                <SelectValue placeholder="User Severity" />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                <SelectItem value="all">All</SelectItem>
+                                                <SelectItem value="low">Low</SelectItem>
+                                                <SelectItem value="medium">Medium</SelectItem>
+                                                <SelectItem value="high">High</SelectItem>
+                                                <SelectItem value="critical">Critical</SelectItem>
+                                            </SelectContent>
+                                        </Select>
+                                        <Select value={filterSeverityByAI} onValueChange={setFilterSeverityByAI}>
+                                            <SelectTrigger className="w-[180px]">
+                                                <SelectValue placeholder="AI Severity" />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                <SelectItem value="all">All</SelectItem>
+                                                <SelectItem value="low">Low</SelectItem>
+                                                <SelectItem value="medium">Medium</SelectItem>
+                                                <SelectItem value="high">High</SelectItem>
+                                                <SelectItem value="critical">Critical</SelectItem>
+                                            </SelectContent>
+                                        </Select>
+                                        <Input
+                                            type="number"
+                                            placeholder="Min AI Confidence"
+                                            value={filterAIConfidenceMin}
+                                            onChange={(e) => setFilterAIConfidenceMin(e.target.value)}
+                                            className="w-[150px]"
+                                        />
+                                        <Input
+                                            type="number"
+                                            placeholder="Max AI Confidence"
+                                            value={filterAIConfidenceMax}
+                                            onChange={(e) => setFilterAIConfidenceMax(e.target.value)}
+                                            className="w-[150px]"
+                                        />
+                                        <Input
+                                            type="date"
+                                            value={filterDateFrom}
+                                            onChange={(e) => setFilterDateFrom(e.target.value)}
+                                            placeholder="From Date"
+                                        />
+                                        <Input
+                                            type="date"
+                                            value={filterDateTo}
+                                            onChange={(e) => setFilterDateTo(e.target.value)}
+                                            placeholder="To Date"
+                                        />
+                                        <Input
+                                            placeholder="Submitter Name"
+                                            value={filterSubmitter}
+                                            onChange={(e) => setFilterSubmitter(e.target.value)}
+                                            className="w-[180px]"
+                                        />
+                                        <Button onClick={() => fetchReports(1)}>Apply Filters</Button>
+                                    </div>
                                 </div>
                             </CardHeader>
                             <CardContent className="p-4">
@@ -597,31 +637,14 @@ export const AdminDashboard = () => {
                                                     </TableCell>
                                                     <TableCell className="py-2">
                                                         <div className="space-y-1">
-                                                            <Badge variant="outline" className="text-xs h-5 px-1 mr-1">
-                                                                {report.pollutionType}
-                                                            </Badge>
-                                                            <Badge
-                                                                className={cn("text-xs h-5 px-1", getSeverityColor(report.severityByAI))}
-                                                            >
-                                                                {report.severityByAI}
-                                                            </Badge>
+                                                            <Badge variant="outline" className="text-xs h-5 px-1 mr-1">{report.pollutionType}</Badge>
+                                                            <Badge className={cn("text-xs h-5 px-1", getSeverityColor(report.severityByAI))}>{report.severityByAI}</Badge>
                                                         </div>
                                                     </TableCell>
                                                     <TableCell className="py-2">
                                                         <div className="flex items-center">
-                                                            <div className="text-xs font-medium">
-                                                                {report.ai_confidence}%
-                                                            </div>
-                                                            <div
-                                                                className={cn(
-                                                                    "ml-2 w-2 h-2 rounded-full",
-                                                                    report.ai_confidence > 90
-                                                                        ? "bg-green-500"
-                                                                        : report.ai_confidence > 70
-                                                                            ? "bg-yellow-500"
-                                                                            : "bg-red-500"
-                                                                )}
-                                                            />
+                                                            <div className="text-xs font-medium">{report.ai_confidence}%</div>
+                                                            <div className={cn("ml-2 w-2 h-2 rounded-full", report.ai_confidence > 90 ? "bg-green-500" : report.ai_confidence > 70 ? "bg-yellow-500" : "bg-red-500")} />
                                                         </div>
                                                     </TableCell>
                                                     <TableCell className="py-2">
@@ -629,174 +652,94 @@ export const AdminDashboard = () => {
                                                     </TableCell>
                                                     <TableCell className="py-2">
                                                         <div className="flex items-center space-x-1">
-                                                            <Dialog
-                                                                open={
-                                                                    showReportDialog &&
-                                                                    selectedReport?.id === report.id
-                                                                }
-                                                                onOpenChange={setShowReportDialog}
-                                                            >
+                                                            <Dialog open={showReportDialog && selectedReport?.id === report.id} onOpenChange={setShowReportDialog}>
                                                                 <DialogTrigger asChild>
-                                                                    <Button
-                                                                        variant="outline"
-                                                                        size="sm"
-                                                                        className="h-7 w-7 p-0"
-                                                                        onClick={() => setSelectedReport(report)}
-                                                                    >
+                                                                    <Button variant="outline" size="sm" className="h-7 w-7 p-0" onClick={() => setSelectedReport(report)}>
                                                                         <Eye className="w-3 h-3" />
                                                                     </Button>
                                                                 </DialogTrigger>
                                                                 <DialogContent className="max-w-3xl">
                                                                     <DialogHeader>
                                                                         <DialogTitle>Report Validation</DialogTitle>
-                                                                        <DialogDescription>
-                                                                            Review and validate pollution report
-                                                                        </DialogDescription>
+                                                                        <DialogDescription>Review and validate pollution report</DialogDescription>
                                                                     </DialogHeader>
                                                                     <div className="space-y-4">
                                                                         <div className="grid grid-cols-2 gap-4">
                                                                             <div>
                                                                                 <Label>Title</Label>
-                                                                                <div className="text-sm font-medium">
-                                                                                    {selectedReport?.title}
-                                                                                </div>
+                                                                                <div className="text-sm font-medium">{selectedReport?.title}</div>
                                                                             </div>
                                                                             <div>
                                                                                 <Label>Location</Label>
-                                                                                <div className="text-sm">
-                                                                                    {selectedReport?.address}
-                                                                                </div>
+                                                                                <div className="text-sm">{selectedReport?.address}</div>
                                                                             </div>
                                                                         </div>
                                                                         <div>
                                                                             <Label>Description</Label>
-                                                                            <div className="text-sm">
-                                                                                {selectedReport?.content}
-                                                                            </div>
+                                                                            <div className="text-sm">{selectedReport?.content}</div>
                                                                         </div>
                                                                         <div className="grid grid-cols-2 gap-4 my-4">
                                                                             <div className="flex flex-col items-center">
                                                                                 <Label className="mb-2">Submitted Image</Label>
                                                                                 {selectedReport?.image ? (
-                                                                                    <img
-                                                                                        src={selectedReport.image}
-                                                                                        alt="Submitted"
-                                                                                        className="max-h-300 rounded-md border border-gray-300"
-                                                                                    />
+                                                                                    <img src={selectedReport.image} alt="Submitted" className="max-h-300 rounded-md border border-gray-300" />
                                                                                 ) : (
-                                                                                    <p className="text-xs text-gray-500">
-                                                                                        No submitted image available
-                                                                                    </p>
+                                                                                    <p className="text-xs text-gray-500">No submitted image available</p>
                                                                                 )}
                                                                             </div>
                                                                             <div className="flex flex-col items-center">
                                                                                 <Label className="mb-2">AI Annotated Image</Label>
                                                                                 {selectedReport?.ai_annotated_image ? (
-                                                                                    <img
-                                                                                        src={selectedReport.ai_annotated_image}
-                                                                                        alt="AI Annotated"
-                                                                                        className="max-h-300 rounded-md border border-gray-300"
-                                                                                    />
+                                                                                    <img src={selectedReport.ai_annotated_image} alt="AI Annotated" className="max-h-300 rounded-md border border-gray-300" />
                                                                                 ) : (
-                                                                                    <p className="text-xs text-gray-500">
-                                                                                        No AI annotated image available
-                                                                                    </p>
+                                                                                    <p className="text-xs text-gray-500">No AI annotated image available</p>
                                                                                 )}
                                                                             </div>
                                                                         </div>
                                                                         <div className="grid grid-cols-3 gap-4">
                                                                             <div>
                                                                                 <Label>Type</Label>
-                                                                                <Badge variant="outline" className="ml-1">
-                                                                                    {selectedReport?.pollutionType}
-                                                                                </Badge>
+                                                                                <Badge variant="outline" className="ml-1">{selectedReport?.pollutionType}</Badge>
                                                                             </div>
                                                                             <div>
                                                                                 <div>
                                                                                     <Label className="mr-1">User Severity</Label>
-                                                                                    <Badge
-                                                                                        className={getSeverityColor(
-                                                                                            selectedReport?.severityByUser || "",
-                                                                                        )}
-                                                                                    >
-                                                                                        {selectedReport?.severityByUser}
-                                                                                    </Badge>
+                                                                                    <Badge className={getSeverityColor(selectedReport?.severityByUser || "")}>{selectedReport?.severityByUser}</Badge>
                                                                                 </div>
                                                                                 <div>
                                                                                     <Label className="mr-5">AI Severity</Label>
-                                                                                    <Badge
-                                                                                        className={getSeverityColor(
-                                                                                            selectedReport?.severityByAI || "",
-                                                                                        )}
-                                                                                    >
-                                                                                        {selectedReport?.severityByAI}
-                                                                                    </Badge>
+                                                                                    <Badge className={getSeverityColor(selectedReport?.severityByAI || "")}>{selectedReport?.severityByAI}</Badge>
                                                                                 </div>
                                                                             </div>
                                                                             <div>
                                                                                 <Label>AI Confidence</Label>
-                                                                                <div className="text-sm font-medium">
-                                                                                    <p
-                                                                                        className={cn(
-                                                                                            "text-sm font-medium",
-                                                                                            selectedReport?.ai_confidence > 90
-                                                                                                ? "text-green-500"
-                                                                                                : selectedReport?.ai_confidence > 70
-                                                                                                    ? "text-yellow-500"
-                                                                                                    : "text-red-500"
-                                                                                        )}
-                                                                                    >
-                                                                                        {selectedReport?.ai_confidence}%
-                                                                                    </p>
-                                                                                </div>
+                                                                                <p className={cn("text-sm font-medium", selectedReport?.ai_confidence > 90 ? "text-green-500" : selectedReport?.ai_confidence > 70 ? "text-yellow-500" : "text-red-500")}>
+                                                                                    {selectedReport?.ai_confidence}%
+                                                                                </p>
                                                                             </div>
                                                                             <div>
                                                                                 <Label>Date Report Created</Label>
-                                                                                <div className="text-sm">
-                                                                                    {selectedReport && format(parseISO(selectedReport.created_at), 'dd MMM yyyy, h:mm a')}
-                                                                                </div>
+                                                                                <div className="text-sm">{selectedReport && format(parseISO(selectedReport.created_at), 'dd MMM yyyy, h:mm a')}</div>
                                                                             </div>
                                                                             <div>
                                                                                 <Label>Date Report Modified</Label>
-                                                                                <div className="text-sm">
-                                                                                    {selectedReport && format(parseISO(selectedReport.updated_at), 'dd MMM yyyy, h:mm a')}
-                                                                                </div>
+                                                                                <div className="text-sm">{selectedReport && format(parseISO(selectedReport.updated_at), 'dd MMM yyyy, h:mm a')}</div>
                                                                             </div>
                                                                             <div>
                                                                                 <Label>Report Submitted By</Label>
-                                                                                <div className="text-sm">
-                                                                                    {selectedReport?.username}
-                                                                                </div>
+                                                                                <div className="text-sm">{selectedReport?.username}</div>
                                                                             </div>
                                                                         </div>
                                                                         <div className="flex space-x-2 pt-4">
-                                                                            <Button
-                                                                                onClick={() => openConfirmDialog(selectedReport.id, "approve")}
-                                                                                className="bg-green-600 hover:bg-green-700 h-8 text-xs"
-                                                                                size="sm"
-                                                                            >
+                                                                            <Button onClick={() => openConfirmDialog(selectedReport.id, "approve")} className="bg-green-600 hover:bg-green-700 h-8 text-xs" size="sm">
                                                                                 <CheckCircle className="w-3 h-3 mr-1" />
                                                                                 Approve Report
                                                                             </Button>
-                                                                            <Button
-                                                                                className="bg-red-600 hover:bg-red-700 h-8 text-xs"
-                                                                                size="sm"
-                                                                                onClick={() => openConfirmDialog(selectedReport.id, "reject")}
-                                                                            >
+                                                                            <Button className="bg-red-600 hover:bg-red-700 h-8 text-xs" size="sm" onClick={() => openConfirmDialog(selectedReport.id, "reject")}>
                                                                                 <XCircle className="w-3 h-3 mr-1" />
                                                                                 Reject Report
                                                                             </Button>
-                                                                            <Button
-                                                                                variant="outline"
-                                                                                size="sm"
-                                                                                className="h-8 text-xs"
-                                                                                onClick={() =>
-                                                                                    handleReportAction(
-                                                                                        selectedReport?.id,
-                                                                                        "request_info",
-                                                                                    )
-                                                                                }
-                                                                            >
+                                                                            <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => handleReportAction(selectedReport?.id, "request_info")}>
                                                                                 <Clock className="w-3 h-3 mr-1" />
                                                                                 Request More Info
                                                                             </Button>
@@ -809,27 +752,31 @@ export const AdminDashboard = () => {
                                                                     <DialogHeader>
                                                                         <DialogTitle>Confirm Action</DialogTitle>
                                                                         <DialogDescription>
-                                                                            {pendingAction === 'approve' 
-                                                                                ? "Are you sure you want to approve this report?" 
-                                                                                : "Are you sure you want to reject this report?"}
+                                                                            {pendingAction === 'approve' ? "Please provide a reason for approving this report." : "Please provide a reason for rejecting this report."}
                                                                         </DialogDescription>
                                                                     </DialogHeader>
-                                                                    <div className="flex justify-end space-x-2">
-                                                                        <Button
-                                                                            variant="outline"
-                                                                            onClick={() => setIsConfirmDialogOpen(false)}
-                                                                        >
-                                                                            No
-                                                                        </Button>
+                                                                    <div className="mt-4">
+                                                                        <Label htmlFor="adminNotes">Reason (required)</Label>
+                                                                        <textarea
+                                                                            id="adminNotes"
+                                                                            className="w-full p-2 border rounded"
+                                                                            value={adminNotes}
+                                                                            onChange={(e) => setAdminNotes(e.target.value)}
+                                                                            placeholder={`Enter the reason for ${pendingAction}ing this report...`}
+                                                                        />
+                                                                    </div>
+                                                                    <div className="flex justify-end space-x-2 mt-4">
+                                                                        <Button variant="outline" onClick={() => setIsConfirmDialogOpen(false)}>Cancel</Button>
                                                                         <Button
                                                                             onClick={() => {
-                                                                                if (selectedReportId) {
-                                                                                    handleReportAction(selectedReportId, pendingAction);
+                                                                                if (selectedReportId && adminNotes.trim()) {
+                                                                                    handleReportAction(selectedReportId, pendingAction, adminNotes);
+                                                                                    setIsConfirmDialogOpen(false);
                                                                                 }
-                                                                                setIsConfirmDialogOpen(false);
                                                                             }}
+                                                                            disabled={!adminNotes.trim()}
                                                                         >
-                                                                            Yes
+                                                                            Confirm
                                                                         </Button>
                                                                     </div>
                                                                 </DialogContent>
@@ -842,23 +789,9 @@ export const AdminDashboard = () => {
                                     </Table>
                                 </div>
                                 <div className="flex items-center justify-between mt-4">
-                                    <Button
-                                        onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
-                                        disabled={currentPage === 1}
-                                        size="sm"
-                                        className="h-8 text-xs"
-                                    >
-                                        Previous
-                                    </Button>
+                                    <Button onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))} disabled={currentPage === 1} size="sm" className="h-8 text-xs">Previous</Button>
                                     <span className="text-xs">Page {currentPage} of {totalPages}</span>
-                                    <Button
-                                        onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
-                                        disabled={currentPage === totalPages}
-                                        size="sm"
-                                        className="h-8 text-xs"
-                                    >
-                                        Next
-                                    </Button>
+                                    <Button onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))} disabled={currentPage === totalPages} size="sm" className="h-8 text-xs">Next</Button>
                                 </div>
                             </CardContent>
                         </Card>
@@ -872,14 +805,32 @@ export const AdminDashboard = () => {
                                         <Users className="w-4 h-4 mr-2" />
                                         User Management
                                     </CardTitle>
-                                    <div className="flex items-center gap-3">
+                                    <div className="flex flex-wrap gap-4">
                                         <div className="relative">
                                             <Search className="absolute left-2 top-1/2 transform -translate-y-1/2 text-gray-400 w-4 h-4" />
-                                            <Input
-                                                placeholder="Search users..."
-                                                className="pl-8 h-9 text-sm w-64 border-gray-300 focus:border-waterbase-500"
-                                            />
+                                            <Input placeholder="Search users..." className="pl-8 h-9 text-sm w-64 border-gray-300 focus:border-waterbase-500" />
                                         </div>
+                                        <Select value={filterRole} onValueChange={setFilterRole}>
+                                            <SelectTrigger className="w-[180px]">
+                                                <SelectValue placeholder="Role" />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                <SelectItem value="all">All</SelectItem>
+                                                <SelectItem value="user">User</SelectItem>
+                                                <SelectItem value="admin">Admin</SelectItem>
+                                                <SelectItem value="ngo">NGO</SelectItem>
+                                                <SelectItem value="lgu">LGU</SelectItem>
+                                                <SelectItem value="researcher">Researcher</SelectItem>
+                                                <SelectItem value="volunteer">Volunteer</SelectItem>
+                                            </SelectContent>
+                                        </Select>
+                                        <Input placeholder="Organization" value={filterOrganization} onChange={(e) => setFilterOrganization(e.target.value)} className="w-[180px]" />
+                                        <Input placeholder="Area of Responsibility" value={filterArea} onChange={(e) => setFilterArea(e.target.value)} className="w-[180px]" />
+                                        <Input type="date" value={filterJoinDateFrom} onChange={(e) => setFilterJoinDateFrom(e.target.value)} placeholder="Join Date From" />
+                                        <Input type="date" value={filterJoinDateTo} onChange={(e) => setFilterJoinDateTo(e.target.value)} placeholder="Join Date To" />
+                                        <Input type="number" placeholder="Min Reports" value={filterMinReports} onChange={(e) => setFilterMinReports(e.target.value)} className="w-[150px]" />
+                                        <Input type="number" placeholder="Min Events" value={filterMinEvents} onChange={(e) => setFilterMinEvents(e.target.value)} className="w-[150px]" />
+                                        <Button onClick={() => fetchUsers(1)}>Apply Filters</Button>
                                     </div>
                                 </div>
                             </CardHeader>
@@ -891,7 +842,6 @@ export const AdminDashboard = () => {
                                                 <TableHead className="text-xs">User Details</TableHead>
                                                 <TableHead className="text-xs">Role</TableHead>
                                                 <TableHead className="text-xs">Activity</TableHead>
-                                                <TableHead className="text-xs">Status</TableHead>
                                                 <TableHead className="text-xs">Join Date</TableHead>
                                                 <TableHead className="text-xs">Actions</TableHead>
                                             </TableRow>
@@ -901,23 +851,12 @@ export const AdminDashboard = () => {
                                                 <TableRow key={user.id}>
                                                     <TableCell className="py-2">
                                                         <div>
-                                                            <div className="font-medium text-xs">
-                                                                {user.firstName} {user.lastName}
-                                                            </div>
-                                                            <div className="text-xs text-gray-600">
-                                                                {user.email}
-                                                            </div>
+                                                            <div className="font-medium text-xs">{user.firstName} {user.lastName}</div>
+                                                            <div className="text-xs text-gray-600">{user.email}</div>
                                                         </div>
                                                     </TableCell>
                                                     <TableCell className="py-2">
-                                                        <Badge
-                                                            variant={
-                                                                user.role === "NGO" ? "default" : "outline"
-                                                            }
-                                                            className="text-xs h-5 px-1"
-                                                        >
-                                                            {user.role}
-                                                        </Badge>
+                                                        <Badge variant={user.role === "NGO" ? "default" : "outline"} className="text-xs h-5 px-1">{user.role}</Badge>
                                                     </TableCell>
                                                     <TableCell className="py-2">
                                                         <div className="text-xs space-y-1">
@@ -932,46 +871,17 @@ export const AdminDashboard = () => {
                                                         </div>
                                                     </TableCell>
                                                     <TableCell className="py-2">
-                                                        <Badge className={cn("text-xs h-5 px-1", getStatusColor("Active"))}>
-                                                            Active
-                                                        </Badge>
-                                                    </TableCell>
-                                                    <TableCell className="py-2">
                                                         <div className="text-xs">{format(parseISO(user.created_at), 'dd MMM yyyy')}</div>
                                                     </TableCell>
                                                     <TableCell className="py-2">
                                                         <div className="flex items-center space-x-1">
-                                                            <Button
-                                                                variant="outline"
-                                                                size="sm"
-                                                                className="h-7 w-7 p-0"
-                                                                onClick={() => {
-                                                                    setSelectedUser(user);
-                                                                    setShowEditUserDialog(true);
-                                                                }}
-                                                            >
+                                                            <Button variant="outline" size="sm" className="h-7 w-7 p-0" onClick={() => { setSelectedUser(user); setShowEditUserDialog(true); }}>
                                                                 <Edit className="w-3 h-3" />
                                                             </Button>
-                                                            <Button
-                                                                variant="outline"
-                                                                size="sm"
-                                                                className="h-7 w-7 p-0"
-                                                                onClick={() => {
-                                                                    setSelectedUser(user);
-                                                                    setShowUserDialog(true);
-                                                                }}
-                                                            >
+                                                            <Button variant="outline" size="sm" className="h-7 w-7 p-0" onClick={() => { setSelectedUser(user); setShowUserDialog(true); }}>
                                                                 <Eye className="w-3 h-3" />
                                                             </Button>
-                                                            <Button
-                                                                variant="outline"
-                                                                size="sm"
-                                                                className="h-7 w-7 p-0 text-red-600"
-                                                                onClick={() => {
-                                                                    setUserToDelete(user);
-                                                                    setShowDeleteUserDialog(true);
-                                                                }}
-                                                            >
+                                                            <Button variant="outline" size="sm" className="h-7 w-7 p-0 text-red-600" onClick={() => { setUserToDelete(user); setShowDeleteUserDialog(true); }}>
                                                                 <Trash2 className="w-3 h-3" />
                                                             </Button>
                                                         </div>
@@ -982,23 +892,9 @@ export const AdminDashboard = () => {
                                     </Table>
                                 </div>
                                 <div className="flex items-center justify-between mt-4">
-                                    <Button
-                                        onClick={() => setCurrentUserPage(prev => Math.max(prev - 1, 1))}
-                                        disabled={currentUserPage === 1}
-                                        size="sm"
-                                        className="h-8 text-xs"
-                                    >
-                                        Previous
-                                    </Button>
+                                    <Button onClick={() => setCurrentUserPage(prev => Math.max(prev - 1, 1))} disabled={currentUserPage === 1} size="sm" className="h-8 text-xs">Previous</Button>
                                     <span className="text-xs">Page {currentUserPage} of {totalUserPages}</span>
-                                    <Button
-                                        onClick={() => setCurrentUserPage(prev => Math.min(prev + 1, totalUserPages))}
-                                        disabled={currentUserPage === totalUserPages}
-                                        size="sm"
-                                        className="h-8 text-xs"
-                                    >
-                                        Next
-                                    </Button>
+                                    <Button onClick={() => setCurrentUserPage(prev => Math.min(prev + 1, totalUserPages))} disabled={currentUserPage === totalUserPages} size="sm" className="h-8 text-xs">Next</Button>
                                 </div>
                             </CardContent>
                         </Card>
@@ -1012,63 +908,31 @@ export const AdminDashboard = () => {
                                         <div className="grid grid-cols-2 gap-3">
                                             <div>
                                                 <Label htmlFor="firstName">First Name</Label>
-                                                <Input
-                                                    id="firstName"
-                                                    placeholder="Maria"
-                                                    value={editFormData.firstName}
-                                                    onChange={(e) => setEditFormData({ ...editFormData, firstName: e.target.value })}
-                                                    disabled={isUpdating}
-                                                />
+                                                <Input id="firstName" placeholder="Maria" value={editFormData.firstName} onChange={(e) => setEditFormData({ ...editFormData, firstName: e.target.value })} disabled={isUpdating} />
                                             </div>
                                             <div>
                                                 <Label htmlFor="lastName">Last Name</Label>
-                                                <Input
-                                                    id="lastName"
-                                                    placeholder="Santos"
-                                                    value={editFormData.lastName}
-                                                    onChange={(e) => setEditFormData({ ...editFormData, lastName: e.target.value })}
-                                                    disabled={isUpdating}
-                                                />
+                                                <Input id="lastName" placeholder="Santos" value={editFormData.lastName} onChange={(e) => setEditFormData({ ...editFormData, lastName: e.target.value })} disabled={isUpdating} />
                                             </div>
                                         </div>
                                         <div>
                                             <Label htmlFor="email">Email Address</Label>
                                             <div className="relative">
                                                 <Mail className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
-                                                <Input
-                                                    id="email"
-                                                    type="email"
-                                                    placeholder="maria@example.com"
-                                                    className="pl-10"
-                                                    value={editFormData.email}
-                                                    onChange={(e) => setEditFormData({ ...editFormData, email: e.target.value })}
-                                                    disabled={isUpdating}
-                                                />
+                                                <Input id="email" type="email" placeholder="maria@example.com" className="pl-10" value={editFormData.email} onChange={(e) => setEditFormData({ ...editFormData, email: e.target.value })} disabled={isUpdating} />
                                             </div>
                                         </div>
                                         <div>
                                             <Label htmlFor="phoneNumber">Phone Number</Label>
                                             <div className="relative">
                                                 <Phone className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
-                                                <Input
-                                                    id="phoneNumber"
-                                                    type="tel"
-                                                    placeholder="+63 912 345 6789"
-                                                    className="pl-10"
-                                                    value={editFormData.phoneNumber}
-                                                    onChange={(e) => setEditFormData({ ...editFormData, phoneNumber: e.target.value })}
-                                                    disabled={isUpdating}
-                                                />
+                                                <Input id="phoneNumber" type="tel" placeholder="+63 912 345 6789" className="pl-10" value={editFormData.phoneNumber} onChange={(e) => setEditFormData({ ...editFormData, phoneNumber: e.target.value })} disabled={isUpdating} />
                                             </div>
                                         </div>
                                         <div>
                                             <Label htmlFor="role">User Type</Label>
-                                            <Select
-                                                value={editFormData.role}
-                                                onValueChange={(value) => setEditFormData({ ...editFormData, role: value })}
-                                                disabled={isUpdating}
-                                            >
-                                                оно <SelectTrigger>
+                                            <Select value={editFormData.role} onValueChange={(value) => setEditFormData({ ...editFormData, role: value })} disabled={isUpdating}>
+                                                <SelectTrigger>
                                                     <SelectValue placeholder="Select user role" />
                                                 </SelectTrigger>
                                                 <SelectContent>
@@ -1086,39 +950,21 @@ export const AdminDashboard = () => {
                                                 <Label htmlFor="organization">Organization</Label>
                                                 <div className="relative">
                                                     <MapPin className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
-                                                    <Input
-                                                        id="organization"
-                                                        placeholder="Environmental Watch PH"
-                                                        className="pl-10"
-                                                        value={editFormData.organization}
-                                                        onChange={(e) => setEditFormData({ ...editFormData, organization: e.target.value })}
-                                                        disabled={isUpdating}
-                                                    />
+                                                    <Input id="organization" placeholder="Environmental Watch PH" className="pl-10" value={editFormData.organization} onChange={(e) => setEditFormData({ ...editFormData, organization: e.target.value })} disabled={isUpdating} />
                                                 </div>
                                             </div>
                                         )}
                                         {shouldShowOrganizationFields(editFormData.role) && (
                                             <div>
                                                 <Label htmlFor="areaOfResponsibility">Area of Responsibility</Label>
-                                                <SearchableSelect
-                                                    value={editFormData.areaOfResponsibility}
-                                                    onValueChange={(value) => setEditFormData({ ...editFormData, areaOfResponsibility: value })}
-                                                    placeholder="Search for region, province, city, or barangay..."
-                                                    disabled={isUpdating}
-                                                />
-                                                <p className="text-xs text-gray-500 mt-1">
-                                                    Type at least 2 characters to search for locations
-                                                </p>
+                                                <SearchableSelect value={editFormData.areaOfResponsibility} onValueChange={(value) => setEditFormData({ ...editFormData, areaOfResponsibility: value })} placeholder="Search for region, province, city, or barangay..." disabled={isUpdating} />
+                                                <p className="text-xs text-gray-500 mt-1">Type at least 2 characters to search for locations</p>
                                             </div>
                                         )}
                                     </div>
                                     <div className="flex justify-end space-x-2 mt-6">
-                                        <Button variant="outline" onClick={() => setShowEditUserDialog(false)} disabled={isUpdating}>
-                                            Cancel
-                                        </Button>
-                                        <Button onClick={handleUpdateUser} disabled={isUpdating}>
-                                            {isUpdating ? 'Saving...' : 'Save'}
-                                        </Button>
+                                        <Button variant="outline" onClick={() => setShowEditUserDialog(false)} disabled={isUpdating}>Cancel</Button>
+                                        <Button onClick={handleUpdateUser} disabled={isUpdating}>{isUpdating ? 'Saving...' : 'Save'}</Button>
                                     </div>
                                 </DialogContent>
                             </Dialog>
@@ -1167,25 +1013,11 @@ export const AdminDashboard = () => {
                                 <DialogContent>
                                     <DialogHeader>
                                         <DialogTitle>Confirm Delete</DialogTitle>
-                                        <DialogDescription>
-                                            Are you sure you want to delete {userToDelete.firstName} {userToDelete.lastName}?
-                                        </DialogDescription>
+                                        <DialogDescription>Are you sure you want to delete {userToDelete.firstName} {userToDelete.lastName}?</DialogDescription>
                                     </DialogHeader>
                                     <div className="flex justify-end space-x-2">
-                                        <Button 
-                                            variant="outline" 
-                                            onClick={() => setShowDeleteUserDialog(false)}
-                                            disabled={isDeleting}
-                                        >
-                                            Cancel
-                                        </Button>
-                                        <Button 
-                                            variant="destructive"
-                                            onClick={handleDeleteUser}
-                                            disabled={isDeleting}
-                                        >
-                                            {isDeleting ? 'Deleting...' : 'Delete'}
-                                        </Button>
+                                        <Button variant="outline" onClick={() => setShowDeleteUserDialog(false)} disabled={isDeleting}>Cancel</Button>
+                                        <Button variant="destructive" onClick={handleDeleteUser} disabled={isDeleting}>{isDeleting ? 'Deleting...' : 'Delete'}</Button>
                                     </div>
                                 </DialogContent>
                             </Dialog>
@@ -1200,6 +1032,27 @@ export const AdminDashboard = () => {
                                         <Calendar className="w-5 h-5 mr-2" />
                                         Event Management
                                     </CardTitle>
+                                    <div className="flex flex-wrap gap-4">
+                                        <Select value={filterStatus} onValueChange={setFilterStatus}>
+                                            <SelectTrigger className="w-[180px]">
+                                                <SelectValue placeholder="Status" />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                <SelectItem value="all">All</SelectItem>
+                                                <SelectItem value="recruiting">Recruiting</SelectItem>
+                                                <SelectItem value="active">Active</SelectItem>
+                                                <SelectItem value="completed">Completed</SelectItem>
+                                                <SelectItem value="cancelled">Cancelled</SelectItem>
+                                            </SelectContent>
+                                        </Select>
+                                        <Input type="date" value={filterEventDateFrom} onChange={(e) => setFilterEventDateFrom(e.target.value)} placeholder="From Date" />
+                                        <Input type="date" value={filterEventDateTo} onChange={(e) => setFilterEventDateTo(e.target.value)} placeholder="To Date" />
+                                        <Input placeholder="Location" value={filterLocation} onChange={(e) => setFilterLocation(e.target.value)} className="w-[180px]" />
+                                        <Input placeholder="Creator Name" value={filterCreator} onChange={(e) => setFilterCreator(e.target.value)} className="w-[180px]" />
+                                        <Input type="number" placeholder="Min Volunteers" value={filterVolunteersMin} onChange={(e) => setFilterVolunteersMin(e.target.value)} className="w-[150px]" />
+                                        <Input type="number" placeholder="Max Volunteers" value={filterVolunteersMax} onChange={(e) => setFilterVolunteersMax(e.target.value)} className="w-[150px]" />
+                                        <Button onClick={() => fetchEvents(1)}>Apply Filters</Button>
+                                    </div>
                                 </div>
                             </CardHeader>
                             <CardContent>
@@ -1223,30 +1076,11 @@ export const AdminDashboard = () => {
                                                 <TableCell>{event.time}</TableCell>
                                                 <TableCell>{event.address}</TableCell>
                                                 <TableCell>{event.attendees_count} / {event.maxVolunteers}</TableCell>
-                                                <TableCell>
-                                                    <Badge className={getEventStatusColor(event.status)}>
-                                                        {event.status}
-                                                    </Badge>
-                                                </TableCell>
+                                                <TableCell><Badge className={getEventStatusColor(event.status)}>{event.status}</Badge></TableCell>
                                                 <TableCell>
                                                     <div className="flex items-center space-x-1">
-                                                        <Button 
-                                                            variant="outline" 
-                                                            size="sm" 
-                                                            onClick={() => {
-                                                                setSelectedEvent(event);
-                                                                setShowEventDialog(true);
-                                                            }}
-                                                        >
-                                                            <Eye className="w-3 h-3" />
-                                                        </Button>
-                                                        <Button 
-                                                            variant="outline" 
-                                                            size="sm" 
-                                                            onClick={() => {/* TODO: Implement delete event */}}
-                                                        >
-                                                            <Trash2 className="w-3 h-3" />
-                                                        </Button>
+                                                        <Button variant="outline" size="sm" onClick={() => { setSelectedEvent(event); setShowEventDialog(true); }}><Eye className="w-3 h-3" /></Button>
+                                                        <Button variant="outline" size="sm" onClick={() => {/* TODO: Implement delete event */}}><Trash2 className="w-3 h-3" /></Button>
                                                     </div>
                                                 </TableCell>
                                             </TableRow>
@@ -1254,23 +1088,9 @@ export const AdminDashboard = () => {
                                     </TableBody>
                                 </Table>
                                 <div className="flex items-center justify-between mt-4">
-                                    <Button
-                                        onClick={() => setCurrentEventPage(prev => Math.max(prev - 1, 1))}
-                                        disabled={currentEventPage === 1}
-                                        size="sm"
-                                        className="h-8 text-xs"
-                                    >
-                                        Previous
-                                    </Button>
+                                    <Button onClick={() => setCurrentEventPage(prev => Math.max(prev - 1, 1))} disabled={currentEventPage === 1} size="sm" className="h-8 text-xs">Previous</Button>
                                     <span className="text-xs">Page {currentEventPage} of {totalEventPages}</span>
-                                    <Button
-                                        onClick={() => setCurrentEventPage(prev => Math.min(prev + 1, totalEventPages))}
-                                        disabled={currentEventPage === totalEventPages}
-                                        size="sm"
-                                        className="h-8 text-xs"
-                                    >
-                                        Next
-                                    </Button>
+                                    <Button onClick={() => setCurrentEventPage(prev => Math.min(prev + 1, totalEventPages))} disabled={currentEventPage === totalEventPages} size="sm" className="h-8 text-xs">Next</Button>
                                 </div>
                             </CardContent>
                         </Card>
@@ -1279,80 +1099,21 @@ export const AdminDashboard = () => {
                                 <DialogHeader>
                                     <DialogTitle>Event Details</DialogTitle>
                                     <DialogDescription>View all information about this event</DialogDescription>
-                                    <DialogClose asChild>
-                                    </DialogClose>
                                 </DialogHeader>
                                 {selectedEvent && (
                                     <div className="grid grid-cols-2 gap-4 mt-4">
-                                        {/* Basic Information */}
-                                        <div>
-                                            <Label className="font-bold">Title</Label>
-                                            <div className="text-sm">{selectedEvent.title}</div>
-                                        </div>
-                                        <div>
-                                            <Label className="font-bold">Date</Label>
-                                            <div className="text-sm">
-                                                {format(parseISO(selectedEvent.date), 'dd MMM yyyy')}
-                                            </div>
-                                        </div>
-                                        <div>
-                                            <Label className="font-bold">Time</Label>
-                                            <div className="text-sm">{selectedEvent.time}</div>
-                                        </div>
-                                        <div>
-                                            <Label className="font-bold">Duration</Label>
-                                            <div className="text-sm">{selectedEvent.duration} hours</div>
-                                        </div>
-                                        <div className="col-span-2">
-                                            <Label className="font-bold">Description</Label>
-                                            <div className="text-sm">{selectedEvent.description}</div>
-                                        </div>
-
-                                        {/* Location Information */}
-                                        <div>
-                                            <Label className="font-bold">Address</Label>
-                                            <div className="text-sm">{selectedEvent.address}</div>
-                                        </div>
-                                        <div>
-                                            <Label className="font-bold">Coordinates</Label>
-                                            <div className="text-sm">
-                                                {selectedEvent.latitude}, {selectedEvent.longitude}
-                                            </div>
-                                        </div>
-
-                                        {/* Volunteer Information */}
-                                        <div>
-                                            <Label className="font-bold">Volunteers</Label>
-                                            <div className="text-sm">
-                                                {selectedEvent.currentVolunteers} / {selectedEvent.maxVolunteers}
-                                            </div>
-                                        </div>
-
-                                        {/* Event Status */}
-                                        <div>
-                                            <Label className="font-bold mr-2">Status</Label>
-                                            <Badge className={getEventStatusColor(selectedEvent.status)}>
-                                                {selectedEvent.status}
-                                            </Badge>
-                                        </div>
-
-                                        {/* Rewards */}
-                                        <div>
-                                            <Label className="font-bold">Points</Label>
-                                            <div className="text-sm">{selectedEvent.points}</div>
-                                        </div>
-                                        <div>
-                                            <Label className="font-bold">Badge</Label>
-                                            <div className="text-sm">{selectedEvent.badge}</div>
-                                        </div>
-
-                                        {/* Creator Information */}
-                                        <div>
-                                            <Label className="font-bold">Created By</Label>
-                                            <div className="text-sm">
-                                                {selectedEvent.creator.firstName} {selectedEvent.creator.lastName}
-                                            </div>
-                                        </div>
+                                        <div><Label className="font-bold">Title</Label><div className="text-sm">{selectedEvent.title}</div></div>
+                                        <div><Label className="font-bold">Date</Label><div className="text-sm">{format(parseISO(selectedEvent.date), 'dd MMM yyyy')}</div></div>
+                                        <div><Label className="font-bold">Time</Label><div className="text-sm">{selectedEvent.time}</div></div>
+                                        <div><Label className="font-bold">Duration</Label><div className="text-sm">{selectedEvent.duration} hours</div></div>
+                                        <div className="col-span-2"><Label className="font-bold">Description</Label><div className="text-sm">{selectedEvent.description}</div></div>
+                                        <div><Label className="font-bold">Address</Label><div className="text-sm">{selectedEvent.address}</div></div>
+                                        <div><Label className="font-bold">Coordinates</Label><div className="text-sm">{selectedEvent.latitude}, {selectedEvent.longitude}</div></div>
+                                        <div><Label className="font-bold">Volunteers</Label><div className="text-sm">{selectedEvent.currentVolunteers} / {selectedEvent.maxVolunteers}</div></div>
+                                        <div><Label className="font-bold mr-2">Status</Label><Badge className={getEventStatusColor(selectedEvent.status)}>{selectedEvent.status}</Badge></div>
+                                        <div><Label className="font-bold">Points</Label><div className="text-sm">{selectedEvent.points}</div></div>
+                                        <div><Label className="font-bold">Badge</Label><div className="text-sm">{selectedEvent.badge}</div></div>
+                                        <div><Label className="font-bold">Created By</Label><div className="text-sm">{selectedEvent.creator.firstName} {selectedEvent.creator.lastName}</div></div>
                                     </div>
                                 )}
                             </DialogContent>
@@ -1372,9 +1133,7 @@ export const AdminDashboard = () => {
                                     <div>
                                         <Label>AI Validation Threshold</Label>
                                         <Select defaultValue="0.8">
-                                            <SelectTrigger>
-                                                <SelectValue />
-                                            </SelectTrigger>
+                                            <SelectTrigger><SelectValue /></SelectTrigger>
                                             <SelectContent>
                                                 <SelectItem value="0.7">70% Confidence</SelectItem>
                                                 <SelectItem value="0.8">80% Confidence</SelectItem>
@@ -1386,14 +1145,10 @@ export const AdminDashboard = () => {
                                     <div>
                                         <Label>Auto-approve Reports</Label>
                                         <Select defaultValue="disabled">
-                                            <SelectTrigger>
-                                                <SelectValue />
-                                            </SelectTrigger>
+                                            <SelectTrigger><SelectValue /></SelectTrigger>
                                             <SelectContent>
                                                 <SelectItem value="disabled">Disabled</SelectItem>
-                                                <SelectItem value="high">
-                                                    High Confidence Only
-                                                </SelectItem>
+                                                <SelectItem value="high">High Confidence Only</SelectItem>
                                                 <SelectItem value="all">All Above Threshold</SelectItem>
                                             </SelectContent>
                                         </Select>
@@ -1401,9 +1156,7 @@ export const AdminDashboard = () => {
                                     <div>
                                         <Label>Email Notifications</Label>
                                         <Select defaultValue="enabled">
-                                            <SelectTrigger>
-                                                <SelectValue />
-                                            </SelectTrigger>
+                                            <SelectTrigger><SelectValue /></SelectTrigger>
                                             <SelectContent>
                                                 <SelectItem value="enabled">Enabled</SelectItem>
                                                 <SelectItem value="disabled">Disabled</SelectItem>
@@ -1418,22 +1171,10 @@ export const AdminDashboard = () => {
                                     <CardTitle>System Maintenance</CardTitle>
                                 </CardHeader>
                                 <CardContent className="space-y-4">
-                                    <Button variant="outline" className="w-full">
-                                        <Download className="w-4 h-4 mr-2" />
-                                        Export System Data
-                                    </Button>
-                                    <Button variant="outline" className="w-full">
-                                        <RefreshCw className="w-4 h-4 mr-2" />
-                                        Clear Cache
-                                    </Button>
-                                    <Button variant="outline" className="w-full">
-                                        <BarChart3 className="w-4 h-4 mr-2" />
-                                        Generate Reports
-                                    </Button>
-                                    <Button variant="destructive" className="w-full">
-                                        <Shield className="w-4 h-4 mr-2" />
-                                        System Backup
-                                    </Button>
+                                    <Button variant="outline" className="w-full"><Download className="w-4 h-4 mr-2" />Export System Data</Button>
+                                    <Button variant="outline" className="w-full"><RefreshCw className="w-4 h-4 mr-2" />Clear Cache</Button>
+                                    <Button variant="outline" className="w-full"><BarChart3 className="w-4 h-4 mr-2" />Generate Reports</Button>
+                                    <Button variant="destructive" className="w-full"><Shield className="w-4 h-4 mr-2" />System Backup</Button>
                                 </CardContent>
                             </Card>
                         </div>

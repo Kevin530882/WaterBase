@@ -8,6 +8,7 @@ use App\Http\Controllers\ReportController;
 use App\Http\Controllers\GeographicController;
 use App\Http\Controllers\DetectPollutionController;
 use App\Http\Controllers\AdminDashboardController;
+use App\Http\Controllers\AdminReportsController;
 use App\Http\Controllers\DashboardController;
 
 Route::post('/login', [UserController::class, 'login']);
@@ -56,6 +57,11 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/dashboard/monthly-trends', [DashboardController::class, 'getMonthlyTrends']);
 
     Route::post('/predict', [DetectPollutionController::class, 'predict']);
+    
+    Route::get('/admin/reports', [AdminReportsController::class, 'getAllReports']);
+    Route::put("/admin/reports/{report}", [AdminReportsController::class,'updateReport']);
+    Route::delete('/admin/reports/{report}', [AdminReportsController::class, 'deleteReport']);
+    Route::get('/admin/reports/stats', [AdminReportsController::class, 'getReportStats']);
 
     Route::get('/admin/reports/pending', [AdminDashboardController::class, 'getPendingReports']);
     Route::put('/admin/reports/{report}/status', [AdminDashboardController::class, 'updateStatus']);

@@ -23,7 +23,9 @@ class Report extends Model
         'ai_annotated_image',
         'user_id',
         'status',
-        'verifiedBy'
+        'verifiedBy',
+        'verified_at',
+        'admin_notes'
     ];
 
     protected $casts = [
@@ -34,5 +36,9 @@ class Report extends Model
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class, 'user_id');
+    }
+        public function verifiedBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'verifiedBy');
     }
 }
