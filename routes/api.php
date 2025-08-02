@@ -8,6 +8,7 @@ use App\Http\Controllers\ReportController;
 use App\Http\Controllers\GeographicController;
 use App\Http\Controllers\DetectPollutionController;
 use App\Http\Controllers\AdminDashboardController;
+use App\Http\Controllers\DashboardController;
 
 Route::post('/login', [UserController::class, 'login']);
 Route::post('/register', [UserController::class, 'register']);
@@ -47,12 +48,18 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::put('/user/profile', [UserController::class, 'updateProfile']);
     Route::get('/user/stats', [UserController::class, 'getStats']);
 
+    // Dashboard routes
+    Route::get('/dashboard/stats', [DashboardController::class, 'getStats']);
+    Route::get('/dashboard/recent-reports', [DashboardController::class, 'getRecentReports']);
+    Route::get('/dashboard/reports-by-region', [DashboardController::class, 'getReportsByRegion']);
+    Route::get('/dashboard/monthly-trends', [DashboardController::class, 'getMonthlyTrends']);
+
     Route::post('/predict', [DetectPollutionController::class, 'predict']);
 
-    Route::get('/admin/reports/pending',[AdminDashboardController::class,'getPendingReports']);
+    Route::get('/admin/reports/pending', [AdminDashboardController::class, 'getPendingReports']);
     Route::put('/admin/reports/{report}/status', [AdminDashboardController::class, 'updateStatus']);
 
-    Route::get('/admin/users', [AdminDashboardController::class,'getExistingUsers']);
-    Route::put('/admin/users/{user}', [AdminDashboardController::class,'editExistingUser']);
+    Route::get('/admin/users', [AdminDashboardController::class, 'getExistingUsers']);
+    Route::put('/admin/users/{user}', [AdminDashboardController::class, 'editExistingUser']);
     Route::delete('/admin/users/{user}', [AdminDashboardController::class, 'deleteUser']);
 });

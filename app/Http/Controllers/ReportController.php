@@ -86,105 +86,105 @@ class ReportController extends Controller
         return $this->index($request);
     }
 
-public function store(Request $request)
-{
-    try {
-        // Validate request data
-        $reportsValidated = $request->validate([
-            'title' => 'required|string|max:255|min:1',
-            'content' => 'required|string',
-            'address' => 'required|string',
-            'latitude' => 'required|numeric|between:-90,90',
-            'longitude' => 'required|numeric|between:-180,180',
-            'pollutionType' => 'required|string',
-            'status' => ['required', new Enum(ReportStatus::class)],
-            'image' => 'required|image|mimes:jpeg,png,jpg,gif|max:2048',
-            'severityByUser' => ['required', new Enum(SeverityLevel::class)],
-            'user_id' => 'required|integer|exists:users,id',
-            'severityByAI' => ['required', new Enum(SeverityLevel::class)],
-            'ai_verified' => 'boolean',
-            'ai_confidence' => 'numeric',
-            'severityPercentage' => 'numeric',
-        ]);
-
-        // Store image
+    public function store(Request $request)
+    {
         try {
-            $file = $request->file('image');
-            $fileName = $file->getClientOriginalName();
-            // Store original image
-            $path = Storage::disk('public')->putFileAs('uploads', $file, $fileName);
-            $imagePath = Storage::url($path);
+            // Validate request data
+            $reportsValidated = $request->validate([
+                'title' => 'required|string|max:255|min:1',
+                'content' => 'required|string',
+                'address' => 'required|string',
+                'latitude' => 'required|numeric|between:-90,90',
+                'longitude' => 'required|numeric|between:-180,180',
+                'pollutionType' => 'required|string',
+                'status' => ['required', new Enum(ReportStatus::class)],
+                'image' => 'required|image|mimes:jpeg,png,jpg,gif|max:2048',
+                'severityByUser' => ['required', new Enum(SeverityLevel::class)],
+                'user_id' => 'required|integer|exists:users,id',
+                'severityByAI' => ['required', new Enum(SeverityLevel::class)],
+                'ai_verified' => 'boolean',
+                'ai_confidence' => 'numeric',
+                'severityPercentage' => 'numeric',
+            ]);
 
-            if (!$imagePath) {
-                throw new \Exception('Failed to store image in uploads directory.');
+            // Store image
+            try {
+                $file = $request->file('image');
+                $fileName = $file->getClientOriginalName();
+                // Store original image
+                $path = Storage::disk('public')->putFileAs('uploads', $file, $fileName);
+                $imagePath = Storage::url($path);
+
+                if (!$imagePath) {
+                    throw new \Exception('Failed to store image in uploads directory.');
+                }
+
+                // Construct annotated image path
+                //$fileExtension = pathinfo($fileName, PATHINFO_EXTENSION);
+                $fileNameWithoutExtension = pathinfo($fileName, PATHINFO_FILENAME);
+                $annotatedFileName = $fileNameWithoutExtension . '_annotated.' . 'jpg';
+                $annotatedImagePath = Storage::url('uploads/' . $annotatedFileName);
+
+                // Verify if annotated image exists
+                if (!Storage::disk('public')->exists('uploads/' . $annotatedFileName)) {
+                    throw new \Exception('Annotated image does not exist.');
+                }
+
+            } catch (\Exception $e) {
+                Log::error('Image storage failed: ' . $e->getMessage(), [
+                    'file' => $fileName,
+                    'user_id' => $request->user_id,
+                ]);
+                return response()->json([
+                    'status' => 'error',
+                    'message' => 'Failed to store image: ' . $e->getMessage(),
+                ], 500);
             }
 
-            // Construct annotated image path
-            //$fileExtension = pathinfo($fileName, PATHINFO_EXTENSION);
-            $fileNameWithoutExtension = pathinfo($fileName, PATHINFO_FILENAME);
-            $annotatedFileName = $fileNameWithoutExtension . '_annotated.' . 'jpg';
-            $annotatedImagePath = Storage::url('uploads/' . $annotatedFileName);
-
-            // Verify if annotated image exists
-            if (!Storage::disk('public')->exists('uploads/' . $annotatedFileName)) {
-                throw new \Exception('Annotated image does not exist.');
+            // Create report
+            try {
+                $report = Report::create(array_merge($reportsValidated, [
+                    'image' => $imagePath, // Store original image path
+                    'ai_annotated_image' => $annotatedImagePath, // Store annotated image path
+                ]));
+            } catch (\Exception $e) {
+                Log::error('Report creation failed: ' . $e->getMessage(), [
+                    'validated_data' => $reportsValidated,
+                    'image_path' => $imagePath,
+                    'annotated_image_path' => $annotatedImagePath,
+                ]);
+                return response()->json([
+                    'status' => 'error',
+                    'message' => 'Failed to create report: ' . $e->getMessage(),
+                ], 500);
             }
 
-        } catch (\Exception $e) {
-            Log::error('Image storage failed: ' . $e->getMessage(), [
-                'file' => $fileName,
-                'user_id' => $request->user_id,
+            return response()->json([
+                'success' => 'Report Created Successfully',
+                'status' => 'success',
+                'report' => $report,
+            ], 200);
+
+        } catch (ValidationException $e) {
+            Log::warning('Validation failed for report creation: ' . json_encode($e->errors()), [
+                'request_data' => $request->all(),
             ]);
             return response()->json([
                 'status' => 'error',
-                'message' => 'Failed to store image: ' . $e->getMessage(),
-            ], 500);
-        }
-
-        // Create report
-        try {
-            $report = Report::create(array_merge($reportsValidated, [
-                'image' => $imagePath, // Store original image path
-                'ai_annotated_image' => $annotatedImagePath, // Store annotated image path
-            ]));
+                'message' => 'Validation failed',
+                'errors' => $e->errors(),
+            ], 422);
         } catch (\Exception $e) {
-            Log::error('Report creation failed: ' . $e->getMessage(), [
-                'validated_data' => $reportsValidated,
-                'image_path' => $imagePath,
-                'annotated_image_path' => $annotatedImagePath,
+            Log::error('Unexpected error in report creation: ' . $e->getMessage(), [
+                'request_data' => $request->all(),
+                'trace' => $e->getTraceAsString(),
             ]);
             return response()->json([
                 'status' => 'error',
-                'message' => 'Failed to create report: ' . $e->getMessage(),
+                'message' => 'An unexpected error occurred. Please try again later.',
             ], 500);
         }
-
-        return response()->json([
-            'success' => 'Report Created Successfully',
-            'status' => 'success',
-            'report' => $report,
-        ], 200);
-
-    } catch (ValidationException $e) {
-        Log::warning('Validation failed for report creation: ' . json_encode($e->errors()), [
-            'request_data' => $request->all(),
-        ]);
-        return response()->json([
-            'status' => 'error',
-            'message' => 'Validation failed',
-            'errors' => $e->errors(),
-        ], 422);
-    } catch (\Exception $e) {
-        Log::error('Unexpected error in report creation: ' . $e->getMessage(), [
-            'request_data' => $request->all(),
-            'trace' => $e->getTraceAsString(),
-        ]);
-        return response()->json([
-            'status' => 'error',
-            'message' => 'An unexpected error occurred. Please try again later.',
-        ], 500);
     }
-}
 
     public function show(string $id)
     {
