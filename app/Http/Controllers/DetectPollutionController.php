@@ -12,7 +12,7 @@ class DetectPollutionController extends Controller
     {
         set_time_limit(600);
         $request->validate([
-            'image' => 'required|image|mimes:jpeg,png,jpg|max:2048',
+            'image' => 'required|image|mimes:jpeg,png,jpg|max:5120',
         ]);
 
         // Store the uploaded image

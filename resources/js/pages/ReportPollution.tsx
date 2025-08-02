@@ -30,7 +30,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { MapPin, Upload } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { OpenStreetMapSearchableSelect } from "@/components/pagecomponents/openstreetmap-searchable-select";
-
+import { formatDisplayName, NominatimResult } from '@/utils/location';
 export const ReportPollution = () => {
   const { user, isAuthenticated } = useAuth();
   const [showReportForm, setShowReportForm] = useState(false);
@@ -70,11 +70,12 @@ export const ReportPollution = () => {
       console.log('Verify image response:', response);
       console.log('Verify image data:', data);
       if (response.ok && data.tampered === false && data.gps != null) {
+        const newAddress = await fetchAddressFromCoordinates(data.gps.latitude,data.gps.longitude);
         setNewReport(prev => ({
           ...prev,
-          address: data.address || '',
-          latitude: data.latitude?.toString() || '',
-          longitude: data.longitude?.toString() || ''
+          address: newAddress || '',
+          latitude: data.gps.latitude?.toString() || '',
+          longitude: data.gps.longitude?.toString() || ''
         }));
         setVerificationStatus('success');
         setShowLocationFields(false);
@@ -310,25 +311,63 @@ export const ReportPollution = () => {
     }
   };
 
-  const handleGetCurrentLocation = () => {
-    if (navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(
-        (position) => {
+const fetchAddressFromCoordinates = async (lat: number, lon: number) => {
+  try {
+    const url = `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}&addressdetails=1`;
+    const response = await fetch(url, {
+      headers: {
+        'User-Agent': 'WaterBase-App/1.0'
+      }
+    });
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    const data: NominatimResult = await response.json();
+    console.log('Reverse Geocoding Response:', data); // Add this for debugging
+    if (data && data.display_name) {
+      return formatDisplayName(data);
+    } else {
+      throw new Error('No address found');
+    }
+  } catch (error) {
+    console.error('Error fetching address:', error);
+    throw error;
+  }
+};
+const handleGetCurrentLocation = () => {
+  if (navigator.geolocation) {
+    navigator.geolocation.getCurrentPosition(
+      async (position) => {
+        const lat = position.coords.latitude;
+        const lon = position.coords.longitude;
+        try {
+          const address = await fetchAddressFromCoordinates(lat, lon);
           setNewReport({
             ...newReport,
-            latitude: position.coords.latitude.toString(),
-            longitude: position.coords.longitude.toString(),
+            latitude: lat.toString(),
+            longitude: lon.toString(),
+            address: address
           });
-        },
-        (error) => {
-          console.error('Geolocation error:', error);
-          setErrorMessage('Could not get current location. Please enter coordinates manually.');
+          setErrorMessage('');
+        } catch (error) {
+          setNewReport({
+            ...newReport,
+            latitude: lat.toString(),
+            longitude: lon.toString(),
+            address: ''
+          });
+          setErrorMessage('Could not fetch address. Please enter manually or search.');
         }
-      );
-    } else {
-      setErrorMessage('Geolocation is not supported by this browser.');
-    }
-  };
+      },
+      (error) => {
+        console.error('Geolocation error:', error);
+        setErrorMessage('Could not get current location. Please enter coordinates manually.');
+      }
+    );
+  } else {
+    setErrorMessage('Geolocation is not supported by this browser.');
+  }
+};
 
 
   return (

@@ -113,7 +113,7 @@ class ReportController extends Controller
                 'longitude' => 'required|numeric|between:-180,180',
                 'pollutionType' => 'required|string',
                 'status' => ['required', new Enum(ReportStatus::class)],
-                'image' => 'required|image|mimes:jpeg,png,jpg,gif|max:2048',
+                'image' => 'required|image|mimes:jpeg,png,jpg,gif|max:5120',
                 'severityByUser' => ['required', new Enum(SeverityLevel::class)],
                 'user_id' => 'required|integer|exists:users,id',
                 'severityByAI' => ['required', new Enum(SeverityLevel::class)],
@@ -333,7 +333,7 @@ class ReportController extends Controller
             // Store the uploaded image
             set_time_limit(600);
             $request->validate([
-                'image' => 'required|image|mimes:jpeg,png,jpg|max:2048',
+                'image' => 'required|image|mimes:jpeg,png,jpg|max:5120',
             ]);
 
             // Store the uploaded image
