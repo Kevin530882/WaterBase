@@ -128,6 +128,7 @@ export const OrganizerPortal = () => {
 
         try {
             setIsLoadingEvents(true);
+            console.log('Fetching created events for user:', user.id);
 
             const response = await fetch(`/api/events?user_id=${user.id}`, {
                 headers: {
@@ -138,9 +139,10 @@ export const OrganizerPortal = () => {
 
             if (response.ok) {
                 const data = await response.json();
+                console.log('Fetched events:', data);
                 setCreatedEvents(data);
             } else {
-                console.error('Failed to fetch events');
+                console.error('Failed to fetch events:', response.status);
             }
         } catch (error) {
             console.error('Error fetching events:', error);
@@ -152,6 +154,7 @@ export const OrganizerPortal = () => {
     // Process reports into eligible areas using report groups or legacy grouping
     const processEligibleAreas = (reports: Report[]) => {
         console.log('Processing eligible areas with reports:', reports);
+        console.log('Current createdEvents:', createdEvents);
 
         if (!reports || reports.length === 0) {
             console.log('No reports to process');
@@ -181,12 +184,23 @@ export const OrganizerPortal = () => {
     };
 
     const checkIfLocationHasEvent = (coordinates: { lat: number; lng: number }) => {
-        if (!createdEvents || createdEvents.length === 0) return false;
+        console.log('Checking if location has event:', coordinates);
+        console.log('Available events:', createdEvents);
 
-        return createdEvents.some(event => {
+        if (!createdEvents || createdEvents.length === 0) {
+            console.log('No events available');
+            return false;
+        }
+
+        const hasEvent = createdEvents.some(event => {
             const eventCoords = { lat: event.latitude, lng: event.longitude };
-            return areLocationsMatching(eventCoords, coordinates);
+            const isMatching = areLocationsMatching(eventCoords, coordinates);
+            console.log(`Event at ${eventCoords.lat}, ${eventCoords.lng} matches ${coordinates.lat}, ${coordinates.lng}:`, isMatching);
+            return isMatching;
         });
+
+        console.log('Location has event:', hasEvent);
+        return hasEvent;
     };
 
     const getMostRecentEventDateForLocation = (coordinates: { lat: number; lng: number }) => {
@@ -575,11 +589,24 @@ export const OrganizerPortal = () => {
         return 'Low';
     };
 
-    useEffect(() => {
-        fetchReports();
+    const handleRefreshData = async () => {
         if (user?.id) {
-            fetchCreatedEvents();
+            // First fetch events, then reports (reports processing depends on events)
+            await fetchCreatedEvents();
         }
+        await fetchReports();
+    };
+
+    useEffect(() => {
+        const loadData = async () => {
+            if (user?.id) {
+                // First fetch events, then reports (reports processing depends on events)
+                await fetchCreatedEvents();
+            }
+            await fetchReports();
+        };
+
+        loadData();
     }, [user?.id, token]);
 
     const handleViewReport = (report: Report) => {
@@ -605,7 +632,7 @@ export const OrganizerPortal = () => {
             });
 
             if (response.ok) {
-                fetchReports();
+                await handleRefreshData();
                 alert('Report declined successfully!');
             } else {
                 throw new Error('Failed to decline report');
@@ -646,7 +673,7 @@ export const OrganizerPortal = () => {
             if (response.ok) {
                 const responseData = await response.json();
                 console.log('Bulk decline success:', responseData);
-                fetchReports();
+                await handleRefreshData();
                 alert(`Successfully declined ${pendingReports.length} reports!`);
             } else {
                 const errorData = await response.json();
@@ -710,7 +737,7 @@ export const OrganizerPortal = () => {
                         <Button
                             variant="outline"
                             size="sm"
-                            onClick={fetchReports}
+                            onClick={handleRefreshData}
                             disabled={isLoading}
                         >
                             <RefreshCw className={cn("w-4 h-4 mr-2", isLoading && "animate-spin")} />
