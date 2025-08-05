@@ -90,9 +90,9 @@ class AdminReportsController extends Controller
                 'title' => 'sometimes|string|max:255',
                 'content' => 'sometimes|string',
                 'pollutionType' => 'sometimes|string',
-                'status' => 'sometimes|in:pending,verified,declined',
+                'status' => 'sometimes|in:pending,verified,declined,resolved',
                 'severityByAI' => 'sometimes|in:low,medium,high,critical',
-                'admin_notes' => 'sometimes|string',
+                'admin_notes' => 'string',
             ]);
 
             $report->update($validated);

@@ -76,6 +76,7 @@ export const AdminDashboard = () => {
     const [isConfirmDialogOpen, setIsConfirmDialogOpen] = useState(false);
     const [pendingAction, setPendingAction] = useState('');
     const [selectedReportId, setSelectedReportId] = useState(null);
+
     const [users, setUsers] = useState([]);
     const [currentUserPage, setCurrentUserPage] = useState(1);
     const [totalUserPages, setTotalUserPages] = useState(1);
@@ -97,10 +98,14 @@ export const AdminDashboard = () => {
     const [isDeleting, setIsDeleting] = useState(false);
     const [errorMessage, setErrorMessage] = useState('');
     const [successMessage, setSuccessMessage] = useState('');
+    
     const [events, setEvents] = useState([]);
     const [currentEventPage, setCurrentEventPage] = useState(1);
     const [totalEventPages, setTotalEventPages] = useState(1);
     const [showEventDialog, setShowEventDialog] = useState(false);
+    const [showDeleteEventDialog, setShowDeleteEventDialog] = useState(false);
+    const [eventToDelete, setEventToDelete] = useState(null);
+    const [isDeletingEvent, setIsDeletingEvent] = useState(false);
     const [selectedEvent, setSelectedEvent] = useState(null);
     const [adminStats, setAdminStats] = useState({
         totalUsers: 0,
@@ -112,6 +117,7 @@ export const AdminDashboard = () => {
         rejectedReports: 0,
         monthlyGrowth: 0,
     });
+    
     const [refreshKey, setRefreshKey] = useState(0);
 
     // Filter states for Reports Validation Queue
@@ -123,6 +129,7 @@ export const AdminDashboard = () => {
     const [filterDateFrom, setFilterDateFrom] = useState('');
     const [filterDateTo, setFilterDateTo] = useState('');
     const [filterSubmitter, setFilterSubmitter] = useState('');
+    const [adminNotes, setAdminNotes] = useState('');
 
     // Filter states for Users Management
     const [filterRole, setFilterRole] = useState('');
@@ -141,7 +148,7 @@ export const AdminDashboard = () => {
     const [filterCreator, setFilterCreator] = useState('');
     const [filterVolunteersMin, setFilterVolunteersMin] = useState('');
     const [filterVolunteersMax, setFilterVolunteersMax] = useState('');
-    const [adminNotes, setAdminNotes] = useState('');
+    
 
     const refreshData = () => {
         setRefreshKey(prev => prev + 1);
@@ -359,14 +366,37 @@ export const AdminDashboard = () => {
         }
     };
 
+    const handleDeleteEvent = async () => {
+        setIsDeletingEvent(true);
+        try {
+            const response = await fetch(`/api/admin/events/${eventToDelete.id}`, {
+                method: 'DELETE',
+                headers: {
+                    'Authorization': `Bearer ${localStorage.getItem('auth_token')}`,
+                },
+            });
+            if (!response.ok) throw new Error('Failed to delete event');
+            fetchEvents(currentEventPage);
+            setShowDeleteEventDialog(false);
+            setSuccessMessage('Event deleted successfully');
+            setTimeout(() => setSuccessMessage(''), 5000);
+        } catch (error) {
+            console.error('Error deleting event:', error);
+            setErrorMessage('Failed to delete event. Please try again.');
+        } finally {
+            setIsDeletingEvent(false);
+        }
+    };
+
     useEffect(() => {
         if (selectedUser) {
             setEditFormData({
                 firstName: selectedUser.firstName || '',
                 lastName: selectedUser.lastName || '',
                 email: selectedUser.email || '',
-                phoneNumber: selectedUser.phoneNumber || '',
-                role: selectedUser.role || '',
+                phoneNumber: selectedUser.phoneNumber ||
+
+'',                role: selectedUser.role || '',
                 organization: selectedUser.organization || '',
                 areaOfResponsibility: selectedUser.areaOfResponsibility || ''
             });
@@ -470,7 +500,7 @@ export const AdminDashboard = () => {
                         <TabsTrigger value="overview" className="text-xs px-2 py-1 data-[state=active]:bg-waterbase-500 data-[state=active]:text-white">Overview</TabsTrigger>
                         <TabsTrigger value="reports" className="text-xs px-2 py-1 data-[state=active]:bg-waterbase-500 data-[state=active]:text-white">Reports</TabsTrigger>
                         <TabsTrigger value="users" className="text-xs px-2 py-1 data-[state=active]:bg-waterbase-500 data-[state=active]:text-white">Users</TabsTrigger>
-                        <TabsTrigger value="volunteers" className="text-xs px-2 py-1 data-[state=active]:bg-waterbase-500 data-[state=active]:text-white">Tasks</TabsTrigger>
+                        <TabsTrigger value="volunteers" className="text-xs px-2 py-1 data-[state=active]:bg-waterbase-500 data-[state=active]:text-white">Events</TabsTrigger>
                         <TabsTrigger value="settings" className="text-xs px-2 py-1 data-[state=active]:bg-waterbase-500 data-[state=active]:text-white">Settings</TabsTrigger>
                     </TabsList>
 
@@ -618,8 +648,8 @@ export const AdminDashboard = () => {
                                                 <TableHead className="text-xs">Report Details</TableHead>
                                                 <TableHead className="text-xs">Submitter</TableHead>
                                                 <TableHead className="text-xs">Type & AI Severity</TableHead>
-                                                <TableHead className="text-xs">AI Confidence</TableHead>
-                                                <TableHead className="text-xs">Submitted</TableHead>
+                                                <TableHead className="text-xs hidden md:table-cell">AI Confidence</TableHead>
+                                                <TableHead className="text-xs hidden md:table-cell">Submitted</TableHead>
                                                 <TableHead className="text-xs">Actions</TableHead>
                                             </TableRow>
                                         </TableHeader>
@@ -627,27 +657,27 @@ export const AdminDashboard = () => {
                                             {reports.map((report) => (
                                                 <TableRow key={report.id}>
                                                     <TableCell className="py-2">
-                                                        <div>
-                                                            <div className="font-medium text-xs">{report.title}</div>
-                                                            <div className="text-xs text-gray-600">{report.address}</div>
+                                                        <div className="max-w-[150px]">
+                                                            <div className="font-medium text-xs truncate">{report.title}</div>
+                                                            <div className="text-xs text-gray-600 truncate">{report.address}</div>
                                                         </div>
                                                     </TableCell>
                                                     <TableCell className="py-2">
-                                                        <div className="text-xs">{report.username}</div>
+                                                        <div className="text-xs truncate">{report.username}</div>
                                                     </TableCell>
                                                     <TableCell className="py-2">
                                                         <div className="space-y-1">
-                                                            <Badge variant="outline" className="text-xs h-5 px-1 mr-1">{report.pollutionType}</Badge>
-                                                            <Badge className={cn("text-xs h-5 px-1", getSeverityColor(report.severityByAI))}>{report.severityByAI}</Badge>
+                                                            <Badge variant="outline" className="text-xs h-5 px-1 mr-1 max-w-[100px] truncate">{report.pollutionType}</Badge>
+                                                            <Badge className={cn("text-xs h-5 px-1 max-w-[100px] truncate", getSeverityColor(report.severityByAI))}>{report.severityByAI}</Badge>
                                                         </div>
                                                     </TableCell>
-                                                    <TableCell className="py-2">
+                                                    <TableCell className="py-2 hidden md:table-cell">
                                                         <div className="flex items-center">
                                                             <div className="text-xs font-medium">{report.ai_confidence}%</div>
                                                             <div className={cn("ml-2 w-2 h-2 rounded-full", report.ai_confidence > 90 ? "bg-green-500" : report.ai_confidence > 70 ? "bg-yellow-500" : "bg-red-500")} />
                                                         </div>
                                                     </TableCell>
-                                                    <TableCell className="py-2">
+                                                    <TableCell className="py-2 hidden md:table-cell">
                                                         <div className="text-xs text-gray-600">{format(parseISO(report.created_at), 'dd MMM yyyy, h:mm a')}</div>
                                                     </TableCell>
                                                     <TableCell className="py-2">
@@ -658,7 +688,7 @@ export const AdminDashboard = () => {
                                                                         <Eye className="w-3 h-3" />
                                                                     </Button>
                                                                 </DialogTrigger>
-                                                                <DialogContent className="max-w-3xl">
+                                                                <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto">
                                                                     <DialogHeader>
                                                                         <DialogTitle>Report Validation</DialogTitle>
                                                                         <DialogDescription>Review and validate pollution report</DialogDescription>
@@ -682,15 +712,15 @@ export const AdminDashboard = () => {
                                                                             <div className="flex flex-col items-center">
                                                                                 <Label className="mb-2">Submitted Image</Label>
                                                                                 {selectedReport?.image ? (
-                                                                                    <img src={selectedReport.image} alt="Submitted" className="max-h-300 rounded-md border border-gray-300" />
+                                                                                    <img src={selectedReport.image} alt="Submitted" className="w-full max-h-[400px] object-contain rounded-md border border-gray-300" />
                                                                                 ) : (
                                                                                     <p className="text-xs text-gray-500">No submitted image available</p>
-                                                                                )}
+                                                                                 )}
                                                                             </div>
                                                                             <div className="flex flex-col items-center">
                                                                                 <Label className="mb-2">AI Annotated Image</Label>
                                                                                 {selectedReport?.ai_annotated_image ? (
-                                                                                    <img src={selectedReport.ai_annotated_image} alt="AI Annotated" className="max-h-300 rounded-md border border-gray-300" />
+                                                                                    <img src={selectedReport.ai_annotated_image} alt="AI Annotated" className="w-full max-h-[400px] object-contain rounded-md border border-gray-300" />
                                                                                 ) : (
                                                                                     <p className="text-xs text-gray-500">No AI annotated image available</p>
                                                                                 )}
@@ -816,7 +846,6 @@ export const AdminDashboard = () => {
                                             </SelectTrigger>
                                             <SelectContent>
                                                 <SelectItem value="all">All</SelectItem>
-                                                <SelectItem value="user">User</SelectItem>
                                                 <SelectItem value="admin">Admin</SelectItem>
                                                 <SelectItem value="ngo">NGO</SelectItem>
                                                 <SelectItem value="lgu">LGU</SelectItem>
@@ -841,8 +870,8 @@ export const AdminDashboard = () => {
                                             <TableRow>
                                                 <TableHead className="text-xs">User Details</TableHead>
                                                 <TableHead className="text-xs">Role</TableHead>
-                                                <TableHead className="text-xs">Activity</TableHead>
-                                                <TableHead className="text-xs">Join Date</TableHead>
+                                                <TableHead className="text-xs hidden md:table-cell">Activity</TableHead>
+                                                <TableHead className="text-xs hidden md:table-cell">Join Date</TableHead>
                                                 <TableHead className="text-xs">Actions</TableHead>
                                             </TableRow>
                                         </TableHeader>
@@ -850,15 +879,15 @@ export const AdminDashboard = () => {
                                             {users.map((user) => (
                                                 <TableRow key={user.id}>
                                                     <TableCell className="py-2">
-                                                        <div>
-                                                            <div className="font-medium text-xs">{user.firstName} {user.lastName}</div>
-                                                            <div className="text-xs text-gray-600">{user.email}</div>
+                                                        <div className="max-w-[150px]">
+                                                            <div className="font-medium text-xs truncate">{user.firstName} {user.lastName}</div>
+                                                            <div className="text-xs text-gray-600 truncate">{user.email}</div>
                                                         </div>
                                                     </TableCell>
                                                     <TableCell className="py-2">
-                                                        <Badge variant={user.role === "NGO" ? "default" : "outline"} className="text-xs h-5 px-1">{user.role}</Badge>
+                                                        <Badge variant={user.role === "NGO" ? "default" : "outline"} className="text-xs h-5 px-1 max-w-[100px] truncate">{user.role}</Badge>
                                                     </TableCell>
-                                                    <TableCell className="py-2">
+                                                    <TableCell className="py-2 hidden md:table-cell">
                                                         <div className="text-xs space-y-1">
                                                             {user.role === "volunteer" ? (
                                                                 <>
@@ -870,7 +899,7 @@ export const AdminDashboard = () => {
                                                             )}
                                                         </div>
                                                     </TableCell>
-                                                    <TableCell className="py-2">
+                                                    <TableCell className="py-2 hidden md:table-cell">
                                                         <div className="text-xs">{format(parseISO(user.created_at), 'dd MMM yyyy')}</div>
                                                     </TableCell>
                                                     <TableCell className="py-2">
@@ -900,7 +929,7 @@ export const AdminDashboard = () => {
                         </Card>
                         {selectedUser && (
                             <Dialog open={showEditUserDialog} onOpenChange={setShowEditUserDialog}>
-                                <DialogContent>
+                                <DialogContent className="max-h-[80vh] overflow-y-auto">
                                     <DialogHeader>
                                         <DialogTitle>Edit User</DialogTitle>
                                     </DialogHeader>
@@ -971,7 +1000,7 @@ export const AdminDashboard = () => {
                         )}
                         {selectedUser && (
                             <Dialog open={showUserDialog} onOpenChange={setShowUserDialog}>
-                                <DialogContent>
+                                <DialogContent className="max-h-[80vh] overflow-y-auto">
                                     <DialogHeader>
                                         <DialogTitle>User Details</DialogTitle>
                                     </DialogHeader>
@@ -1028,7 +1057,7 @@ export const AdminDashboard = () => {
                         <Card className="border-waterbase-200">
                             <CardHeader>
                                 <div className="flex items-center justify-between">
-                                    <CardTitle className="flex items-center">
+                                    <CardTitle className="flex items-center text-lg">
                                         <Calendar className="w-5 h-5 mr-2" />
                                         Event Management
                                     </CardTitle>
@@ -1056,37 +1085,55 @@ export const AdminDashboard = () => {
                                 </div>
                             </CardHeader>
                             <CardContent>
-                                <Table>
-                                    <TableHeader>
-                                        <TableRow>
-                                            <TableHead>Title</TableHead>
-                                            <TableHead>Date</TableHead>
-                                            <TableHead>Time</TableHead>
-                                            <TableHead>Location</TableHead>
-                                            <TableHead>Volunteers</TableHead>
-                                            <TableHead>Status</TableHead>
-                                            <TableHead>Actions</TableHead>
-                                        </TableRow>
-                                    </TableHeader>
-                                    <TableBody>
-                                        {events.map((event) => (
-                                            <TableRow key={event.id}>
-                                                <TableCell>{event.title}</TableCell>
-                                                <TableCell>{format(parseISO(event.date), 'dd MMM yyyy')}</TableCell>
-                                                <TableCell>{event.time}</TableCell>
-                                                <TableCell>{event.address}</TableCell>
-                                                <TableCell>{event.attendees_count} / {event.maxVolunteers}</TableCell>
-                                                <TableCell><Badge className={getEventStatusColor(event.status)}>{event.status}</Badge></TableCell>
-                                                <TableCell>
-                                                    <div className="flex items-center space-x-1">
-                                                        <Button variant="outline" size="sm" onClick={() => { setSelectedEvent(event); setShowEventDialog(true); }}><Eye className="w-3 h-3" /></Button>
-                                                        <Button variant="outline" size="sm" onClick={() => {/* TODO: Implement delete event */}}><Trash2 className="w-3 h-3" /></Button>
-                                                    </div>
-                                                </TableCell>
+                                <div className="overflow-x-auto">
+                                    <Table>
+                                        <TableHeader>
+                                            <TableRow>
+                                                <TableHead className="text-xs">Title</TableHead>
+                                                <TableHead className="text-xs">Date</TableHead>
+                                                <TableHead className="text-xs hidden md:table-cell">Time</TableHead>
+                                                <TableHead className="text-xs hidden md:table-cell">Location</TableHead>
+                                                <TableHead className="text-xs">Volunteers</TableHead>
+                                                <TableHead className="text-xs">Status</TableHead>
+                                                <TableHead className="text-xs">Actions</TableHead>
                                             </TableRow>
-                                        ))}
-                                    </TableBody>
-                                </Table>
+                                        </TableHeader>
+                                        <TableBody>
+                                            {events.map((event) => (
+                                                <TableRow key={event.id}>
+                                                    <TableCell className="py-2">
+                                                        <div className="max-w-[150px] truncate">{event.title}</div>
+                                                    </TableCell>
+                                                    <TableCell className="py-2">
+                                                        <div className="text-xs">{format(parseISO(event.date), 'dd MMM yyyy')}</div>
+                                                    </TableCell>
+                                                    <TableCell className="py-2 hidden md:table-cell">
+                                                        <div className="text-xs">{event.time}</div>
+                                                    </TableCell>
+                                                    <TableCell className="py-2 hidden md:table-cell">
+                                                        <div className="text-xs truncate max-w-[150px]">{event.address}</div>
+                                                    </TableCell>
+                                                    <TableCell className="py-2">
+                                                        <div className="text-xs">{event.attendees_count} / {event.maxVolunteers}</div>
+                                                    </TableCell>
+                                                    <TableCell className="py-2">
+                                                        <Badge className={cn(getEventStatusColor(event.status), "text-xs h-5 px-1 max-w-[100px] truncate")}>{event.status}</Badge>
+                                                    </TableCell>
+                                                    <TableCell className="py-2">
+                                                        <div className="flex items-center space-x-1">
+                                                            <Button variant="outline" size="sm" className="h-7 w-7 p-0" onClick={() => { setSelectedEvent(event); setShowEventDialog(true); }}>
+                                                                <Eye className="w-3 h-3" />
+                                                            </Button>
+                                                            <Button variant="outline" size="sm" className="h-7 w-7 p-0" onClick={() => {setEventToDelete(event); setShowDeleteEventDialog(true);}}>
+                                                                <Trash2 className="w-3 h-3" />
+                                                            </Button>
+                                                        </div>
+                                                    </TableCell>
+                                                </TableRow>
+                                            ))}
+                                        </TableBody>
+                                    </Table>
+                                </div>
                                 <div className="flex items-center justify-between mt-4">
                                     <Button onClick={() => setCurrentEventPage(prev => Math.max(prev - 1, 1))} disabled={currentEventPage === 1} size="sm" className="h-8 text-xs">Previous</Button>
                                     <span className="text-xs">Page {currentEventPage} of {totalEventPages}</span>
@@ -1095,7 +1142,7 @@ export const AdminDashboard = () => {
                             </CardContent>
                         </Card>
                         <Dialog open={showEventDialog} onOpenChange={setShowEventDialog}>
-                            <DialogContent className="max-w-3xl">
+                            <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto">
                                 <DialogHeader>
                                     <DialogTitle>Event Details</DialogTitle>
                                     <DialogDescription>View all information about this event</DialogDescription>
@@ -1118,6 +1165,20 @@ export const AdminDashboard = () => {
                                 )}
                             </DialogContent>
                         </Dialog>
+                        {eventToDelete && (
+                            <Dialog open={showDeleteEventDialog} onOpenChange={setShowDeleteEventDialog}>
+                                <DialogContent>
+                                    <DialogHeader>
+                                        <DialogTitle>Confirm Delete</DialogTitle>
+                                        <DialogDescription>Are you sure you want to delete the event "{eventToDelete.title}"?</DialogDescription>
+                                    </DialogHeader>
+                                    <div className="flex justify-end space-x-2">
+                                        <Button variant="outline" onClick={() => setShowDeleteEventDialog(false)} disabled={isDeletingEvent}>Cancel</Button>
+                                        <Button variant="destructive" onClick={handleDeleteEvent} disabled={isDeletingEvent}>{isDeletingEvent ? 'Deleting...' : 'Delete'}</Button>
+                                    </div>
+                                </DialogContent>
+                            </Dialog>
+                        )}
                     </TabsContent>
 
                     <TabsContent value="settings">

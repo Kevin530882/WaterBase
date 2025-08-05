@@ -265,6 +265,14 @@ class AdminDashboardController extends Controller
             return response()->json(['message' => 'No events found'], 404);
         }
     }
+    public function deleteEvent(Event $event)
+        {
+            if (Auth::user()->role !== 'admin') {
+                return response()->json(['message' => 'Unauthorized'], 403);
+            }
+            $event->delete();
+            return response()->json(['message' => 'event deleted successfully']);
+        }
 
     public function getAdminStats()
     {

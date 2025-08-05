@@ -71,6 +71,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::delete('/admin/users/{user}', [AdminDashboardController::class, 'deleteUser']);
 
     Route::get("/admin/events", [AdminDashboardController::class,"getEvents"]);
+    Route::delete('/admin/events/{event}', [AdminDashboardController::class, 'deleteEvent']);
 
     Route::get('/admin/stats', [AdminDashboardController::class, 'getAdminStats']);
 });

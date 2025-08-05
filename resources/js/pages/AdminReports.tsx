@@ -301,6 +301,7 @@ export const AdminReports = () => {
                                     <SelectItem value="verified">Verified</SelectItem>
                                     <SelectItem value="pending">Pending</SelectItem>
                                     <SelectItem value="declined">Rejected</SelectItem>
+                                    <SelectItem value="resolved">Resolved</SelectItem>
                                 </SelectContent>
                             </Select>
                             <Select value={filterType} onValueChange={setFilterType}>
@@ -452,9 +453,12 @@ export const AdminReports = () => {
                                             </TableCell>
                                             <TableCell className="py-2">
                                                 <div className="space-y-1">
-                                                    <Badge variant="outline" className="text-xs h-5 px-1">{report.pollutionType}</Badge>
-                                                    <Badge className={cn("text-xs h-5 px-1", getSeverityColor(report.severityByAI || report.severityByUser))}>
-                                                        {report.severityByAI || report.severityByUser}
+                                                    <Badge variant="outline" className="text-xs h-5 px-1 mr-1 whitespace-nowrap">{report.pollutionType}</Badge>
+                                                    <Badge className={cn("text-xs h-5 px-1 mr-1 whitespace-nowrap", getSeverityColor(report.severityByUser))}>
+                                                        User: {report.severityByUser}
+                                                    </Badge>
+                                                    <Badge className={cn("text-xs h-5 px-1 whitespace-nowrap", getSeverityColor(report.severityByAI))}>
+                                                        AI: {report.severityByAI}
                                                     </Badge>
                                                 </div>
                                             </TableCell>
@@ -478,7 +482,7 @@ export const AdminReports = () => {
                                                                 <Eye className="w-3 h-3" />
                                                             </Button>
                                                         </DialogTrigger>
-                                                        <DialogContent className="max-w-3xl">
+                                                        <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto">
                                                             <DialogHeader>
                                                                 <DialogTitle>Report Details</DialogTitle>
                                                                 <DialogDescription>Complete information for report #{selectedReport?.id}</DialogDescription>
@@ -592,7 +596,7 @@ export const AdminReports = () => {
 
                 {/* Edit Report Dialog */}
                 <Dialog open={showEditDialog} onOpenChange={setShowEditDialog}>
-                    <DialogContent className="max-w-2xl">
+                    <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
                         <DialogHeader>
                             <DialogTitle>Edit Report</DialogTitle>
                             <DialogDescription>Update report information and validation status</DialogDescription>
@@ -640,6 +644,7 @@ export const AdminReports = () => {
                                             <SelectItem value="verified">Verified</SelectItem>
                                             <SelectItem value="pending">Pending</SelectItem>
                                             <SelectItem value="declined">Rejected</SelectItem>
+                                            <SelectItem value="resolved">Resolved</SelectItem>
                                         </SelectContent>
                                     </Select>
                                 </div>
