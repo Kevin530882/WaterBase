@@ -57,10 +57,12 @@ interface AreaReport {
 
 export const SufficientReportsTab = ({
     eligibleAreas,
+    isLoading = false,
     onSelectArea,
     onRefresh,
 }: {
     eligibleAreas: any[];
+    isLoading?: boolean;
     onSelectArea: (area: any) => void;
     onRefresh: () => void;
 }) => {
@@ -100,7 +102,6 @@ export const SufficientReportsTab = ({
     const handleCreateEvent = async () => {
         if (!selectedArea) return;
 
-        // Validate form
         if (!newEvent.title.trim()) {
             setEventError("Event title is required");
             return;
@@ -163,8 +164,6 @@ export const SufficientReportsTab = ({
                 });
                 setShowCreateEvent(false);
                 setSelectedArea(null);
-
-                // Use the prop instead of fetchCreatedEvents
                 onRefresh();
 
                 // Show success message
@@ -183,19 +182,9 @@ export const SufficientReportsTab = ({
         }
     };
 
-    // Location matching utility (no longer needed but kept for reference)
-    // const areLocationsMatching = (coord1: { lat: number; lng: number }, coord2: { lat: number; lng: number }) => {
-    //     const latDiff = Math.abs(coord1.lat - coord2.lat);
-    //     const lngDiff = Math.abs(coord1.lng - coord2.lng);
-    //     const distance = Math.sqrt(latDiff * latDiff + lngDiff * lngDiff);
-    //     return distance <= 0.0005; // 1m threshold
-    // };
-
     const filteredAreas = useMemo(() => {
         let areas = eligibleAreas;
 
-        // Don't filter out areas with events - show them all
-        // Just apply urgent filter if enabled
         if (showUrgentOnly) {
             areas = areas.filter(area =>
                 area.severityLevel.toLowerCase() === 'high' ||
@@ -206,14 +195,16 @@ export const SufficientReportsTab = ({
         return areas;
     }, [eligibleAreas, showUrgentOnly]);
 
-    // Since we now only show areas without events, these are no longer needed
-    // const areasWithEvents = useMemo(() => {
-    //     return eligibleAreas.filter(area => area.hasAssociatedEvent);
-    // }, [eligibleAreas]);
-
-    // const areasWithoutEvents = useMemo(() => {
-    //     return eligibleAreas.filter(area => !area.hasAssociatedEvent);
-    // }, [eligibleAreas]);
+    if (isLoading) {
+        return (
+            <div className="flex items-center justify-center min-h-[400px]">
+                <div className="text-center">
+                    <Loader2 className="w-8 h-8 animate-spin mx-auto mb-4 text-waterbase-500" />
+                    <p className="text-waterbase-600">Loading accessible reports...</p>
+                </div>
+            </div>
+        );
+    }
 
     return (
         <div className="space-y-6">
@@ -285,8 +276,6 @@ export const SufficientReportsTab = ({
             ) : (
                 <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
                     {filteredAreas.map((area) => {
-                        // All areas shown here no longer have associated events
-
                         return (
                             <Card key={area.id} className={cn(
                                 "border-waterbase-200 hover:shadow-lg transition-shadow",
@@ -565,7 +554,7 @@ export const SufficientReportsTab = ({
                 </div>
             )}
 
-            {/* Updated Summary Stats */}
+            {/* Summary Stats */}
             {eligibleAreas.length > 0 && (
                 <div className="border-t pt-4">
                     <div className="flex items-center justify-between text-sm text-gray-600">
@@ -594,5 +583,5 @@ export const SufficientReportsTab = ({
                 </div>
             )}
         </div>
-    )
-}
+    );
+};

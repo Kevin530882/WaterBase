@@ -5,7 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import Navigation from "@/components/Navigation";
-import { Calendar, MapPin, Users, Loader2, AlertCircle, RefreshCw, } from "lucide-react";
+import { Calendar, MapPin, Users, AlertCircle, RefreshCw } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
 import { SufficientReportsTab } from "@/components/pagecomponents/organizer/SufficientReportsTab";
@@ -58,8 +58,6 @@ interface AreaReport {
 
 export const OrganizerPortal = () => {
     const { token, user } = useAuth();
-
-    // State declarations
     const [activeTab, setActiveTab] = useState("areas");
     const [selectedArea, setSelectedArea] = useState<AreaReport | null>(null);
     const [eligibleAreas, setEligibleAreas] = useState<AreaReport[]>([]);
@@ -70,8 +68,7 @@ export const OrganizerPortal = () => {
     const [isLoadingEvents, setIsLoadingEvents] = useState(false);
     const [editingEvent, setEditingEvent] = useState<any>(null);
 
-    // Fetch accessible reports using location-based access control
-    const fetchReports = async () => {
+    const fetchReports = async (eventsData?: any[]) => {
         if (!token) {
             console.log('No token available');
             return;
@@ -108,7 +105,9 @@ export const OrganizerPortal = () => {
                 console.log('VERIFIED REPORTS:', verifiedReports);
                 console.log('USER AREA:', user?.areaOfResponsibility);
 
-                processEligibleAreas(verifiedReports);
+                // Use the passed events data or current state
+                const eventsToUse = eventsData || createdEvents;
+                processEligibleAreas(verifiedReports, eventsToUse);
             } else {
                 const errorText = await response.text();
                 console.error('API Error:', errorText);
@@ -122,38 +121,10 @@ export const OrganizerPortal = () => {
         }
     };
 
-    const fetchCreatedEvents = async () => {
-        if (!user?.id) return;
-
-        try {
-            setIsLoadingEvents(true);
-            console.log('Fetching created events for user:', user.id);
-
-            const response = await fetch(`/api/events?user_id=${user.id}`, {
-                headers: {
-                    'Authorization': `Bearer ${token}`,
-                    'Accept': 'application/json',
-                },
-            });
-
-            if (response.ok) {
-                const data = await response.json();
-                console.log('Fetched events:', data);
-                setCreatedEvents(data);
-            } else {
-                console.error('Failed to fetch events:', response.status);
-            }
-        } catch (error) {
-            console.error('Error fetching events:', error);
-        } finally {
-            setIsLoadingEvents(false);
-        }
-    };
-
     // Process reports into eligible areas using report groups or legacy grouping
-    const processEligibleAreas = (reports: Report[]) => {
+    const processEligibleAreas = (reports: Report[], eventsData: any[]) => {
         console.log('Processing eligible areas with reports:', reports);
-        console.log('Current createdEvents:', createdEvents);
+        console.log('Current createdEvents from parameter:', eventsData);
 
         if (!reports || reports.length === 0) {
             console.log('No reports to process');
@@ -166,10 +137,10 @@ export const OrganizerPortal = () => {
 
         if (reportsWithGroups.length > 0) {
             console.log('Using report groups for area processing');
-            processAreasFromReportGroups(reports);
+            processAreasFromReportGroups(reports, eventsData);
         } else {
             console.log('Falling back to legacy coordinate-based grouping');
-            processAreasLegacy(reports);
+            processAreasLegacy(reports, eventsData);
         }
     };
 
@@ -182,16 +153,16 @@ export const OrganizerPortal = () => {
         return distance <= 0.001; // approximately 100m threshold
     };
 
-    const checkIfLocationHasEvent = (coordinates: { lat: number; lng: number }) => {
+    const checkIfLocationHasEvent = (coordinates: { lat: number; lng: number }, eventsData: any[]) => {
         console.log('Checking if location has event:', coordinates);
-        console.log('Available events:', createdEvents);
+        console.log('Available events:', eventsData);
 
-        if (!createdEvents || createdEvents.length === 0) {
+        if (!eventsData || eventsData.length === 0) {
             console.log('No events available');
             return false;
         }
 
-        const hasEvent = createdEvents.some(event => {
+        const hasEvent = eventsData.some(event => {
             const eventCoords = { lat: event.latitude, lng: event.longitude };
             const isMatching = areLocationsMatching(eventCoords, coordinates);
             console.log(`Event at ${eventCoords.lat}, ${eventCoords.lng} matches ${coordinates.lat}, ${coordinates.lng}:`, isMatching);
@@ -202,10 +173,10 @@ export const OrganizerPortal = () => {
         return hasEvent;
     };
 
-    const getMostRecentEventDateForLocation = (coordinates: { lat: number; lng: number }) => {
-        if (!createdEvents || createdEvents.length === 0) return new Date(0);
+    const getMostRecentEventDateForLocation = (coordinates: { lat: number; lng: number }, eventsData: any[]) => {
+        if (!eventsData || eventsData.length === 0) return new Date(0);
 
-        const eventsAtLocation = createdEvents.filter(event => {
+        const eventsAtLocation = eventsData.filter(event => {
             const eventCoords = { lat: event.latitude, lng: event.longitude };
             return areLocationsMatching(eventCoords, coordinates);
         });
@@ -232,7 +203,7 @@ export const OrganizerPortal = () => {
     };
 
     // Process areas using the new report groups system
-    const processAreasFromReportGroups = (reports: Report[]) => {
+    const processAreasFromReportGroups = (reports: Report[], eventsData: any[]) => {
         // Group reports by report_group_id
         const groupedReports: { [key: number]: Report[] } = {};
 
@@ -263,10 +234,10 @@ export const OrganizerPortal = () => {
             )[0];
 
             const locationCoords = { lat: mostRecentReport.latitude, lng: mostRecentReport.longitude };
-            const hasExistingEvent = checkIfLocationHasEvent(locationCoords);
+            const hasExistingEvent = checkIfLocationHasEvent(locationCoords, eventsData);
 
             if (hasExistingEvent) {
-                const mostRecentEventDate = getMostRecentEventDateForLocation(locationCoords);
+                const mostRecentEventDate = getMostRecentEventDateForLocation(locationCoords, eventsData);
 
                 // Only get reports after the most recent event (skip older reports with existing events)
                 const reportsAfterEvent = activeReports.filter(report =>
@@ -274,7 +245,6 @@ export const OrganizerPortal = () => {
                 );
 
                 // Skip creating area for old reports (with existing event) - we don't want to show these
-                // if (reportsBeforeEvent.length > 0) { ... } - REMOVED
 
                 // Create separate area for new reports (after the event)
                 if (reportsAfterEvent.length > 0) {
@@ -337,7 +307,7 @@ export const OrganizerPortal = () => {
     };
 
     // Legacy function for coordinate-based grouping (fallback)
-    const processAreasLegacy = (reports: Report[]) => {
+    const processAreasLegacy = (reports: Report[], eventsData: any[]) => {
         // First filter out declined individual reports for legacy grouping
         const activeReports = reports.filter(report => report.status !== 'declined');
 
@@ -389,18 +359,15 @@ export const OrganizerPortal = () => {
 
                 // Check if this location already has a cleanup event
                 const locationCoords = { lat, lng };
-                const hasExistingEvent = checkIfLocationHasEvent(locationCoords);
+                const hasExistingEvent = checkIfLocationHasEvent(locationCoords, eventsData);
 
                 if (hasExistingEvent) {
-                    const mostRecentEventDate = getMostRecentEventDateForLocation(locationCoords);
+                    const mostRecentEventDate = getMostRecentEventDateForLocation(locationCoords, eventsData);
 
                     // Only get reports after the most recent event (skip older reports with existing events)
                     const reportsAfterEvent = groupReports.filter(report =>
                         new Date(report.created_at) > mostRecentEventDate
                     );
-
-                    // Skip creating area for old reports (with existing event) - we don't want to show these
-                    // if (reportsBeforeEvent.length > 0) { ... } - REMOVED
 
                     // Create separate area for new reports (after the event)
                     if (reportsAfterEvent.length > 0) {
@@ -526,25 +493,87 @@ export const OrganizerPortal = () => {
         return 'Low';
     };
 
-    const handleRefreshData = async () => {
-        if (user?.id) {
-            // First fetch events, then reports (reports processing depends on events)
-            await fetchCreatedEvents();
-        }
-        await fetchReports();
-    };
-
     useEffect(() => {
         const loadData = async () => {
+            let eventsData: any[] = [];
+
+            // First fetch events if user exists
             if (user?.id) {
-                // First fetch events, then reports (reports processing depends on events)
-                await fetchCreatedEvents();
+                try {
+                    setIsLoadingEvents(true);
+                    console.log('Fetching created events for user:', user.id);
+
+                    const response = await fetch(`/api/events?user_id=${user.id}`, {
+                        headers: {
+                            'Authorization': `Bearer ${token}`,
+                            'Accept': 'application/json',
+                        },
+                    });
+
+                    if (response.ok) {
+                        eventsData = await response.json();
+                        console.log('Fetched events in useEffect:', eventsData);
+                        setCreatedEvents(eventsData);
+                    } else {
+                        console.error('Failed to fetch events:', response.status);
+                    }
+                } catch (error) {
+                    console.error('Error fetching events in useEffect:', error);
+                } finally {
+                    setIsLoadingEvents(false);
+                }
             }
-            await fetchReports();
+
+            // Then fetch reports with the events data
+            await fetchReports(eventsData);
         };
 
-        loadData();
+        if (token) {
+            loadData();
+        }
     }, [user?.id, token]);
+
+    const handleRefreshData = async () => {
+        let eventsData: any[] = [];
+
+        // First fetch events if user exists
+        if (user?.id) {
+            try {
+                setIsLoadingEvents(true);
+                console.log('Fetching created events for user:', user.id);
+
+                const response = await fetch(`/api/events?user_id=${user.id}`, {
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Accept': 'application/json',
+                    },
+                });
+
+                if (response.ok) {
+                    eventsData = await response.json();
+                    console.log('Fetched events in handleRefreshData:', eventsData);
+                    setCreatedEvents(eventsData);
+                } else {
+                    console.error('Failed to fetch events:', response.status);
+                }
+            } catch (error) {
+                console.error('Error fetching events in handleRefreshData:', error);
+            } finally {
+                setIsLoadingEvents(false);
+            }
+        }
+
+        // Then fetch reports with the events data
+        await fetchReports(eventsData);
+    };
+
+    // Handle tab changes and load data as needed
+    const handleTabChange = async (newTab: string) => {
+        setActiveTab(newTab);
+
+        // For now, we don't need lazy loading since we load everything initially
+        // This ensures consistent behavior between initial load and refresh
+    };
 
     const handleViewReport = (report: Report) => {
         console.log('Viewing report:', report);
@@ -623,22 +652,6 @@ export const OrganizerPortal = () => {
         }
     };
 
-    if (isLoading) {
-        return (
-            <div className="min-h-screen bg-gradient-to-br from-waterbase-50 to-enviro-50">
-                <Navigation />
-                <div className="max-w-7xl mx-auto py-8 px-4 sm:px-6 lg:px-8">
-                    <div className="flex items-center justify-center min-h-[400px]">
-                        <div className="text-center">
-                            <Loader2 className="w-8 h-8 animate-spin mx-auto mb-4 text-waterbase-500" />
-                            <p className="text-waterbase-600">Loading accessible reports...</p>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        );
-    }
-
     return (
         <div className="min-h-screen bg-gradient-to-br from-waterbase-50 to-enviro-50">
             <Navigation />
@@ -691,7 +704,7 @@ export const OrganizerPortal = () => {
                     </Alert>
                 )}
 
-                <Tabs value={activeTab} onValueChange={setActiveTab}>
+                <Tabs value={activeTab} onValueChange={handleTabChange}>
                     <TabsList className="grid w-full grid-cols-3 mb-6 h-auto">
                         <TabsTrigger value="areas" className="flex flex-col sm:flex-row items-center space-y-1 sm:space-y-0 sm:space-x-2 px-2 py-2 sm:px-4 sm:py-2 text-xs sm:text-sm h-auto min-h-[3rem] sm:min-h-[2.5rem]">
                             <MapPin className="w-3 h-3 sm:w-4 sm:h-4" />
@@ -711,13 +724,13 @@ export const OrganizerPortal = () => {
                     <TabsContent value="areas">
                         <SufficientReportsTab
                             eligibleAreas={eligibleAreas}
+                            isLoading={isLoading}
                             onSelectArea={(area) => {
                                 setSelectedArea(area);
                                 setShowAreaDetails(true);
                             }}
                             onRefresh={() => {
-                                fetchReports();
-                                fetchCreatedEvents();
+                                handleRefreshData();
                             }}
                         />
                     </TabsContent>
@@ -728,8 +741,8 @@ export const OrganizerPortal = () => {
                             createdEvents={createdEvents}
                             isLoadingEvents={isLoadingEvents}
                             onEditEvent={setEditingEvent}
-                            onRefresh={fetchCreatedEvents}
-                            onTabChange={setActiveTab}
+                            onRefresh={handleRefreshData}
+                            onTabChange={handleTabChange}
                         />
                     </TabsContent>
 
@@ -755,7 +768,7 @@ export const OrganizerPortal = () => {
                     isOpen={!!editingEvent}
                     onClose={() => setEditingEvent(null)}
                     event={editingEvent}
-                    onSuccess={fetchCreatedEvents}
+                    onSuccess={handleRefreshData}
                 />
             </div>
         </div>
