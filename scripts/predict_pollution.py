@@ -152,7 +152,7 @@ def main(image_path):
         }
         
         # Load the water model
-        water_model = YOLO("../vision_models/water_detect_2.pt")  # Adjust this path
+        water_model = YOLO("../vision_models/water_detector_2.pt")  # Adjust this path
         
         # Run inference for water model
         water_results = water_model(resized_image_path, verbose=False, conf=0.5, iou=0.7)
