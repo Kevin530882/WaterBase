@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import Navigation from "@/components/Navigation";
 import { Button } from "@/components/ui/button";
 import {
@@ -24,7 +24,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Zap, AlertCircle, CheckCircle, Loader2 } from "lucide-react";
+import { AlertCircle, CheckCircle, Loader2 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { MapPin, Upload } from "lucide-react";
@@ -50,10 +50,10 @@ export const ReportPollution = () => {
     longitude: "",
     pollutionType: "",
     severityByUser: "",
-    image: null,
+    image: null as File | null,
   });
 
-  const verifyImageMetadata = async (file) => {
+  const verifyImageMetadata = async (file: File) => {
     setVerificationStatus('verifying');
     setShowLocationFields(false);
     try {
@@ -100,7 +100,7 @@ export const ReportPollution = () => {
     }
   };
 
-  const handleImageSelect = async (e) => {
+  const handleImageSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     console.log('Selected file:', file);
     if (file) {
@@ -188,11 +188,13 @@ export const ReportPollution = () => {
         isFile: newReport.image instanceof File
       });
 
-      predictFormData.append('image', newReport.image);
+      if (newReport.image) {
+        predictFormData.append('image', newReport.image as Blob);
+      }
       predictFormData.append('severityByUser', newReport.severityByUser);
 
       console.log('Submitting to /api/predict:', {
-        image: newReport.image.name,
+        image: newReport.image?.name,
         severityByUser: newReport.severityByUser,
       });
 
@@ -232,7 +234,9 @@ export const ReportPollution = () => {
       reportFormData.append('longitude', newReport.longitude);
       reportFormData.append('pollutionType', newReport.pollutionType);
       reportFormData.append('status', new_status);
-      reportFormData.append('image', newReport.image);
+      if (newReport.image) {
+        reportFormData.append('image', newReport.image as Blob);
+      }
       reportFormData.append('severityByUser', newReport.severityByUser);
       reportFormData.append('user_id', (user?.id || 1).toString());
       reportFormData.append('severityByAI', ai_data[0].severity_level);

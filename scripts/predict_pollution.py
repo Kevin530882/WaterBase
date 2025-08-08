@@ -152,7 +152,7 @@ def main(image_path):
         }
         
         # Load the water model
-        water_model = YOLO("../vision_models/water_detector.pt")  # Adjust this path
+        water_model = YOLO("../vision_models/water_detect_2.pt")  # Adjust this path
         
         # Run inference for water model
         water_results = water_model(resized_image_path, verbose=False, conf=0.5, iou=0.7)
@@ -199,8 +199,8 @@ def main(image_path):
         #     return
         
         # Load and run other models
-        trash_model = YOLO("../vision_models/trash_detector.pt")
-        pollution_model = YOLO("../vision_models/unnatural_color_detector.pt")
+        trash_model = YOLO("../vision_models/trash_detect_2.pt")
+        pollution_model = YOLO("../vision_models/unnatural_colors_3.pt")
         
         trash_results = trash_model(resized_image_path, verbose=False, conf=0.5, iou=0.7)
         pollution_results = pollution_model(resized_image_path, verbose=False, conf=0.5, iou=0.7)

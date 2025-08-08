@@ -62,6 +62,7 @@ import {
     MapPin,
     X
 } from "lucide-react";
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, LineChart, Line } from 'recharts';
 import { cn } from "@/lib/utils";
 import { SearchableSelect } from "@/components/pagecomponents/searchable-select";
 
@@ -117,6 +118,7 @@ export const AdminDashboard = () => {
         rejectedReports: 0,
         monthlyGrowth: 0,
     });
+    const [recentAlerts, setRecentAlerts] = useState([]);
     
     const [refreshKey, setRefreshKey] = useState(0);
 
@@ -405,7 +407,25 @@ export const AdminDashboard = () => {
 
     useEffect(() => {
         fetchAdminStats();
+        fetchRecentAlerts();
     }, [refreshKey]);
+
+    const fetchRecentAlerts = async () => {
+        try {
+            const response = await fetch('/api/admin/reports/high-severity', {
+                method: 'GET',
+                headers: {
+                    'Authorization': `Bearer ${localStorage.getItem('auth_token')}`,
+                },
+            });
+            if (!response.ok) throw new Error('Failed to fetch recent alerts');
+            const data = await response.json();
+            setRecentAlerts(data);
+        } catch (error) {
+            console.error('Error fetching recent alerts:', error);
+            setErrorMessage('Failed to load recent alerts. Please try again.');
+        }
+    };
 
     return (
         <div className="min-h-screen bg-gray-50">
@@ -513,13 +533,38 @@ export const AdminDashboard = () => {
                                         System Activity
                                     </CardTitle>
                                 </CardHeader>
-                                <CardContent>
-                                    <div className="h-64 bg-gradient-to-br from-waterbase-50 to-enviro-50 rounded-lg flex items-center justify-center">
-                                        <div className="text-center">
-                                            <BarChart3 className="w-12 h-12 text-waterbase-500 mx-auto mb-4" />
-                                            <p className="text-waterbase-600">Activity charts and analytics</p>
-                                        </div>
-                                    </div>
+                                <CardContent className="p-2 h-64">
+                                    <ResponsiveContainer width="100%" height="100%">
+                                        <LineChart
+                                            data={[
+                                                { name: 'Total Users', value: adminStats.totalUsers },
+                                                { name: 'Total Reports', value: adminStats.totalReports },
+                                                { name: 'Active Events', value: adminStats.activeEvents },
+                                                { name: 'Active Volunteers', value: adminStats.activeVolunteers },
+                                            ]}
+                                            margin={{
+                                                top: 10,
+                                                right: 30,
+                                                left: 0,
+                                                bottom: 0,
+                                            }}
+                                        >
+                                            <CartesianGrid strokeDasharray="3 3" className="stroke-gray-200" />
+                                            <XAxis dataKey="name" axisLine={false} tickLine={false} style={{ fontSize: '10px' }} />
+                                            <YAxis axisLine={false} tickLine={false} style={{ fontSize: '10px' }} />
+                                            <Tooltip
+                                                contentStyle={{
+                                                    backgroundColor: '#ffffff',
+                                                    borderColor: '#e2e8f0',
+                                                    borderRadius: '0.375rem',
+                                                    fontSize: '12px',
+                                                }}
+                                                labelStyle={{ color: '#4b5563' }}
+                                            />
+                                            <Legend wrapperStyle={{ fontSize: '12px', paddingTop: '10px' }} />
+                                            <Line type="monotone" dataKey="value" stroke="#60A5FA" strokeWidth={2} dot={{ r: 4, fill: '#60A5FA' }} activeDot={{ r: 6, fill: '#2563EB', stroke: '#2563EB' }} />
+                                        </LineChart>
+                                    </ResponsiveContainer>
                                 </CardContent>
                             </Card>
                             <Card className="border-waterbase-200">
@@ -531,27 +576,21 @@ export const AdminDashboard = () => {
                                 </CardHeader>
                                 <CardContent>
                                     <div className="space-y-3">
-                                        <div className="p-3 bg-red-50 border border-red-200 rounded-lg">
-                                            <div className="flex items-center justify-between">
-                                                <span className="text-sm font-medium text-red-800">High Priority Report</span>
-                                                <Badge variant="destructive" className="text-xs">Critical</Badge>
+                                        {recentAlerts.length > 0 ? (
+                                            recentAlerts.map((alert) => (
+                                                <div key={alert.id} className="p-3 bg-red-50 border border-red-200 rounded-lg">
+                                                    <div className="flex items-center justify-between">
+                                                        <span className="text-sm font-medium text-red-800">{alert.title}</span>
+                                                        <Badge variant="destructive" className="text-xs">{alert.severityByAI || alert.severityByUser}</Badge>
+                                                    </div>
+                                                    <p className="text-xs text-red-600 mt-1">{alert.address} - {format(parseISO(alert.created_at), 'dd MMM yy')}</p>
+                                                </div>
+                                            ))
+                                        ) : (
+                                            <div className="p-3 bg-gray-50 border border-gray-200 rounded-lg text-center text-gray-600">
+                                                No recent high-severity alerts.
                                             </div>
-                                            <p className="text-xs text-red-600 mt-1">Industrial waste report requires immediate validation</p>
-                                        </div>
-                                        <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
-                                            <div className="flex items-center justify-between">
-                                                <span className="text-sm font-medium text-yellow-800">User Account Issue</span>
-                                                <Badge variant="secondary" className="text-xs">Medium</Badge>
-                                            </div>
-                                            <p className="text-xs text-yellow-600 mt-1">Suspicious activity detected on user account</p>
-                                        </div>
-                                        <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
-                                            <div className="flex items-center justify-between">
-                                                <span className="text-sm font-medium text-blue-800">System Update</span>
-                                                <Badge variant="outline" className="text-xs">Info</Badge>
-                                            </div>
-                                            <p className="text-xs text-blue-600 mt-1">New features deployed successfully</p>
-                                        </div>
+                                        )}
                                     </div>
                                 </CardContent>
                             </Card>

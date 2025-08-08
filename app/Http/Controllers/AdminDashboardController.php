@@ -328,4 +328,25 @@ class AdminDashboardController extends Controller
         ]);
     }
 
+    public function getRecentHighSeverityReports()
+    {
+        // Ensure only admin users can access this endpoint
+        if (Auth::user()->role !== 'admin') {
+            return response()->json(['message' => 'Unauthorized'], 403);
+        }
+
+        $reports = Report::with('user')
+            ->where('status', 'pending')
+            ->where(function ($query) {
+                $query->where('severityByUser', 'High')
+                    ->orWhere('severityByUser', 'Critical')
+                    ->orWhere('severityByAI', 'High')
+                    ->orWhere('severityByAI', 'Critical');
+            })
+            ->latest()
+            ->limit(5)
+            ->get();
+
+        return response()->json($reports);
+    }
 }
