@@ -207,9 +207,9 @@ export const AreaDetails = ({
                                                 <div className="relative w-full sm:w-24 h-48 sm:h-24 flex-shrink-0">
                                                     <img
                                                         src={
-                                                            report.image.startsWith("data:")
+                                                            report.image
                                                                 ? report.image
-                                                                : `data:image/jpeg;base64,${report.image}`
+                                                                : `${report.image}`
                                                         }
                                                         alt={report.title}
                                                         className="w-full h-full object-cover rounded-lg cursor-pointer transition-transform hover:scale-105"
@@ -229,9 +229,9 @@ export const AreaDetails = ({
                                                         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-75 pointer-events-none">
                                                             <img
                                                                 src={
-                                                                    report.image.startsWith("data:")
+                                                                    report.image
                                                                         ? report.image
-                                                                        : `data:image/jpeg;base64,${report.image}`
+                                                                        : `${report.image}`
                                                                 }
                                                                 alt={report.title}
                                                                 className="max-w-[80vw] max-h-[80vh] object-contain rounded-lg shadow-2xl"
