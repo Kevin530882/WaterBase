@@ -22,6 +22,7 @@ class Report extends Model
         'image',
         'ai_annotated_image',
         'user_id',
+        'report_group_id',
         'status',
         'verifiedBy',
         'verified_at',
@@ -37,8 +38,14 @@ class Report extends Model
     {
         return $this->belongsTo(User::class, 'user_id');
     }
-        public function verifiedBy(): BelongsTo
+
+    public function verifiedBy(): BelongsTo
     {
         return $this->belongsTo(User::class, 'verifiedBy');
+    }
+
+    public function reportGroup(): BelongsTo
+    {
+        return $this->belongsTo(ReportGroup::class, 'report_group_id');
     }
 }

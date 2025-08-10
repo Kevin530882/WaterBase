@@ -50,4 +50,9 @@ class Event extends Model
     {
         return $this->belongsTo(User::class, 'user_id');
     }
+
+    public function reportGroup()
+    {
+        return $this->belongsTo(ReportGroup::class, 'report_group_id');
+    }
 }
