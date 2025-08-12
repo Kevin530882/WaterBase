@@ -14,6 +14,7 @@ use Illuminate\Validation\Rules\Enum;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Validation\ValidationException;
+use App\Models\SystemSetting;
 
 class ReportController extends Controller
 {
@@ -113,7 +114,7 @@ class ReportController extends Controller
                 'longitude' => 'required|numeric|between:-180,180',
                 'pollutionType' => 'required|string',
                 'status' => ['required', new Enum(ReportStatus::class)],
-                'image' => 'required|image|mimes:jpeg,png,jpg,gif|max:5120',
+                'image' => 'required|image|mimes:jpeg,png,jpg,gif|max:10120',
                 'severityByUser' => ['required', new Enum(SeverityLevel::class)],
                 'user_id' => 'required|integer|exists:users,id',
                 'severityByAI' => ['required', new Enum(SeverityLevel::class)],
@@ -158,9 +159,27 @@ class ReportController extends Controller
 
             // Create report
             try {
+                // Apply auto-approval rules based on system settings
+                $settings = SystemSetting::query()->latest()->first();
+                // Normalize flags
+                $reportsValidated['ai_verified'] = (bool)($reportsValidated['ai_verified'] ?? false);
+
+                // Auto-approval requires both: feature enabled AND ai_confidence >= threshold AND ai_verified === true
+                if ($settings && ($settings->auto_approve_enabled)) {
+                    $aiConfidence = (float)($reportsValidated['ai_confidence'] ?? 0);
+                    $meetsConfidence = $aiConfidence >= (int)$settings->auto_approve_threshold;
+                    if ($meetsConfidence && $reportsValidated['ai_verified'] === true) {
+                        $reportsValidated['status'] = 'verified';
+                    } else {
+                        $reportsValidated['status'] = 'pending';
+                    }
+                } else {
+                    $reportsValidated['status'] = 'pending';
+                }
+
                 $report = Report::create(array_merge($reportsValidated, [
-                    'image' => $imagePath, // Store original image path
-                    'ai_annotated_image' => $annotatedImagePath, // Store annotated image path
+                    'image' => $imagePath,
+                    'ai_annotated_image' => $annotatedImagePath,
                 ]));
             } catch (\Exception $e) {
                 Log::error('Report creation failed: ' . $e->getMessage(), [

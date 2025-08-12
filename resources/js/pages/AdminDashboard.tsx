@@ -122,6 +122,10 @@ export const AdminDashboard = () => {
     
     const [refreshKey, setRefreshKey] = useState(0);
 
+    // System settings state
+    const [autoApproveEnabled, setAutoApproveEnabled] = useState(false);
+    const [autoApproveThreshold, setAutoApproveThreshold] = useState(80);
+
     // Filter states for Reports Validation Queue
     const [filterPollutionType, setFilterPollutionType] = useState('');
     const [filterSeverityByUser, setFilterSeverityByUser] = useState('');
@@ -408,6 +412,22 @@ export const AdminDashboard = () => {
     useEffect(() => {
         fetchAdminStats();
         fetchRecentAlerts();
+        // fetch system settings on refresh
+        (async () => {
+            try {
+                const response = await fetch('/api/admin/system-settings', {
+                    method: 'GET',
+                    headers: { 'Authorization': `Bearer ${localStorage.getItem('auth_token')}` },
+                });
+                if (response.ok) {
+                    const data = await response.json();
+                    setAutoApproveEnabled(Boolean(data.auto_approve_enabled));
+                    setAutoApproveThreshold(Number(data.auto_approve_threshold));
+                }
+            } catch (e) {
+                console.error('Error fetching system settings:', e);
+            }
+        })();
     }, [refreshKey]);
 
     const fetchRecentAlerts = async () => {
@@ -617,6 +637,8 @@ export const AdminDashboard = () => {
                                                 <SelectItem value="Sewage Discharge">Sewage Discharge</SelectItem>
                                                 <SelectItem value="Chemical Pollution">Chemical Pollution</SelectItem>
                                                 <SelectItem value="Oil Spill">Oil Spillage</SelectItem>
+                                                <SelectItem value="Unnatural Color - AI">Unnatural Color - AI</SelectItem>
+                                                <SelectItem value="Clean">Clean</SelectItem>
                                             </SelectContent>
                                         </Select>
                                         <Select value={filterSeverityByUser} onValueChange={setFilterSeverityByUser}>
@@ -1231,38 +1253,53 @@ export const AdminDashboard = () => {
                                 </CardHeader>
                                 <CardContent className="space-y-4">
                                     <div>
-                                        <Label>AI Validation Threshold</Label>
-                                        <Select defaultValue="0.8">
-                                            <SelectTrigger><SelectValue /></SelectTrigger>
-                                            <SelectContent>
-                                                <SelectItem value="0.7">70% Confidence</SelectItem>
-                                                <SelectItem value="0.8">80% Confidence</SelectItem>
-                                                <SelectItem value="0.9">90% Confidence</SelectItem>
-                                                <SelectItem value="0.95">95% Confidence</SelectItem>
-                                            </SelectContent>
-                                        </Select>
-                                    </div>
-                                    <div>
                                         <Label>Auto-approve Reports</Label>
-                                        <Select defaultValue="disabled">
-                                            <SelectTrigger><SelectValue /></SelectTrigger>
-                                            <SelectContent>
-                                                <SelectItem value="disabled">Disabled</SelectItem>
-                                                <SelectItem value="high">High Confidence Only</SelectItem>
-                                                <SelectItem value="all">All Above Threshold</SelectItem>
-                                            </SelectContent>
-                                        </Select>
+                                        <div className="mt-1">
+                                            <Select value={autoApproveEnabled ? 'enabled' : 'disabled'} onValueChange={(v) => setAutoApproveEnabled(v === 'enabled')}>
+                                                <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
+                                                <SelectContent>
+                                                    <SelectItem value="enabled">Enabled</SelectItem>
+                                                    <SelectItem value="disabled">Disabled</SelectItem>
+                                                </SelectContent>
+                                            </Select>
+                                        </div>
                                     </div>
                                     <div>
-                                        <Label>Email Notifications</Label>
-                                        <Select defaultValue="enabled">
-                                            <SelectTrigger><SelectValue /></SelectTrigger>
-                                            <SelectContent>
-                                                <SelectItem value="enabled">Enabled</SelectItem>
-                                                <SelectItem value="disabled">Disabled</SelectItem>
-                                                <SelectItem value="critical">Critical Only</SelectItem>
-                                            </SelectContent>
-                                        </Select>
+                                        <Label>AI Confidence Threshold (%)</Label>
+                                        <div className="mt-1">
+                                            <Input
+                                                type="number"
+                                                min="0"
+                                                max="100"
+                                                value={autoApproveThreshold}
+                                                onChange={(e) => setAutoApproveThreshold(Number(e.target.value))}
+                                                placeholder="Enter threshold (0-100)"
+                                                className="w-full"
+                                            />
+                                            <p className="text-xs text-gray-500 mt-1">Enter a value between 0 and 100</p>
+                                        </div>
+                                    </div>
+                                    <div className="pt-2">
+                                        <Button onClick={async () => {
+                                            try {
+                                                const res = await fetch('/api/admin/system-settings', {
+                                                    method: 'PUT',
+                                                    headers: {
+                                                        'Authorization': `Bearer ${localStorage.getItem('auth_token')}`,
+                                                        'Content-Type': 'application/json'
+                                                    },
+                                                    body: JSON.stringify({
+                                                        auto_approve_enabled: autoApproveEnabled,
+                                                        auto_approve_threshold: autoApproveThreshold,
+                                                    })
+                                                });
+                                                if (!res.ok) throw new Error('Failed');
+                                                setSuccessMessage('Settings saved');
+                                                setTimeout(() => setSuccessMessage(''), 3000);
+                                            } catch (e) {
+                                                setErrorMessage('Failed to save settings');
+                                            }
+                                        }}>Save Settings</Button>
                                     </div>
                                 </CardContent>
                             </Card>

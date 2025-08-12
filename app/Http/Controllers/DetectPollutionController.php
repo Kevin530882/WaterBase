@@ -12,7 +12,7 @@ class DetectPollutionController extends Controller
     {
         set_time_limit(600);
         $request->validate([
-            'image' => 'required|image|mimes:jpeg,png,jpg|max:5120',
+            'image' => 'required|image|mimes:jpeg,png,jpg|max:10120',
         ]);
 
         // Store the uploaded image
@@ -45,15 +45,31 @@ class DetectPollutionController extends Controller
             return response()->json(['error' => 'Invalid JSON output from Python script.', 'output' => $json_line], 400);
         }
 
-        $verified = False;
-        if($predictions['total_water_area'] > 0){
-            if($predictions['overall_confidence'] > 69){
-                $verified = $this->isCloseMatchAiPrediction($request->severityByUser, $predictions['severity_level'], $predictions['pollution_percentage']);
-            }
+        // Compute verification purely by closeness of user vs AI severity level
+        // Confidence and other gates are handled by backend auto-approval rules, not here
+        $userSeverity = $request->severityByUser;
+        
+        // Debug logging
+        Log::info('AI Verification Debug', [
+            'userSeverity' => $userSeverity,
+            'aiSeverity' => $predictions['severity_level'],
+            'pollutionPercentage' => $predictions['pollution_percentage'],
+            'isEmpty' => empty($userSeverity),
+            'isMedium' => $userSeverity === 'medium'
+        ]);
+        
+        // If user severity is 'medium' (default) or empty, this is likely a Quick Photo flow
+        // where the user hasn't specified severity yet, so we consider it verified
+        if (empty($userSeverity) || $userSeverity === 'medium') {
+            $verified = true;
+            Log::info('Quick Photo flow - setting verified to true');
+        } else {
+            // For Detailed Report flow, compare user's specified severity with AI's severity
+            $verified = $this->isCloseMatchAiPrediction($userSeverity, $predictions['severity_level'], $predictions['pollution_percentage']);
+            Log::info('Detailed Report flow - verification result', ['verified' => $verified]);
         }
-            
-            
-        return response()->json(array_merge([$predictions,'ai_verified' => $verified]), 200);
+
+        return response()->json(array_merge([$predictions, 'ai_verified' => $verified]), 200);
     }
 
     
@@ -67,11 +83,21 @@ class DetectPollutionController extends Controller
             'critical' => [ 75.0, 100.0],
         ];
 
-        $u = strtolower($userSev);
-        $a = strtolower($aiSev);
+        $u = strtolower(trim($userSev));
+        $a = strtolower(trim($aiSev));
 
         $i = array_search($u, $levels, true);
         $j = array_search($a, $levels, true);
+        
+        // Debug logging for severity comparison
+        Log::info('Severity comparison', [
+            'userSev' => $userSev,
+            'aiSev' => $aiSev,
+            'userSevLower' => $u,
+            'aiSevLower' => $a,
+            'userIndex' => $i,
+            'aiIndex' => $j
+        ]);
 
         // 2) Exact match
         if ($i === $j) {
