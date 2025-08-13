@@ -621,6 +621,8 @@ export const AdminReports = () => {
                                             <SelectItem value="Chemical Pollution">Chemical Pollution</SelectItem>
                                             <SelectItem value="Sewage Discharge">Sewage Discharge</SelectItem>
                                             <SelectItem value="Oil Spill">Oil Spillage</SelectItem>
+                                            <SelectItem value="Unnatural Color - AI">Unnatural Color - AI</SelectItem>
+                                            <SelectItem value="Clean">Clean</SelectItem>
                                         </SelectContent>
                                     </Select>
                                 </div>

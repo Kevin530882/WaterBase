@@ -34,13 +34,37 @@ import { formatDisplayName, NominatimResult } from '@/utils/location';
 export const ReportPollution = () => {
   const { user, isAuthenticated } = useAuth();
   const [showReportForm, setShowReportForm] = useState(false);
+  // Quick Photo flow modal
   const [showCameraModal, setShowCameraModal] = useState(false);
+  // Dedicated Detailed flow scan modal
+  const [showDetailedScanModal, setShowDetailedScanModal] = useState(false);
   const [showSubmitModal, setShowSubmitModal] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitStatus, setSubmitStatus] = useState('idle');
   const [errorMessage, setErrorMessage] = useState('');
+  // Quick flow verification and location state
   const [verificationStatus, setVerificationStatus] = useState('idle');
   const [showLocationFields, setShowLocationFields] = useState(false);
+  // Detailed flow verification and location state
+  const [verificationStatusDetailed, setVerificationStatusDetailed] = useState<'idle'|'verifying'|'success'|'failed'>('idle');
+  const [showLocationFieldsDetailed, setShowLocationFieldsDetailed] = useState(false);
+  const [fieldsLocked, setFieldsLocked] = useState(false);
+  const [userStartedDetailedForm, setUserStartedDetailedForm] = useState(false);
+  // Quick flow AI status
+  const [aiScanStatus, setAiScanStatus] = useState<'idle' | 'scanning' | 'success' | 'error'>('idle');
+  // Detailed flow AI status
+  const [aiScanStatusDetailed, setAiScanStatusDetailed] = useState<'idle' | 'scanning' | 'success' | 'error'>('idle');
+  const [aiResults, setAiResults] = useState<null | {
+    severity_level: string;
+    overall_confidence: number;
+    pollution_percentage: number;
+    water_predictions: Array<{ class_name: string; confidence: number; mask_area: number }>;
+    trash_predictions: Array<{ class_name: string; confidence: number; mask_area: number }>;
+    pollution_predictions: Array<{ class_name: string; confidence: number; mask_area: number }>;
+    ai_verified: boolean;
+  }>(null);
+  const [showAiResultModal, setShowAiResultModal] = useState(false);
+  const [aiAnalysisViewMode, setAiAnalysisViewMode] = useState<'quick'|'detailed'>('quick');
 
   const [newReport, setNewReport] = useState({
     title: "",
@@ -107,9 +131,98 @@ export const ReportPollution = () => {
       if (file.type.startsWith('image/') && ['image/jpeg', 'image/png', 'image/jpg', 'image/gif'].includes(file.type)) {
         setNewReport({ ...newReport, image: file });
         console.log('Image set in state:', file.name);
-        const isValid = await verifyImageMetadata(file);
-        if (!isValid) {
+        const metadataOk = await verifyImageMetadata(file);
+        if (!metadataOk) {
           setNewReport({ ...newReport, image: file, latitude: '', longitude: '' });
+        }
+
+        // Run AI verification immediately after metadata verification
+        try {
+          setAiScanStatus('scanning');
+          const predictFormData = new FormData();
+          predictFormData.append('image', file as Blob);
+          predictFormData.append('severityByUser', newReport.severityByUser || 'medium');
+
+          const ai_response = await fetch('/api/predict', {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${localStorage.getItem('auth_token')}`,
+            },
+            body: predictFormData,
+          });
+
+          if (!ai_response.ok) {
+            const text = await ai_response.text();
+            console.error('AI Prediction response:', {
+              status: ai_response.status,
+              statusText: ai_response.statusText,
+              body: text,
+            });
+            throw new Error(`Prediction failed: ${text}`);
+          }
+          const ai_data = await ai_response.json();
+          console.log('AI Prediction:', ai_data);
+          const pred = ai_data[0] || ai_data;
+          const ai_verified = ai_data.ai_verified ?? false;
+
+          const waterPreds = Array.isArray(pred.water_predictions) ? pred.water_predictions : [];
+          const trashPreds = Array.isArray(pred.trash_predictions) ? pred.trash_predictions : [];
+          const pollutionPreds = Array.isArray(pred.pollution_predictions) ? pred.pollution_predictions : [];
+
+          const hasWater = waterPreds.length > 0;
+          const hasTrash = trashPreds.length > 0;
+          const hasUnnatural = pollutionPreds.length > 0;
+
+          let inferredType = 'Clean';
+          if (hasWater && hasTrash && hasUnnatural) inferredType = 'Industrial Waste';
+          else if (hasWater && hasTrash) inferredType = 'Plastic Pollution';
+          else if (hasWater && hasUnnatural) inferredType = 'Unnatural Color - AI';
+          else if (!hasWater && !hasTrash && !hasUnnatural) inferredType = 'Clean';
+
+          const summarizePreds = (label: string, preds: Array<{ class_name: string; confidence: number; mask_area: number }>) => {
+            if (!preds || preds.length === 0) return `${label}: none`;
+            const top = preds
+              .slice(0, 5)
+              .map((p) => `${p.class_name} (conf: ${Math.round((p.confidence || 0) * 100)}%, area: ${Math.round(p.mask_area || 0)})`)
+              .join('; ');
+            return `${label}: ${top}`;
+          };
+
+          const aiTitle = `AI-generated report: ${inferredType}`;
+          const aiContent = [
+            `This report was auto-filled by AI based on the uploaded image.`,
+            summarizePreds('Water predictions', waterPreds),
+            summarizePreds('Trash predictions', trashPreds),
+            summarizePreds('Pollution predictions', pollutionPreds),
+            `Overall model confidence: ${pred.overall_confidence}%`,
+            `Estimated pollution percentage: ${pred.pollution_percentage}%`,
+          ].join('\n');
+
+          setAiResults({
+            severity_level: pred.severity_level,
+            overall_confidence: pred.overall_confidence,
+            pollution_percentage: pred.pollution_percentage,
+            water_predictions: waterPreds,
+            trash_predictions: trashPreds,
+            pollution_predictions: pollutionPreds,
+            ai_verified,
+          });
+          setAiScanStatus('success');
+
+          // Quick Photo flow: auto-fill and lock only in quick flow
+          if (!userStartedDetailedForm) {
+            setNewReport((prev) => ({
+              ...prev,
+              title: aiTitle,
+              content: aiContent,
+              pollutionType: inferredType,
+              severityByUser: pred.severity_level,
+            }));
+            setFieldsLocked(true);
+          }
+        } catch (err) {
+          console.error('AI verification error:', err);
+          setAiScanStatus('error');
         }
       } else {
         setErrorMessage('Please select a valid image file (JPEG, PNG, JPG, or GIF).');
@@ -177,53 +290,8 @@ export const ReportPollution = () => {
     setSubmitStatus('idle');
 
     try {
-      // Step 1: Call /api/predict with FormData
-      const predictFormData = new FormData();
-
-      // Debug: Check if the image is still valid
-      console.log('Image file before prediction:', {
-        name: newReport.image?.name,
-        type: newReport.image?.type,
-        size: newReport.image?.size,
-        isFile: newReport.image instanceof File
-      });
-
-      if (newReport.image) {
-        predictFormData.append('image', newReport.image as Blob);
-      }
-      predictFormData.append('severityByUser', newReport.severityByUser);
-
-      console.log('Submitting to /api/predict:', {
-        image: newReport.image?.name,
-        severityByUser: newReport.severityByUser,
-      });
-
-      const ai_response = await fetch('/api/predict', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('auth_token')}`,
-        },
-        body: predictFormData,
-      });
-
-      if (!ai_response.ok) {
-        const text = await ai_response.text();
-        console.error('AI Prediction response:', {
-          status: ai_response.status,
-          statusText: ai_response.statusText,
-          body: text,
-        });
-        throw new Error(`Prediction failed: ${text}`);
-      }
-
-      const ai_data = await ai_response.json();
-      console.log('AI Response:', ai_response);
-      console.log('AI Data:', ai_data);
-
-      let new_status = 'pending';
-      if (ai_data.ai_verified === true) {
-        new_status = 'verified';
-      }
+      // Use cached AI results; backend will decide status
+      const new_status = 'pending';
 
       // Step 2: Submit report with FormData
       const reportFormData = new FormData();
@@ -239,10 +307,17 @@ export const ReportPollution = () => {
       }
       reportFormData.append('severityByUser', newReport.severityByUser);
       reportFormData.append('user_id', (user?.id || 1).toString());
-      reportFormData.append('severityByAI', ai_data[0].severity_level);
-      reportFormData.append('ai_verified', ai_data.ai_verified ? '1' : '0');
-      reportFormData.append('ai_confidence', ai_data[0].overall_confidence.toString());
-      reportFormData.append('severityPercentage', ai_data[0].pollution_percentage.toString());
+      if (aiResults) {
+        reportFormData.append('severityByAI', aiResults.severity_level);
+        reportFormData.append('ai_verified', aiResults.ai_verified ? '1' : '0');
+        reportFormData.append('ai_confidence', aiResults.overall_confidence.toString());
+        reportFormData.append('severityPercentage', aiResults.pollution_percentage.toString());
+      } else {
+        reportFormData.append('severityByAI', newReport.severityByUser || 'medium');
+        reportFormData.append('ai_verified', '0');
+        reportFormData.append('ai_confidence', '0');
+        reportFormData.append('severityPercentage', '0');
+      }
 
       console.log('Submitting to /api/reports:', {
         title: newReport.title,
@@ -255,10 +330,10 @@ export const ReportPollution = () => {
         image: newReport.image?.name || 'undefined',
         severityByUser: newReport.severityByUser,
         user_id: user?.id || 1,
-        severityByAI: ai_data[0].severity_level,
-        ai_verified: ai_data.ai_verified,
-        ai_confidence: ai_data[0].overall_confidence,
-        severityPercentage: ai_data[0].pollution_percentage,
+        severityByAI: aiResults?.severity_level,
+        ai_verified: aiResults?.ai_verified,
+        ai_confidence: aiResults?.overall_confidence,
+        severityPercentage: aiResults?.pollution_percentage,
       });
 
       const response = await fetch('/api/reports', {
@@ -296,6 +371,9 @@ export const ReportPollution = () => {
           severityByUser: "",
           image: null,
         });
+        setFieldsLocked(false);
+        setAiResults(null);
+        setUserStartedDetailedForm(false);
         setTimeout(() => {
           setShowReportForm(false);
           setShowCameraModal(false);
@@ -479,10 +557,8 @@ const handleGetCurrentLocation = () => {
                         <Input
                           placeholder="Brief description of the pollution"
                           value={newReport.title}
-                          onChange={(e) =>
-                            setNewReport({ ...newReport, title: e.target.value })
-                          }
-                          disabled={isSubmitting}
+                          onChange={(e) => { setNewReport({ ...newReport, title: e.target.value }); setUserStartedDetailedForm(true); }}
+                          disabled={isSubmitting || fieldsLocked}
                         />
                       </div>
 
@@ -493,14 +569,9 @@ const handleGetCurrentLocation = () => {
                         <Textarea
                           placeholder="Detailed description of what you observed..."
                           value={newReport.content}
-                          onChange={(e) =>
-                            setNewReport({
-                              ...newReport,
-                              content: e.target.value,
-                            })
-                          }
+                          onChange={(e) => { setNewReport({ ...newReport, content: e.target.value }); }}
                           rows={3}
-                          disabled={isSubmitting}
+                          disabled={isSubmitting || fieldsLocked}
                         />
                       </div>
 
@@ -511,10 +582,8 @@ const handleGetCurrentLocation = () => {
                           </label>
                           <Select
                             value={newReport.pollutionType}
-                            onValueChange={(value) =>
-                              setNewReport({ ...newReport, pollutionType: value })
-                            }
-                            disabled={isSubmitting}
+                            onValueChange={(value) => { setNewReport({ ...newReport, pollutionType: value }); setUserStartedDetailedForm(true); }}
+                            disabled={isSubmitting || fieldsLocked}
                           >
                             <SelectTrigger>
                               <SelectValue placeholder="Select pollution type" />
@@ -525,6 +594,8 @@ const handleGetCurrentLocation = () => {
                               <SelectItem value="Sewage Discharge">Sewage Discharge</SelectItem>
                               <SelectItem value="Chemical Pollution">Chemical Pollution</SelectItem>
                               <SelectItem value="Oil Spill">Oil Spill</SelectItem>
+                              <SelectItem value="Unnatural Color - AI">Unnatural Color - AI</SelectItem>
+                              <SelectItem value="Clean">Clean</SelectItem>
                             </SelectContent>
                           </Select>
                         </div>
@@ -535,10 +606,8 @@ const handleGetCurrentLocation = () => {
                           </label>
                           <Select
                             value={newReport.severityByUser}
-                            onValueChange={(value) =>
-                              setNewReport({ ...newReport, severityByUser: value })
-                            }
-                            disabled={isSubmitting}
+                            onValueChange={(value) => { setNewReport({ ...newReport, severityByUser: value }); setUserStartedDetailedForm(true); }}
+                            disabled={isSubmitting || fieldsLocked}
                           >
                             <SelectTrigger>
                               <SelectValue placeholder="Select severity" />
@@ -551,6 +620,17 @@ const handleGetCurrentLocation = () => {
                             </SelectContent>
                           </Select>
                         </div>
+                      </div>
+
+                      <div className="pt-2">
+                        <Button
+                          onClick={() => setShowDetailedScanModal(true)}
+                          className="w-full"
+                          variant="outline"
+                        >
+                          <Upload className="w-4 h-4 mr-2" />
+                          Select Photo for Metadata + AI Scan
+                        </Button>
                       </div>
                     </div>
                   </DialogContent>
@@ -566,29 +646,7 @@ const handleGetCurrentLocation = () => {
           </div>
         </div>
 
-        <div className="mt-8">
-          <Card className="border-waterbase-200">
-            <CardHeader>
-              <CardTitle className="text-waterbase-950">Submit Report</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <Button
-                onClick={handleSubmitReport}
-                disabled={!newReport.image || isSubmitting}
-                className="w-full bg-waterbase-500 hover:bg-waterbase-600"
-              >
-                {isSubmitting ? (
-                  <>
-                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                    Submitting...
-                  </>
-                ) : (
-                  'Submit Report'
-                )}
-              </Button>
-            </CardContent>
-          </Card>
-        </div>
+        {/* Submit button moved into Quick Photo Report modal */}
 
         {(submitStatus === 'error' || errorMessage) && !showReportForm && !showCameraModal && (
           <div className="mt-4">
@@ -621,6 +679,12 @@ const handleGetCurrentLocation = () => {
                 <div className="text-center py-4">
                   <Loader2 className="w-8 h-8 mx-auto animate-spin text-waterbase-500" />
                   <p className="mt-2 text-waterbase-600">Verifying image metadata...</p>
+                </div>
+              )}
+              {aiScanStatus === 'scanning' && (
+                <div className="text-center py-2">
+                  <Loader2 className="w-6 h-6 mx-auto animate-spin text-enviro-600" />
+                  <p className="mt-1 text-enviro-700">Scanning image for pollution factors...</p>
                 </div>
               )}
 
@@ -696,6 +760,279 @@ const handleGetCurrentLocation = () => {
                 </>
               )}
 
+              {aiScanStatus === 'success' && (
+                <div className="flex justify-end gap-2">
+                  <Button variant="outline" onClick={() => { setAiAnalysisViewMode('quick'); setShowAiResultModal(true); }}>View AI Analysis</Button>
+                </div>
+              )}
+
+              <div className="pt-2">
+                <Button
+                  onClick={handleSubmitReport}
+                  disabled={!newReport.image || isSubmitting || aiScanStatus === 'scanning' || verificationStatus === 'verifying'}
+                  className="w-full bg-waterbase-500 hover:bg-waterbase-600"
+                >
+                  {isSubmitting ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      Submitting...
+                    </>
+                  ) : (
+                    'Submit Report'
+                  )}
+                </Button>
+              </div>
+
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* Detailed Report: dedicated image selection + metadata + AI scan modal */}
+        <Dialog open={showDetailedScanModal} onOpenChange={setShowDetailedScanModal}>
+          <DialogContent className="max-w-[95vw] sm:max-w-md md:max-w-2xl lg:max-w-4xl w-full p-4 sm:p-6">
+            <DialogHeader>
+              <DialogTitle>Select Image for Detailed Report</DialogTitle>
+              <DialogDescription>
+                Choose an image to extract location metadata and run AI pollution detection. Your form remains editable; AI will not auto-fill it.
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="space-y-4 max-h-[70vh] overflow-y-auto">
+              <Input
+                type="file"
+                accept="image/*"
+                capture="environment"
+                onChange={async (e) => {
+                  const file = e.target.files?.[0];
+                  if (!file) return;
+                  // Save image only (do NOT auto-fill any fields for detailed flow)
+                  setNewReport((prev) => ({ ...prev, image: file }));
+
+                  // 1) Metadata verification
+                  setVerificationStatusDetailed('verifying');
+                  setShowLocationFieldsDetailed(false);
+                  try {
+                    const fd = new FormData();
+                    fd.append('image', file);
+                    const resp = await fetch('/api/reports/verify-image', {
+                      method: 'POST',
+                      headers: { 'Authorization': `Bearer ${localStorage.getItem('auth_token')}` },
+                      body: fd,
+                    });
+                    const data = await resp.json();
+                    if (resp.ok && data.tampered === false && data.gps != null) {
+                      const address = await fetchAddressFromCoordinates(data.gps.latitude, data.gps.longitude);
+                      setNewReport((prev) => ({
+                        ...prev,
+                        address: address || prev.address,
+                        latitude: data.gps.latitude?.toString() || prev.latitude,
+                        longitude: data.gps.longitude?.toString() || prev.longitude,
+                      }));
+                      setVerificationStatusDetailed('success');
+                      setShowLocationFieldsDetailed(false);
+                    } else if (resp.ok === true && data.tampered === true && data.gps != null) {
+                      setVerificationStatusDetailed('failed');
+                      setShowLocationFieldsDetailed(false);
+                      setErrorMessage('Error: Image flagged as tampered. Please upload an original, unedited camera photo.');
+                    } else {
+                      setVerificationStatusDetailed('failed');
+                      setShowLocationFieldsDetailed(true);
+                      setErrorMessage('No location metadata found. Please enter location manually.');
+                    }
+                  } catch (err) {
+                    setVerificationStatusDetailed('failed');
+                    setShowLocationFieldsDetailed(true);
+                    setErrorMessage('Failed to verify image metadata. Please enter location manually.');
+                  }
+
+                  // 2) AI scan (do not auto-fill form fields)
+                  try {
+                    setAiScanStatusDetailed('scanning');
+                    const predictFD = new FormData();
+                    predictFD.append('image', file as Blob);
+                    predictFD.append('severityByUser', newReport.severityByUser || 'medium');
+                    const aiResp = await fetch('/api/predict', {
+                      method: 'POST',
+                      headers: { 'Authorization': `Bearer ${localStorage.getItem('auth_token')}` },
+                      body: predictFD,
+                    });
+                    if (!aiResp.ok) throw new Error('AI prediction failed');
+                    const aiData = await aiResp.json();
+                    const pred = aiData[0] || aiData;
+                    const ai_verified = aiData.ai_verified ?? false;
+                    setAiResults({
+                      severity_level: pred.severity_level,
+                      overall_confidence: pred.overall_confidence,
+                      pollution_percentage: pred.pollution_percentage,
+                      water_predictions: Array.isArray(pred.water_predictions) ? pred.water_predictions : [],
+                      trash_predictions: Array.isArray(pred.trash_predictions) ? pred.trash_predictions : [],
+                      pollution_predictions: Array.isArray(pred.pollution_predictions) ? pred.pollution_predictions : [],
+                      ai_verified,
+                    });
+                    setAiScanStatusDetailed('success');
+                  } catch (err) {
+                    setAiScanStatusDetailed('error');
+                  }
+                }}
+                className="w-full"
+              />
+
+              {verificationStatusDetailed === 'verifying' && (
+                <div className="text-center py-2">
+                  <Loader2 className="w-6 h-6 mx-auto animate-spin text-waterbase-500" />
+                  <p className="mt-1 text-waterbase-600">Verifying image metadata...</p>
+                </div>
+              )}
+              {aiScanStatusDetailed === 'scanning' && (
+                <div className="text-center py-2">
+                  <Loader2 className="w-6 h-6 mx-auto animate-spin text-enviro-600" />
+                  <p className="mt-1 text-enviro-700">Scanning image for pollution factors...</p>
+                </div>
+              )}
+
+              {newReport.image && verificationStatusDetailed !== 'verifying' && (
+                <div className="flex justify-center">
+                  <img
+                    src={URL.createObjectURL(newReport.image)}
+                    alt="Preview"
+                    className="max-w-full max-h-[40vh] object-contain rounded-lg"
+                  />
+                </div>
+              )}
+
+              {showLocationFieldsDetailed && (
+                <>
+                  <div>
+                    <label className="text-sm font-medium mb-1 block">Address *</label>
+                    <OpenStreetMapSearchableSelect
+                      value={newReport.address}
+                      onValueChange={(address: string, coordinates?: { lat: number; lng: number }) => {
+                        setNewReport({
+                          ...newReport,
+                          address,
+                          latitude: coordinates?.lat?.toString() || newReport.latitude,
+                          longitude: coordinates?.lng?.toString() || newReport.longitude,
+                        });
+                      }}
+                      placeholder="Search for region, province, city, or barangay..."
+                      disabled={verificationStatusDetailed === 'verifying'}
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    <div>
+                      <label className="text-sm font-medium mb-1 block">Latitude *</label>
+                      <Input
+                        placeholder="14.5995"
+                        value={newReport.latitude}
+                        onChange={(e) => setNewReport({ ...newReport, latitude: e.target.value })}
+                        disabled={verificationStatusDetailed === 'verifying'}
+                      />
+                    </div>
+                    <div>
+                      <label className="text-sm font-medium mb-1 block">Longitude *</label>
+                      <Input
+                        placeholder="121.0008"
+                        value={newReport.longitude}
+                        onChange={(e) => setNewReport({ ...newReport, longitude: e.target.value })}
+                        disabled={verificationStatusDetailed === 'verifying'}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="flex justify-center">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={handleGetCurrentLocation}
+                      disabled={verificationStatusDetailed === 'verifying'}
+                    >
+                      <MapPin className="w-4 h-4 mr-2" />
+                      Use Current Location
+                    </Button>
+                  </div>
+                </>
+              )}
+
+              <div className="flex justify-end gap-2">
+                {aiScanStatusDetailed === 'success' && (
+                  <Button variant="outline" onClick={() => { setAiAnalysisViewMode('detailed'); setShowAiResultModal(true); }}>View AI Analysis</Button>
+                )}
+                <Button
+                  onClick={handleSubmitReport}
+                  disabled={
+                    !newReport.image || isSubmitting ||
+                    verificationStatusDetailed === 'verifying' || aiScanStatusDetailed === 'scanning' ||
+                    !newReport.title.trim() || !newReport.content.trim() || !newReport.pollutionType || !newReport.severityByUser ||
+                    !newReport.address.trim() || !newReport.latitude || !newReport.longitude
+                  }
+                  className="bg-waterbase-500 hover:bg-waterbase-600"
+                >
+                  {isSubmitting ? (
+                    <>
+                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                      Submitting...
+                    </>
+                  ) : (
+                    'Submit Report'
+                  )}
+                </Button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+        {/* Read-only AI analysis preview modal */}
+        <Dialog open={showAiResultModal} onOpenChange={setShowAiResultModal}>
+          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>AI Analysis Result</DialogTitle>
+              <DialogDescription>Auto-filled report details (read-only)</DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4">
+              {aiResults ? (
+                <div className="space-y-2 text-sm">
+                  <div className="font-medium">Inferred Pollution Type: {(() => {
+                    const wp = aiResults.water_predictions?.length > 0;
+                    const tp = aiResults.trash_predictions?.length > 0;
+                    const up = aiResults.pollution_predictions?.length > 0;
+                    if (wp && tp && up) return 'Industrial Waste';
+                    if (wp && tp) return 'Plastic Pollution';
+                    if (wp && up) return 'Unnatural Color - AI';
+                    if (!wp && !tp && !up) return 'Clean';
+                    return 'Clean';
+                  })()}</div>
+                  <div>AI Severity: {aiResults.severity_level}</div>
+                  <div>Overall Confidence: {aiResults.overall_confidence}%</div>
+                  <div>Estimated Pollution: {aiResults.pollution_percentage}%</div>
+                  <div className="mt-2">
+                    <div className="font-medium">Water predictions</div>
+                    <div className="text-xs text-gray-600">
+                      {aiResults.water_predictions?.length ? aiResults.water_predictions.slice(0,5).map((p, i) => (
+                        <div key={`w-${i}`}>{p.class_name} — {Math.round((p.confidence||0)*100)}% (area: {Math.round(p.mask_area||0)})</div>
+                      )) : 'none'}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="font-medium">Trash predictions</div>
+                    <div className="text-xs text-gray-600">
+                      {aiResults.trash_predictions?.length ? aiResults.trash_predictions.slice(0,5).map((p, i) => (
+                        <div key={`t-${i}`}>{p.class_name} — {Math.round((p.confidence||0)*100)}% (area: {Math.round(p.mask_area||0)})</div>
+                      )) : 'none'}
+                    </div>
+                  </div>
+                  <div>
+                    <div className="font-medium">Pollution predictions</div>
+                    <div className="text-xs text-gray-600">
+                      {aiResults.pollution_predictions?.length ? aiResults.pollution_predictions.slice(0,5).map((p, i) => (
+                        <div key={`p-${i}`}>{p.class_name} — {Math.round((p.confidence||0)*100)}% (area: {Math.round(p.mask_area||0)})</div>
+                      )) : 'none'}
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="text-sm text-gray-600">No AI results available.</div>
+              )}
             </div>
           </DialogContent>
         </Dialog>

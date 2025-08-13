@@ -243,6 +243,8 @@ def main(image_path):
         pollution_percentage = 0.0
         if total_water_area > 0:
             pollution_percentage = (polluted_area / total_water_area) * 100
+            # Cap pollution percentage at 100% to avoid unrealistic values due to overlapping detections
+            pollution_percentage = min(pollution_percentage, 100.0)
         
         # Visualize all results
         results_list = [

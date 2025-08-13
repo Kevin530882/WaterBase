@@ -10,6 +10,7 @@ use App\Http\Controllers\DetectPollutionController;
 use App\Http\Controllers\AdminDashboardController;
 use App\Http\Controllers\AdminReportsController;
 use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\SystemSettingsController;
 
 Route::post('/login', [UserController::class, 'login']);
 Route::post('/register', [UserController::class, 'register']);
@@ -75,4 +76,8 @@ Route::middleware('auth:sanctum')->group(function () {
 
     Route::get('/admin/stats', [AdminDashboardController::class, 'getAdminStats']);
     Route::get('/admin/reports/high-severity', [AdminDashboardController::class, 'getRecentHighSeverityReports']);
+
+    // System settings
+    Route::get('/admin/system-settings', [SystemSettingsController::class, 'get']);
+    Route::put('/admin/system-settings', [SystemSettingsController::class, 'update']);
 });
