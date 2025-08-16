@@ -193,26 +193,22 @@ export const SeverityDistributionChart: React.FC<SeverityDistributionChartProps>
       {isExpanded && (
         <CardContent className="pt-0">
           <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-            <TabsList className="grid w-full grid-cols-5 h-8">
-              <TabsTrigger value="overview" className="text-xs px-1">
+            <TabsList className="grid w-full grid-cols-4 h-8">
+              <TabsTrigger value="overview" className="text-xs px-2">
                 <Eye className="w-3 h-3 mr-1" />
                 Overview
               </TabsTrigger>
-              <TabsTrigger value="distribution" className="text-xs px-1">
+              <TabsTrigger value="distribution" className="text-xs px-2">
                 <BarChart3 className="w-3 h-3 mr-1" />
-                Chart
+                Distribution
               </TabsTrigger>
-              <TabsTrigger value="summary" className="text-xs px-1">
+              <TabsTrigger value="summary" className="text-xs px-2">
                 <FileText className="w-3 h-3 mr-1" />
                 Summary
               </TabsTrigger>
-              <TabsTrigger value="insights" className="text-xs px-1">
+              <TabsTrigger value="insights" className="text-xs px-2">
                 <Lightbulb className="w-3 h-3 mr-1" />
                 Insights
-              </TabsTrigger>
-              <TabsTrigger value="debug" className="text-xs px-1">
-                <HelpCircle className="w-3 h-3 mr-1" />
-                Debug
               </TabsTrigger>
             </TabsList>
             
@@ -513,173 +509,6 @@ export const SeverityDistributionChart: React.FC<SeverityDistributionChartProps>
                 </div>
               </TabsContent>
               
-              <TabsContent value="debug" className="space-y-4 mt-0">
-                {/* Raw Data Debug */}
-                <div className="space-y-3">
-                  <h4 className="text-sm font-semibold text-gray-800 flex items-center">
-                    <HelpCircle className="w-4 h-4 mr-2" />
-                    Debug Information
-                  </h4>
-                  
-                  {/* WBSI Calculation Details */}
-                  <div className="p-3 bg-gray-50 rounded-lg">
-                    <h5 className="text-sm font-medium text-gray-800 mb-2">WBSI Calculation</h5>
-                    <div className="space-y-1 text-xs">
-                      <div className="flex justify-between">
-                        <span className="text-gray-600">Modal Severity (Peak):</span>
-                        <span className="font-mono font-medium">{config.peak_severity}%</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-gray-600">WBSI Display:</span>
-                        <span className="font-mono font-medium">{config.wbsi_display}%</span>
-                      </div>
-                      {config.wbsi_display_shrunk && (
-                        <div className="flex justify-between">
-                          <span className="text-gray-600">WBSI Shrunk:</span>
-                          <span className="font-mono font-medium text-red-600">{config.wbsi_display_shrunk}%</span>
-                        </div>
-                      )}
-                      {config.shrinkage_factor && (
-                        <div className="flex justify-between">
-                          <span className="text-gray-600">Shrinkage Factor:</span>
-                          <span className="font-mono font-medium">{config.shrinkage_factor.toFixed(3)}</span>
-                        </div>
-                      )}
-                      <div className="flex justify-between">
-                        <span className="text-gray-600">Consensus:</span>
-                        <span className="font-mono font-medium">{config.consensus_percentage}%</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-gray-600">Consensus Range:</span>
-                        <span className="font-mono font-medium">{config.consensus_range[0]}% - {config.consensus_range[1]}%</span>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Raw Severity Values */}
-                  <div className="p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
-                    <h5 className="text-sm font-medium text-yellow-800 mb-2">📊 Raw Severity Values Used</h5>
-                    <p className="text-xs text-yellow-700 mb-2">
-                      These are the actual severity percentages extracted from the reports:
-                    </p>
-                    <div className="max-h-32 overflow-y-auto">
-                      <div className="grid grid-cols-6 gap-1">
-                        {bar_data.map((item, index) => (
-                          item.count > 0 && (
-                            <div key={index} className="text-xs font-mono bg-white p-1 rounded border text-center">
-                              <div className={cn(
-                                "font-medium",
-                                item.band === 'low' ? 'text-green-600' :
-                                item.band === 'medium' ? 'text-yellow-600' :
-                                item.band === 'high' ? 'text-orange-600' : 'text-red-600'
-                              )}>
-                                {item.severity}%
-                              </div>
-                              <div className="text-gray-500">{item.count.toFixed(1)}×</div>
-                            </div>
-                          )
-                        ))}
-                      </div>
-                    </div>
-                    <p className="text-xs text-yellow-600 mt-2">
-                      Format: <span className="font-mono">Severity% (Count×)</span>
-                    </p>
-                  </div>
-
-                  {/* Band Analysis */}
-                  <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
-                    <h5 className="text-sm font-medium text-blue-800 mb-2">📈 Severity Band Analysis</h5>
-                    <div className="space-y-2">
-                      {Object.entries(config.severity_bands).map(([band, percentage]) => (
-                        <div key={band} className="flex items-center justify-between text-xs">
-                          <div className="flex items-center">
-                            <div
-                              className="w-3 h-3 rounded mr-2"
-                              style={{ backgroundColor: getSeverityBandColor(band) }}
-                            />
-                            <span className="capitalize font-medium">{band}:</span>
-                          </div>
-                          <span className="font-mono">{percentage.toFixed(1)}%</span>
-                        </div>
-                      ))}
-                    </div>
-                    <div className="mt-2 pt-2 border-t border-blue-200 text-xs">
-                      <div className="flex justify-between">
-                        <span className="text-blue-700">Critical Ratio:</span>
-                        <span className="font-mono text-blue-800 font-medium">
-                          {config.severity_bands.critical.toFixed(1)}%
-                        </span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-blue-700">High+Critical Combined:</span>
-                        <span className="font-mono text-blue-800 font-medium">
-                          {(config.severity_bands.high + config.severity_bands.critical).toFixed(1)}%
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Outliers */}
-                  {outliers.length > 0 && (
-                    <div className="p-3 bg-orange-50 border border-orange-200 rounded-lg">
-                      <h5 className="text-sm font-medium text-orange-800 mb-2">⚠️ Outlier Reports</h5>
-                      <div className="space-y-1">
-                        {outliers.map((outlier, index) => (
-                          <div key={outlier.report_id} className="flex justify-between text-xs">
-                            <span className="text-orange-700">Report #{outlier.report_id}:</span>
-                            <span className="font-mono text-orange-800">
-                              {outlier.severity}% (±{outlier.deviation.toFixed(1)})
-                            </span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Technical Info */}
-                  <div className="p-3 bg-gray-100 rounded-lg">
-                    <h5 className="text-sm font-medium text-gray-800 mb-2">🔧 Technical Details</h5>
-                    <div className="space-y-1 text-xs font-mono">
-                      <div className="flex justify-between">
-                        <span>Is Polymodal:</span>
-                        <span className={config.is_polymodal ? 'text-red-600' : 'text-green-600'}>
-                          {config.is_polymodal ? 'YES' : 'NO'}
-                        </span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span>Total Reports:</span>
-                        <span>{config.n_reports}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span>KDE Points:</span>
-                        <span>{kde_data.length}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span>Histogram Bins:</span>
-                        <span>{bar_data.length}</span>
-                      </div>
-                    </div>
-                  </div>
-                  
-                  {/* Interpretation Note */}
-                  <div className="p-3 bg-green-50 border border-green-200 rounded-lg">
-                    <h5 className="text-sm font-medium text-green-800 mb-1">💡 What This Tells Us</h5>
-                    <p className="text-xs text-green-700">
-                      The WBSI of <strong>{config.wbsi_display}%</strong> comes from the modal severity (peak) of the distribution, 
-                      not an average. This means <strong>{config.wbsi_display}%</strong> is where most reports cluster, 
-                      representing the dominant pollution pattern in this area.
-                      
-                      {config.wbsi_display_shrunk && config.shrinkage_factor && (
-                        <span className="block mt-2">
-                          <strong>Small sample adjustment:</strong> With only {config.n_reports} reports, 
-                          the shrunk value would be {config.wbsi_display_shrunk}% (factor: {config.shrinkage_factor.toFixed(3)}), 
-                          but we show the modal severity for better user understanding.
-                        </span>
-                      )}
-                    </p>
-                  </div>
-                </div>
-              </TabsContent>
             </div>
           </Tabs>
         </CardContent>
