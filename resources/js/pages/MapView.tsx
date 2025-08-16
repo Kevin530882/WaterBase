@@ -44,6 +44,8 @@ import L from 'leaflet';
 import { renderToStaticMarkup } from 'react-dom/server';
 // @ts-ignore
 import 'leaflet.heat';
+import { WBSICalculator, getReportsForLocation, getSeverityDescription } from '@/utils/wbsiCalculator';
+import SeverityDistributionChart from '@/components/SeverityDistributionChart';
 
 // Real Report interface based on API structure
 interface Report {
@@ -130,11 +132,32 @@ export const MapView = () => {
   const [searchQuery, setSearchQuery] = useState("");
   const [filteredReports, setFilteredReports] = useState<Report[]>([]);
   const [viewMode, setViewMode] = useState<"standard" | "priority">("standard");
+  const [wbsiData, setWbsiData] = useState<any>(null);
 
-  // Debug selectedReport changes
+  // Calculate WBSI when selectedReport changes
   useEffect(() => {
     console.log('selectedReport state changed:', selectedReport);
-  }, [selectedReport]);
+    
+    if (selectedReport) {
+      const calculator = new WBSICalculator();
+      // Get reports within 5km of the selected report
+      const nearbyReports = getReportsForLocation(reports, selectedReport, 5);
+      
+      if (nearbyReports.length > 0) {
+        // Calculate WBSI for nearby reports
+        const wbsiResult = calculator.calculateWBSI(nearbyReports);
+        const chartData = calculator.generateChartData(wbsiResult);
+        setWbsiData(chartData);
+      } else {
+        // If there are no nearby reports, use just the selected report
+        const wbsiResult = calculator.calculateWBSI([selectedReport]);
+        const chartData = calculator.generateChartData(wbsiResult);
+        setWbsiData(chartData);
+      }
+    } else {
+      setWbsiData(null);
+    }
+  }, [selectedReport, reports]);
 
   // Simplified report selection handler
   const handleReportSelect = (report: Report) => {
@@ -363,7 +386,7 @@ export const MapView = () => {
 
       <div className="flex h-[calc(100vh-64px)]">
         {/* Enhanced Sidebar */}
-        <div className="w-full lg:w-96 bg-white border-r border-gray-200 flex flex-col">
+        <div className="w-full lg:w-96 bg-white border-r border-gray-200 flex flex-col min-h-0">
           {/* Header with View Toggle */}
           <div className="p-4 border-b border-gray-200">
             <div className="flex items-center justify-between mb-4">
@@ -466,6 +489,16 @@ export const MapView = () => {
                 </Select>
               </div>
             </div>
+            
+            {/* Severity Distribution Chart - Only shown when a report is selected */}
+            {selectedReport && wbsiData && (
+              <div className="mt-4">
+                <SeverityDistributionChart 
+                  chartData={wbsiData} 
+                  locationName={selectedReport.address}
+                />
+              </div>
+            )}
           </div>
 
           {/* Priority Zone Highlights */}
@@ -478,7 +511,7 @@ export const MapView = () => {
           )}
 
           {/* Reports list */}
-          <div className="flex-1 overflow-y-auto">
+          <div className="flex-1 overflow-y-auto min-h-0">
             {filteredReports.length === 0 ? (
               <div className="p-4 text-center text-gray-500">
                 <Filter className="w-8 h-8 mx-auto mb-2 text-gray-400" />
