@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import {
     Card,
@@ -22,6 +22,8 @@ import {
     Eye,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { WBSICalculator } from '@/utils/wbsiCalculator';
+import SeverityDistributionChart from '@/components/SeverityDistributionChart';
 
 interface Report {
     id: number;
@@ -77,6 +79,18 @@ export const AreaDetails = ({
     onViewReport,
 }: AreaDetailsProps) => {
     const [hoveredImage, setHoveredImage] = useState<string | null>(null);
+    const [wbsiData, setWbsiData] = useState<any | null>(null);
+
+    useEffect(() => {
+        if (selectedArea && selectedArea.reports.length > 0) {
+            const calculator = new WBSICalculator();
+            const wbsiResult = calculator.calculateWBSI(selectedArea.reports);
+            const chartData = calculator.generateChartData(wbsiResult);
+            setWbsiData(chartData);
+        } else {
+            setWbsiData(null);
+        }
+    }, [selectedArea]);
 
     const getSeverityColor = (severity: string) => {
         switch (severity.toLowerCase()) {
@@ -191,6 +205,16 @@ export const AreaDetails = ({
                             </CardContent>
                         </Card>
 
+                        {/* Severity Distribution Chart */}
+                        {wbsiData && (
+                            <div className="mt-4 border-t border-gray-200 pt-4">
+                                <SeverityDistributionChart
+                                    chartData={wbsiData}
+                                    locationName={selectedArea.location}
+                                />
+                            </div>
+                        )}
+
                         {/* Reports Grid with Images */}
                         <div className="space-y-4">
                             <h3 className="text-base sm:text-lg font-semibold text-waterbase-950">Individual Reports</h3>
@@ -296,15 +320,7 @@ export const AreaDetails = ({
                                                                     <AlertTriangle className="w-3 h-3 mr-1" />
                                                                     Decline
                                                                 </Button>
-                                                                <Button
-                                                                    variant="outline"
-                                                                    size="sm"
-                                                                    className="flex-1"
-                                                                    onClick={() => onViewReport(report)}
-                                                                >
-                                                                    <Eye className="w-3 h-3 mr-1" />
-                                                                    View Details
-                                                                </Button>
+
                                                             </>
                                                         )}
                                                     </div>
@@ -319,10 +335,10 @@ export const AreaDetails = ({
                         {/* Action Buttons */}
                         <div className="flex flex-col sm:flex-row justify-between gap-4 pt-4 border-t">
                             <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2">
-                                <Button variant="outline" className="w-full sm:w-auto">
+                                {/* <Button variant="outline" className="w-full sm:w-auto">
                                     <MapPin className="w-4 h-4 mr-2" />
                                     View on Map
-                                </Button>
+                                </Button> */}
 
                                 {/* Bulk Actions for Verified Reports */}
                                 {selectedArea.reports.some((r) => r.status === "verified") && (
