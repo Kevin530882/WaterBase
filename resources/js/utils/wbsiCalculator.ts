@@ -20,7 +20,7 @@ export interface Report {
   created_at: string;
   updated_at: string;
   image?: string;
-  pollutionpercentage?: number;
+  severityPercentage?: number;  // Updated name to match schema (was pollutionpercentage)
   polluted_pixels?: number;
   water_pixels?: number;
   reports_by_user_in_barangay?: number;
@@ -199,7 +199,7 @@ export class WBSICalculator {
   /**
    * Calculate weighted Kernel Density Estimate for smooth curve
    */
-  kernelDensityEstimate(severities: number[], weights: number[], bandwidth: number = 8.0, nPoints: number = 200): { xPoints: number[]; densityValues: number[] } {
+  kernelDensityEstimate(severities: number[], weights: number[], bandwidth: number = 8.0, nPoints: number = 500): { xPoints: number[]; densityValues: number[] } {  // Increased nPoints for better precision
     const xPoints: number[] = [];
     const densityValues: number[] = [];
 
@@ -465,22 +465,22 @@ export class WBSICalculator {
 
     // Extract severities from reports
     const severities: number[] = reports.map(report => {
-      if (typeof report.pollutionpercentage === 'number') {
-        return Math.max(0.0, Math.min(100.0, report.pollutionpercentage));
+      if (typeof report.severityPercentage === 'number') {  // Updated name
+        return Math.max(0.0, Math.min(100.0, report.severityPercentage));
       }
       
       if (report.polluted_pixels && report.water_pixels) {
         return this.calculateSeverity(report.polluted_pixels, report.water_pixels);
       }
 
-      // Fallback: parse from severity strings
+      // Fallback: parse from severity strings (updated to bin centers)
       const severityStr = report.severityByAI || report.severityByUser || 'medium';
       const lowerStr = severityStr.toLowerCase();
       
-      if (lowerStr.includes('low')) return 20.0;
-      if (lowerStr.includes('medium')) return 50.0;
-      if (lowerStr.includes('high')) return 75.0;
-      if (lowerStr.includes('critical')) return 90.0;
+      if (lowerStr.includes('low')) return 12.5;
+      if (lowerStr.includes('medium')) return 37.5;
+      if (lowerStr.includes('high')) return 62.5;
+      if (lowerStr.includes('critical')) return 87.5;
       
       return 50.0; // Default
     });
@@ -615,10 +615,10 @@ export class WBSICalculator {
       peak_severity: Math.round(wbsiResult.modal_severity * 10) / 10,
       consensus_range: [
         Math.round((wbsiResult.modal_severity - wbsiResult.parameters.delta) * 10) / 10,
-        Math.round((wbsiResult.modal_severity + wbsiResult.parameters.delta) * 10) / 10
+        Math.round((wbsiResult.modal_severity + wbsiResult.parameters.delta) * 10) / 10,
       ] as [number, number],
-      wbsi_display: Math.round(wbsiResult.wbsi_mode * 10) / 10, // Use modal severity, not shrunk value
-      wbsi_display_shrunk: Math.round(wbsiResult.wbsi_mode_shrunk * 10) / 10, // Keep shrunk for reference
+      wbsi_display: Math.round(wbsiResult.wbsi_mode * 10) / 10, // Use raw mode, but chart can override
+      wbsi_display_shrunk: Math.round(wbsiResult.wbsi_mode_shrunk * 10) / 10,
       shrinkage_factor: wbsiResult.shrinkage_factor,
       consensus_percentage: Math.round(wbsiResult.consensus * 1000) / 10,
       severity_bands: wbsiResult.severity_bands,

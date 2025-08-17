@@ -57,11 +57,15 @@ export const SeverityDistributionChart: React.FC<SeverityDistributionChartProps>
   const [activeTab, setActiveTab] = useState("overview");
   const [isExpanded, setIsExpanded] = useState(false);
   
+  // Decide on displayed WBSI: Use shrunk if small n_reports
+  const useShrunk = config.n_reports < 10;  // Threshold for small samples
+  const displayedWBSI = useShrunk ? config.wbsi_display_shrunk : config.wbsi_display;
+  
   // Get comprehensive analysis
-  const interpretation = getWBSIInterpretation(config.wbsi_display, config.consensus_percentage / 100, config.n_reports);
-  const matchingScenarios = findMatchingScenarios(config.wbsi_display, config.consensus_percentage / 100);
-  const insights = getScenarioInsights(config.wbsi_display, config.consensus_percentage / 100, config.n_reports, outliers.length);
-  const summaryReport = generateSummaryReport(config.wbsi_display, config.consensus_percentage / 100, config.n_reports, outliers.length, config.is_polymodal);
+  const interpretation = getWBSIInterpretation(displayedWBSI, config.consensus_percentage / 100, config.n_reports);
+  const matchingScenarios = findMatchingScenarios(displayedWBSI, config.consensus_percentage / 100);
+  const insights = getScenarioInsights(displayedWBSI, config.consensus_percentage / 100, config.n_reports, outliers.length);
+  const summaryReport = generateSummaryReport(displayedWBSI, config.consensus_percentage / 100, config.n_reports, outliers.length, config.is_polymodal);
 
   // Prepare combined data for the chart
   const combinedData = bar_data.map(barItem => {
@@ -111,15 +115,8 @@ export const SeverityDistributionChart: React.FC<SeverityDistributionChartProps>
     }
   };
 
-  // Custom bar shape with severity-based coloring
-  const CustomBar = (props: any) => {
-    const { fill, payload, ...rest } = props;
-    const color = getSeverityBandColor(payload.band);
-    return <Bar {...rest} fill={color} />;
-  };
-
   const severityDescription = React.useMemo(() => {
-    const wbsi = config.wbsi_display;
+    const wbsi = displayedWBSI;
     if (wbsi < 25) {
       return {
         level: "Low Pollution",
@@ -153,7 +150,7 @@ export const SeverityDistributionChart: React.FC<SeverityDistributionChartProps>
         borderColor: "border-red-200"
       };
     }
-  }, [config.wbsi_display]);
+  }, [displayedWBSI]);
 
   return (
     <Card className={cn("w-full", className)}>
@@ -181,12 +178,17 @@ export const SeverityDistributionChart: React.FC<SeverityDistributionChartProps>
               variant="outline" 
               className={cn("text-xs", severityDescription.color)}
             >
-              WBSI: {config.wbsi_display}%
+              WBSI: {displayedWBSI}%
             </Badge>
             <span className="text-xs text-gray-600">
               {config.n_reports} reports, {config.consensus_percentage}% consensus
             </span>
           </div>
+          {useShrunk && (
+            <span className="text-xs text-gray-500 italic">
+              (Adjusted for small sample; raw: {config.wbsi_display}%)
+            </span>
+          )}
         </div>
       </CardHeader>
       
@@ -226,7 +228,7 @@ export const SeverityDistributionChart: React.FC<SeverityDistributionChartProps>
                       <span className="font-semibold text-sm">{interpretation.level}</span>
                     </div>
                     <Badge variant="outline" className={interpretation.color}>
-                      {config.wbsi_display}%
+                      {displayedWBSI}%
                     </Badge>
                   </div>
                   
@@ -285,7 +287,7 @@ export const SeverityDistributionChart: React.FC<SeverityDistributionChartProps>
               
               <TabsContent value="distribution" className="space-y-4 mt-0">
                 {/* Chart */}
-                <div className="h-64 w-full">
+                <div className="h-80 w-full">
                   <ResponsiveContainer width="100%" height="100%">
                     <ComposedChart
                       data={combinedData}
@@ -305,29 +307,12 @@ export const SeverityDistributionChart: React.FC<SeverityDistributionChartProps>
                         label={{ value: 'Reports', angle: -90, position: 'insideLeft', style: { fontSize: '10px' } }}
                       />
                       <Tooltip content={<CustomTooltip />} />
-                      
-                      {/* Consensus range area */}
-                      <ReferenceArea
-                        x1={Math.max(0, config.consensus_range[0])}
-                        x2={Math.min(100, config.consensus_range[1])}
-                        fill="#3b82f6"
-                        fillOpacity={0.1}
-                        label="Consensus Zone"
-                      />
-                      
-                      {/* Peak severity line */}
-                      <ReferenceLine
-                        x={config.peak_severity}
-                        stroke="#3b82f6"
-                        strokeWidth={2}
-                        strokeDasharray="5 5"
-                        label={{ value: 'Peak', position: 'top' }}
-                      />
-                      
+                      <Legend />
+
                       {/* Bars for report counts */}
                       <Bar
                         dataKey="count"
-                        fill={(entry: any) => getSeverityBandColor(entry.band)}
+                        fill="#3b82f6"
                         fillOpacity={0.8}
                         radius={[2, 2, 0, 0]}
                       />
@@ -341,9 +326,35 @@ export const SeverityDistributionChart: React.FC<SeverityDistributionChartProps>
                         dot={false}
                         connectNulls={false}
                       />
+                      
+                      {/* Consensus range area - placed after data for overlay, temp colors for testing */}
+                      <ReferenceArea
+                        x1={Math.max(0, config.consensus_range[0])}
+                        x2={Math.min(100, config.consensus_range[1])}
+                        fill="yellow"  // Temporary for testing visibility; revert to "#3b82f6"
+                        fillOpacity={0.3}  // Temporary increased; revert to 0.1
+                        stroke="red"  // Temporary border for testing
+                        strokeOpacity={0.5}
+                        label={{ value: "Consensus Zone", position: "insideTop" }}
+                        ifOverflow="visible"
+                      />
+                      
+                      {/* Peak severity line - placed after data for overlay, temp color for testing */}
+                      <ReferenceLine
+                        x={config.peak_severity}
+                        stroke="red"  // Temporary for testing; revert to "#3b82f6"
+                        strokeWidth={2}
+                        strokeDasharray="5 5"
+                        label={{ value: 'Peak', position: 'insideTop' }}
+                        ifOverflow="visible"
+                        alwaysShow={true}
+                      />
                     </ComposedChart>
                   </ResponsiveContainer>
                 </div>
+
+                {/* Note for testing */}
+                <p className="text-xs text-gray-500">Note: Using temporary colors (yellow shaded area with red border, red dashed line) for visibility testing. If visible, revert fill to "#3b82f6", fillOpacity to 0.1, remove stroke from ReferenceArea, and stroke to "#3b82f6" for ReferenceLine.</p>
 
                 {/* Chart Interpretation */}
                 <div className="space-y-3">

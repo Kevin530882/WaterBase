@@ -489,16 +489,6 @@ export const MapView = () => {
                 </Select>
               </div>
             </div>
-            
-            {/* Severity Distribution Chart - Only shown when a report is selected */}
-            {selectedReport && wbsiData && (
-              <div className="mt-4">
-                <SeverityDistributionChart 
-                  chartData={wbsiData} 
-                  locationName={selectedReport.address}
-                />
-              </div>
-            )}
           </div>
 
           {/* Priority Zone Highlights */}
@@ -667,7 +657,7 @@ export const MapView = () => {
           {/* Selected report details overlay */}
           {selectedReport && (
             <div
-              className="fixed top-20 right-4 w-80 bg-white rounded-lg shadow-2xl border border-gray-200"
+              className="fixed top-20 right-4 w-96 max-h-[calc(100vh-6rem)] overflow-y-auto bg-white rounded-lg shadow-2xl border border-gray-200"
               style={{ zIndex: 50000 }}
             >
               <div className="p-4">
@@ -759,6 +749,16 @@ export const MapView = () => {
                     </div>
                   )}
                 </div>
+
+                {/* Moved Pollution Analysis here to prevent sidebar overflow */}
+                {wbsiData && (
+                  <div className="mt-4 border-t border-gray-200 pt-4">
+                    <SeverityDistributionChart 
+                      chartData={wbsiData} 
+                      locationName={selectedReport.address}
+                    />
+                  </div>
+                )}
               </div>
             </div>
           )}
