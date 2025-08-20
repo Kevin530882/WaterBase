@@ -137,3 +137,30 @@ body {
 .custom-droplet-marker div {
   transform: translate(-50%, -100%);
 }
+
+
+
+.with-scrollbar::-webkit-scrollbar {
+  display: block;
+  width: 6px; /* Thinner to match subtle UI */
+}
+
+.with-scrollbar::-webkit-scrollbar-track {
+  background: #f3f4f6; /* gray-100 to match card backgrounds */
+  border-radius: 3px;
+}
+
+.with-scrollbar::-webkit-scrollbar-thumb {
+  background: #9ca3af; /* gray-400 */
+  border-radius: 3px;
+}
+
+.with-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: #6b7280; /* gray-500 */
+}
+
+/* For Firefox */
+.with-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: #9ca3af #f3f4f6;
+}

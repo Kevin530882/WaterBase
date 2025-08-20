@@ -10,7 +10,8 @@ import {
   Legend,
   ResponsiveContainer,
   ReferenceLine,
-  ReferenceArea
+  ReferenceArea,
+  LineChart
 } from 'recharts';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -77,7 +78,7 @@ export const SeverityDistributionChart: React.FC<SeverityDistributionChartProps>
     };
   });
 
-  // Custom tooltip
+  // Custom tooltip for histogram/KDE
   const CustomTooltip = ({ active, payload, label }: any) => {
     if (active && payload && payload.length) {
       const data = payload[0].payload;
@@ -93,6 +94,23 @@ export const SeverityDistributionChart: React.FC<SeverityDistributionChartProps>
             {`Distribution: ${(data.density * 100).toFixed(2)}%`}
           </p>
           <p className="text-xs text-gray-500 mt-1">Band: {data.band}</p>
+        </div>
+      );
+    }
+    return null;
+  };
+
+  // Custom tooltip for density chart
+  const DensityTooltip = ({ active, payload, label }: any) => {
+    if (active && payload && payload.length) {
+      const data = payload[0].payload;
+      return (
+        <div className="bg-white p-3 border border-gray-200 rounded-lg shadow-lg">
+          <p className="font-semibold">{`Severity: ${label}%`}</p>
+          <p className="text-green-600">
+            <span className="inline-block w-3 h-3 bg-green-500 rounded mr-2"></span>
+            {`Density: ${data.density.toFixed(4)}`}
+          </p>
         </div>
       );
     }
@@ -195,26 +213,30 @@ export const SeverityDistributionChart: React.FC<SeverityDistributionChartProps>
       {isExpanded && (
         <CardContent className="pt-0">
           <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-            <TabsList className="grid w-full grid-cols-4 h-8">
-              <TabsTrigger value="overview" className="text-xs px-2">
-                <Eye className="w-3 h-3 mr-1" />
+            <TabsList className="grid w-full grid-cols-5 h-10">
+              <TabsTrigger value="overview" className="text-xs px-1 truncate">
+                
                 Overview
               </TabsTrigger>
-              <TabsTrigger value="distribution" className="text-xs px-2">
-                <BarChart3 className="w-3 h-3 mr-1" />
+              <TabsTrigger value="distribution" className="text-xs px-1 truncate">
+                
                 Distribution
               </TabsTrigger>
-              <TabsTrigger value="summary" className="text-xs px-2">
-                <FileText className="w-3 h-3 mr-1" />
+              <TabsTrigger value="density" className="text-xs px-1 truncate">
+                
+                Density
+              </TabsTrigger>
+              <TabsTrigger value="summary" className="text-xs px-1 truncate">
+               
                 Summary
               </TabsTrigger>
-              <TabsTrigger value="insights" className="text-xs px-2">
-                <Lightbulb className="w-3 h-3 mr-1" />
+              <TabsTrigger value="insights" className="text-xs px-1 truncate">
+      
                 Insights
               </TabsTrigger>
             </TabsList>
             
-            <div className="mt-4 max-h-96 overflow-y-auto">
+            <div className="mt-4 h-96 overflow-y-scroll overflow-x-hidden with-scrollbar">
               <TabsContent value="overview" className="space-y-4 mt-0">
                 {/* WBSI Score Display */}
                 <div className={cn(
@@ -395,6 +417,76 @@ export const SeverityDistributionChart: React.FC<SeverityDistributionChartProps>
                         <span className="font-semibold">{percentage.toFixed(1)}%</span>
                       </div>
                     ))}
+                  </div>
+                </div>
+              </TabsContent>
+
+              <TabsContent value="density" className="space-y-4 mt-0">
+                {/* Density Distribution Chart */}
+                <div className="h-80 w-full">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <LineChart
+                      data={kde_data}
+                      margin={{ top: 10, right: 10, left: 10, bottom: 20 }}
+                    >
+                      <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                      <XAxis 
+                        dataKey="severity"
+                        tick={{ fontSize: 11 }}
+                        tickFormatter={(value) => `${value}%`}
+                        domain={[0, 100]}
+                        label={{ value: 'Pollution Severity (%)', position: 'insideBottom', offset: -5, style: { fontSize: '10px' } }}
+                      />
+                      <YAxis 
+                        tick={{ fontSize: 11 }}
+                        width={35}
+                        label={{ value: 'Density', angle: -90, position: 'insideLeft', style: { fontSize: '10px' } }}
+                      />
+                      <Tooltip content={<DensityTooltip />} />
+                      <Legend />
+                      <Line
+                        type="monotone"
+                        dataKey="density"
+                        stroke="#10b981"
+                        strokeWidth={2}
+                        dot={false}
+                        connectNulls={false}
+                        name="Density Curve"
+                      />
+                      {/* Peak severity line */}
+                      <ReferenceLine
+                        x={config.peak_severity}
+                        stroke="#3b82f6"
+                        strokeWidth={2}
+                        strokeDasharray="5 5"
+                        label={{ value: 'Peak', position: 'insideTop' }}
+                        ifOverflow="visible"
+                        alwaysShow={true}
+                      />
+                    </LineChart>
+                  </ResponsiveContainer>
+                </div>
+
+                {/* Chart Interpretation */}
+                <div className="space-y-3">
+                  <h4 className="text-sm font-medium text-gray-800">How to Read This Chart</h4>
+                  <div className="space-y-2 text-xs">
+                    <div>
+                      <span className="font-medium text-green-600">Green curve:</span>
+                      <span className="text-gray-600 ml-1">Shows the estimated probability density of reported severities (bell curve-like distribution)</span>
+                    </div>
+                    <div>
+                      <span className="text-gray-600">Higher peak indicates the most probable severity level</span>
+                    </div>
+                    <div>
+                      <span className="text-gray-600">Symmetric bell shape suggests normal-like distribution of reports</span>
+                    </div>
+                    <div>
+                      <span className="text-gray-600">Skewed or multiple peaks indicate complex pollution patterns</span>
+                    </div>
+                    <div>
+                      <span className="text-gray-600">The area under the curve totals 1 (100% probability)</span>
+                    </div>
                   </div>
                 </div>
               </TabsContent>
