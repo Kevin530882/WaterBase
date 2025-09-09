@@ -60,8 +60,6 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/predict', [DetectPollutionController::class, 'predict']);
     
     Route::get('/admin/reports', [AdminReportsController::class, 'getAllReports']);
-    Route::put("/admin/reports/{report}", [AdminReportsController::class,'updateReport']);
-    Route::delete('/admin/reports/{report}', [AdminReportsController::class, 'deleteReport']);
     Route::get('/admin/reports/stats', [AdminReportsController::class, 'getReportStats']);
 
     Route::get('/admin/reports/pending', [AdminDashboardController::class, 'getPendingReports']);

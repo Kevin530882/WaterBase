@@ -81,59 +81,6 @@ class AdminReportsController extends Controller
         }
     }
 
-    public function updateReport(Request $request, $id)
-    {
-        try {
-            $report = Report::findOrFail($id);
-
-            $validated = $request->validate([
-                'title' => 'sometimes|string|max:255',
-                'content' => 'sometimes|string',
-                'pollutionType' => 'sometimes|string',
-                'status' => 'sometimes|in:pending,verified,declined,resolved',
-                'severityByAI' => 'sometimes|in:low,medium,high,critical',
-                'admin_notes' => 'string',
-            ]);
-
-            $report->update($validated);
-
-            return response()->json([
-                'message' => 'Report updated successfully',
-                'report' => $report,
-            ], 200);
-        } catch (ModelNotFoundException $e) {
-            return response()->json(['message' => 'Report not found'], 404);
-        } catch (ValidationException $e) {
-            return response()->json([
-                'message' => 'Validation failed',
-                'errors' => $e->errors(),
-            ], 422);
-        } catch (\Exception $e) {
-            Log::error('Failed to update report: ' . $e->getMessage());
-            return response()->json([
-                'message' => 'Failed to update report',
-                'error' => $e->getMessage(),
-            ], 500);
-        }
-    }
-
-    public function deleteReport($id)
-    {
-        try {
-            $report = Report::findOrFail($id);
-            $report->delete();
-
-            return response()->json(['message' => 'Report deleted successfully'], 200);
-        } catch (ModelNotFoundException $e) {
-            return response()->json(['message' => 'Report not found'], 404);
-        } catch (\Exception $e) {
-            Log::error('Failed to delete report: ' . $e->getMessage());
-            return response()->json([
-                'message' => 'Failed to delete report',
-                'error' => $e->getMessage(),
-            ], 500);
-        }
-    }
 
     public function getReportStats(Request $request)
     {

@@ -62,17 +62,8 @@ export const AdminReports = () => {
     const [reportStats, setReportStats] = useState({ total: 0, verified: 0, pending: 0, rejected: 0 });
     const [selectedReport, setSelectedReport] = useState(null);
     const [showReportDialog, setShowReportDialog] = useState(false);
-    const [showEditDialog, setShowEditDialog] = useState(false);
     const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
 
-    const [editForm, setEditForm] = useState({
-        title: "",
-        description: "",
-        type: "",
-        severity: "",
-        status: "",
-        adminNotes: "",
-    });
 
     const [advancedFilters, setAdvancedFilters] = useState({
         severityByUser: 'all',
@@ -162,60 +153,6 @@ export const AdminReports = () => {
         }
     };
 
-    const openEditDialog = (report) => {
-        setSelectedReport(report);
-        setEditForm({
-            title: report.title,
-            description: report.content,
-            type: report.pollutionType,
-            severity: report.severityByAI || report.severityByUser,
-            status: report.status,
-            adminNotes: report.admin_notes || "",
-        });
-        setShowEditDialog(true);
-    };
-
-    const handleEditReport = async () => {
-        try {
-            const response = await fetch(`/api/admin/reports/${selectedReport.id}`, {
-                method: 'PUT',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${localStorage.getItem('auth_token')}`,
-                },
-                body: JSON.stringify({
-                    title: editForm.title,
-                    content: editForm.description,
-                    pollutionType: editForm.type,
-                    severityByAI: editForm.severity,
-                    status: editForm.status,
-                    admin_notes: editForm.adminNotes,
-                }),
-            });
-            if (!response.ok) throw new Error('Failed to update report');
-            fetchReports(currentPage);
-            setShowEditDialog(false);
-        } catch (error) {
-            console.error('Error updating report:', error);
-        }
-    };
-
-    const handleDeleteReport = async (reportId) => {
-        if (window.confirm('Are you sure you want to delete this report?')) {
-            try {
-                const response = await fetch(`/api/admin/reports/${reportId}`, {
-                    method: 'DELETE',
-                    headers: {
-                        'Authorization': `Bearer ${localStorage.getItem('auth_token')}`,
-                    },
-                });
-                if (!response.ok) throw new Error('Failed to delete report');
-                fetchReports(currentPage);
-            } catch (error) {
-                console.error('Error deleting report:', error);
-            }
-        }
-    };
 
     return (
         <div className="min-h-screen bg-gray-50">
@@ -573,12 +510,6 @@ export const AdminReports = () => {
                                                             </div>
                                                         </DialogContent>
                                                     </Dialog>
-                                                    <Button variant="outline" size="sm" className="h-7 w-7 p-0" onClick={() => openEditDialog(report)}>
-                                                        <Edit className="w-3 h-3" />
-                                                    </Button>
-                                                    <Button variant="outline" size="sm" className="h-7 w-7 p-0 text-red-600 hover:text-red-700" onClick={() => handleDeleteReport(report.id)}>
-                                                        <Trash2 className="w-3 h-3" />
-                                                    </Button>
                                                 </div>
                                             </TableCell>
                                         </TableRow>
@@ -593,75 +524,6 @@ export const AdminReports = () => {
                         </div>
                     </CardContent>
                 </Card>
-
-                {/* Edit Report Dialog */}
-                <Dialog open={showEditDialog} onOpenChange={setShowEditDialog}>
-                    <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
-                        <DialogHeader>
-                            <DialogTitle>Edit Report</DialogTitle>
-                            <DialogDescription>Update report information and validation status</DialogDescription>
-                        </DialogHeader>
-                        <div className="space-y-4">
-                            <div>
-                                <Label htmlFor="editTitle">Title</Label>
-                                <Input id="editTitle" value={editForm.title} onChange={(e) => setEditForm({ ...editForm, title: e.target.value })} />
-                            </div>
-                            <div>
-                                <Label htmlFor="editDescription">Description</Label>
-                                <Textarea id="editDescription" value={editForm.description} onChange={(e) => setEditForm({ ...editForm, description: e.target.value })} rows={3} />
-                            </div>
-                            <div className="grid grid-cols-3 gap-4">
-                                <div>
-                                    <Label htmlFor="editType">Type</Label>
-                                    <Select value={editForm.type} onValueChange={(value) => setEditForm({ ...editForm, type: value })}>
-                                        <SelectTrigger><SelectValue /></SelectTrigger>
-                                        <SelectContent>
-                                            <SelectItem value="Industrial Waste">Industrial Waste</SelectItem>
-                                            <SelectItem value="Plastic Pollution">Plastic Pollution</SelectItem>
-                                            <SelectItem value="Chemical Pollution">Chemical Pollution</SelectItem>
-                                            <SelectItem value="Sewage Discharge">Sewage Discharge</SelectItem>
-                                            <SelectItem value="Oil Spill">Oil Spillage</SelectItem>
-                                            <SelectItem value="Unnatural Color - AI">Unnatural Color - AI</SelectItem>
-                                            <SelectItem value="Clean">Clean</SelectItem>
-                                        </SelectContent>
-                                    </Select>
-                                </div>
-                                <div>
-                                    <Label htmlFor="editSeverity">Severity</Label>
-                                    <Select value={editForm.severity} onValueChange={(value) => setEditForm({ ...editForm, severity: value })}>
-                                        <SelectTrigger><SelectValue /></SelectTrigger>
-                                        <SelectContent>
-                                            <SelectItem value="low">Low</SelectItem>
-                                            <SelectItem value="medium">Medium</SelectItem>
-                                            <SelectItem value="high">High</SelectItem>
-                                            <SelectItem value="critical">Critical</SelectItem>
-                                        </SelectContent>
-                                    </Select>
-                                </div>
-                                <div>
-                                    <Label htmlFor="editStatus">Status</Label>
-                                    <Select value={editForm.status} onValueChange={(value) => setEditForm({ ...editForm, status: value })}>
-                                        <SelectTrigger><SelectValue /></SelectTrigger>
-                                        <SelectContent>
-                                            <SelectItem value="verified">Verified</SelectItem>
-                                            <SelectItem value="pending">Pending</SelectItem>
-                                            <SelectItem value="declined">Rejected</SelectItem>
-                                            <SelectItem value="resolved">Resolved</SelectItem>
-                                        </SelectContent>
-                                    </Select>
-                                </div>
-                            </div>
-                            <div>
-                                <Label htmlFor="editNotes">Admin Notes</Label>
-                                <Textarea id="editNotes" placeholder="Internal notes about this report..." value={editForm.adminNotes} onChange={(e) => setEditForm({ ...editForm, adminNotes: e.target.value })} rows={2} />
-                            </div>
-                            <div className="flex space-x-2 pt-4">
-                                <Button onClick={handleEditReport} className="flex-1 bg-waterbase-500 hover:bg-waterbase-600">Update Report</Button>
-                                <Button variant="outline" onClick={() => setShowEditDialog(false)} className="flex-1">Cancel</Button>
-                            </div>
-                        </div>
-                    </DialogContent>
-                </Dialog>
             </div>
         </div>
     );
