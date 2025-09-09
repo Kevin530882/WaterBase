@@ -375,9 +375,7 @@ export const SeverityDistributionChart: React.FC<SeverityDistributionChartProps>
                   </ResponsiveContainer>
                 </div>
 
-                {/* Note for testing */}
-                <p className="text-xs text-gray-500">Note: Using temporary colors (yellow shaded area with red border, red dashed line) for visibility testing. If visible, revert fill to "#3b82f6", fillOpacity to 0.1, remove stroke from ReferenceArea, and stroke to "#3b82f6" for ReferenceLine.</p>
-
+               
                 {/* Chart Interpretation */}
                 <div className="space-y-3">
                   <h4 className="text-sm font-medium text-gray-800">How to Read This Chart</h4>

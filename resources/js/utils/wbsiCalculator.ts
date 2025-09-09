@@ -424,8 +424,8 @@ export class WBSICalculator {
   /**
    * Calculate complete WBSI analysis for a set of reports
    */
-  calculateWBSI(reports: Report[]): WBSIResult {
-    if (!reports || reports.length === 0) {
+  calculateWBSI(all_reports: Report[]): WBSIResult {
+    if (!all_reports || all_reports.length === 0) {
       return {
         wbsi_mode: 50.0,
         wbsi_consensus: 50.0,
@@ -463,6 +463,7 @@ export class WBSICalculator {
       };
     }
 
+    const reports = all_reports.filter(report => report.status === 'verified');
     // Extract severities from reports
     const severities: number[] = reports.map(report => {
       if (typeof report.severityPercentage === 'number') {  // Updated name
