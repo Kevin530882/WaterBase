@@ -59,7 +59,7 @@ export const SeverityDistributionChart: React.FC<SeverityDistributionChartProps>
   const [isExpanded, setIsExpanded] = useState(false);
   
   // Decide on displayed WBSI: Use shrunk if small n_reports
-  const useShrunk = config.n_reports < 10;  // Threshold for small samples
+  const useShrunk = config.n_reports < 20;  // Threshold for small samples
   const displayedWBSI = useShrunk ? config.wbsi_display_shrunk : config.wbsi_display;
   
   // Get comprehensive analysis
