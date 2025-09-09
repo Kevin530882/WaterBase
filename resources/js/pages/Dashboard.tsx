@@ -7,19 +7,124 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import {
   BarChart3,
   TrendingUp,
   Users,
   MapPin,
-  Calendar,
   FileText,
   Shield,
-  AlertTriangle,
 } from "lucide-react";
+import { useEffect, useState } from "react";
+import { useAuth } from "@/contexts/AuthContext";
+
+interface DashboardStats {
+  totalReports: number;
+  reportsGrowth: number;
+  verifiedReports: number;
+  verificationRate: number;
+  activeUsers: number;
+  userGrowth: number;
+  totalEvents: number;
+  thisMonthEvents: number;
+}
+
+interface RecentReport {
+  id: number;
+  location: string;
+  type: string;
+  severity: string;
+  time: string;
+  status: string;
+  reporter: string;
+}
 
 export const Dashboard = () => {
+  const { token } = useAuth();
+  const [stats, setStats] = useState<DashboardStats | null>(null);
+  const [recentReports, setRecentReports] = useState<RecentReport[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  const getSeverityColor = (severity: string) => {
+    const severityLower = severity.toLowerCase();
+    switch (severityLower) {
+      case 'critical':
+        return 'bg-red-100 text-red-800';
+      case 'high':
+        return 'bg-orange-100 text-orange-800';
+      case 'medium':
+        return 'bg-yellow-100 text-yellow-800';
+      case 'low':
+        return 'bg-green-100 text-green-800';
+      default:
+        return 'bg-gray-100 text-gray-800';
+    }
+  };
+
+  useEffect(() => {
+    fetchDashboardData();
+  }, []);
+
+  const fetchDashboardData = async () => {
+    try {
+      if (!token) {
+        console.error('No token found - user needs to log in');
+        setStats({
+          totalReports: 0,
+          reportsGrowth: 0,
+          verifiedReports: 0,
+          verificationRate: 0,
+          activeUsers: 0,
+          userGrowth: 0,
+          totalEvents: 0,
+          thisMonthEvents: 0
+        });
+        setLoading(false);
+        return;
+      }
+
+      console.log('Fetching dashboard stats...');
+      // Fetch dashboard stats
+      const statsResponse = await fetch('/api/dashboard/stats', {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+      });
+
+      console.log('Stats response status:', statsResponse.status);
+      if (statsResponse.ok) {
+        const statsData = await statsResponse.json();
+        console.log('Stats data received:', statsData);
+        setStats(statsData);
+      } else {
+        console.error('Stats response error:', await statsResponse.text());
+      }
+
+      console.log('Fetching recent reports...');
+      // Fetch recent reports
+      const reportsResponse = await fetch('/api/dashboard/recent-reports', {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+      });
+
+      console.log('Reports response status:', reportsResponse.status);
+      if (reportsResponse.ok) {
+        const reportsData = await reportsResponse.json();
+        console.log('Reports data received:', reportsData);
+        setRecentReports(reportsData);
+      } else {
+        console.error('Reports response error:', await reportsResponse.text());
+      }
+
+    } catch (error) {
+      console.error('Error fetching dashboard data:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
   return (
     <div className="min-h-screen bg-gradient-to-br from-waterbase-50 to-enviro-50">
       <Navigation />
@@ -30,8 +135,11 @@ export const Dashboard = () => {
             Environmental Dashboard
           </h1>
           <p className="text-waterbase-700">
-            Monitor water pollution reports, track cleanup progress, and analyze
-            environmental data across the Philippines.
+            Monitor water pollution reports, track environmental data, and analyze
+            trends across the Philippines.
+          </p>
+          <p className="text-xs text-waterbase-500">
+            Last updated: {new Date().toLocaleString()} - Version with real data
           </p>
         </div>
 
@@ -45,9 +153,11 @@ export const Dashboard = () => {
               <FileText className="h-4 w-4 text-waterbase-600" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold text-waterbase-950">1,234</div>
+              <div className="text-2xl font-bold text-waterbase-950">
+                {loading ? "..." : stats?.totalReports?.toLocaleString() || "0"}
+              </div>
               <p className="text-xs text-waterbase-600">
-                <span className="text-enviro-600">+12%</span> from last month
+                <span className="text-enviro-600">+{stats?.reportsGrowth || 0}%</span> from last month
               </p>
             </CardContent>
           </Card>
@@ -60,9 +170,11 @@ export const Dashboard = () => {
               <Shield className="h-4 w-4 text-enviro-600" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold text-waterbase-950">987</div>
+              <div className="text-2xl font-bold text-waterbase-950">
+                {loading ? "..." : stats?.verifiedReports?.toLocaleString() || "0"}
+              </div>
               <p className="text-xs text-waterbase-600">
-                <span className="text-enviro-600">80%</span> verification rate
+                <span className="text-enviro-600">{stats?.verificationRate || 0}%</span> verification rate
               </p>
             </CardContent>
           </Card>
@@ -75,9 +187,11 @@ export const Dashboard = () => {
               <Users className="h-4 w-4 text-waterbase-600" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold text-waterbase-950">2,450</div>
+              <div className="text-2xl font-bold text-waterbase-950">
+                {loading ? "..." : stats?.activeUsers?.toLocaleString() || "0"}
+              </div>
               <p className="text-xs text-waterbase-600">
-                <span className="text-enviro-600">+18%</span> from last month
+                <span className="text-enviro-600">+{stats?.userGrowth || 0}%</span> from last month
               </p>
             </CardContent>
           </Card>
@@ -85,20 +199,22 @@ export const Dashboard = () => {
           <Card className="border-waterbase-200">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">
-                Sites Cleaned
+                Cleanup Events
               </CardTitle>
               <MapPin className="h-4 w-4 text-enviro-600" />
             </CardHeader>
             <CardContent>
-              <div className="text-2xl font-bold text-waterbase-950">156</div>
+              <div className="text-2xl font-bold text-waterbase-950">
+                {loading ? "..." : stats?.totalEvents?.toLocaleString() || "0"}
+              </div>
               <p className="text-xs text-waterbase-600">
-                <span className="text-enviro-600">+7</span> this month
+                <span className="text-enviro-600">+{stats?.thisMonthEvents || 0}</span> this month
               </p>
             </CardContent>
           </Card>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
+        <div className="grid grid-cols-1 gap-8 mb-8">
           {/* Recent Reports */}
           <Card className="border-waterbase-200">
             <CardHeader>
@@ -111,128 +227,40 @@ export const Dashboard = () => {
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
-                {[
-                  {
-                    location: "Pasig River, Metro Manila",
-                    type: "Industrial Waste",
-                    severity: "High",
-                    time: "2 hours ago",
-                  },
-                  {
-                    location: "Manila Bay, Manila",
-                    type: "Chemical Pollution",
-                    severity: "Critical",
-                    time: "4 hours ago",
-                  },
-                  {
-                    location: "Marikina River, QC",
-                    type: "Plastic Pollution",
-                    severity: "Medium",
-                    time: "6 hours ago",
-                  },
-                  {
-                    location: "Laguna Lake, Laguna",
-                    type: "Sewage Discharge",
-                    severity: "High",
-                    time: "8 hours ago",
-                  },
-                ].map((report, index) => (
-                  <div
-                    key={index}
-                    className="flex items-center justify-between p-3 bg-waterbase-50 rounded-lg"
-                  >
-                    <div className="flex-1">
-                      <div className="font-medium text-sm text-waterbase-950">
-                        {report.location}
+                {loading ? (
+                  <div className="text-center text-waterbase-600">Loading recent reports...</div>
+                ) : recentReports.length > 0 ? (
+                  recentReports.map((report) => (
+                    <div
+                      key={report.id}
+                      className="flex items-center justify-between p-4 bg-waterbase-50 rounded-lg border border-waterbase-100"
+                    >
+                      <div className="flex-1">
+                        <div className="font-medium text-sm text-waterbase-950 mb-1">
+                          {report.location}
+                        </div>
+                        <div className="text-xs text-waterbase-600 mb-1">
+                          Type: {report.type}
+                        </div>
+                        <div className="text-xs text-waterbase-500">
+                          Reported by: {report.reporter}
+                        </div>
                       </div>
-                      <div className="text-xs text-waterbase-600">
-                        {report.type}
+                      <div className="flex items-center space-x-3">
+                        <span
+                          className={`px-2 py-1 rounded-full text-xs font-medium ${getSeverityColor(report.severity)}`}
+                        >
+                          {report.severity}
+                        </span>
+                        <span className="text-xs text-waterbase-600 whitespace-nowrap">
+                          {report.time}
+                        </span>
                       </div>
                     </div>
-                    <div className="flex items-center space-x-2">
-                      <Badge
-                        variant={
-                          report.severity === "Critical"
-                            ? "destructive"
-                            : report.severity === "High"
-                              ? "secondary"
-                              : "outline"
-                        }
-                        className="text-xs"
-                      >
-                        {report.severity}
-                      </Badge>
-                      <span className="text-xs text-waterbase-600">
-                        {report.time}
-                      </span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Cleanup Progress */}
-          <Card className="border-waterbase-200">
-            <CardHeader>
-              <CardTitle className="text-waterbase-950">
-                Cleanup Progress
-              </CardTitle>
-              <CardDescription className="text-waterbase-600">
-                Active cleanup initiatives and their status
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                {[
-                  {
-                    project: "Manila Bay Restoration",
-                    organization: "Manila Bay Coalition",
-                    progress: 75,
-                    status: "Active",
-                  },
-                  {
-                    project: "Pasig River Cleanup",
-                    organization: "MMDA",
-                    progress: 60,
-                    status: "Active",
-                  },
-                  {
-                    project: "Marikina Riverbank",
-                    organization: "Marikina LGU",
-                    progress: 90,
-                    status: "Completing",
-                  },
-                  {
-                    project: "Laguna Lake Phase 2",
-                    organization: "LLDA",
-                    progress: 30,
-                    status: "Starting",
-                  },
-                ].map((project, index) => (
-                  <div key={index} className="p-3 bg-enviro-50 rounded-lg">
-                    <div className="flex items-center justify-between mb-2">
-                      <div className="font-medium text-sm text-waterbase-950">
-                        {project.project}
-                      </div>
-                      <Badge variant="outline" className="text-xs">
-                        {project.status}
-                      </Badge>
-                    </div>
-                    <div className="text-xs text-waterbase-600 mb-2">
-                      {project.organization}
-                    </div>
-                    <div className="w-full bg-waterbase-200 rounded-full h-2">
-                      <div
-                        className="bg-enviro-500 h-2 rounded-full transition-all duration-300"
-                        style={{ width: `${project.progress}%` }}
-                      />
-                    </div>
-                    <div className="text-xs text-waterbase-600 mt-1">
-                      {project.progress}% complete
-                    </div>
-                  </div>
-                ))}
+                  ))
+                ) : (
+                  <div className="text-center text-waterbase-600">No recent reports found</div>
+                )}
               </div>
             </CardContent>
           </Card>

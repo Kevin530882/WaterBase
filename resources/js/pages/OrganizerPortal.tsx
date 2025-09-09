@@ -1,759 +1,776 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { formatDistanceToNow } from "date-fns";
 import { Button } from "@/components/ui/button";
-import {
-Card,
-CardContent,
-CardDescription,
-CardHeader,
-CardTitle,
-} from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import {
-Select,
-SelectContent,
-SelectItem,
-SelectTrigger,
-SelectValue,
-} from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import {
-Dialog,
-DialogContent,
-DialogDescription,
-DialogHeader,
-DialogTitle,
-DialogTrigger,
-} from "@/components/ui/dialog";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import Navigation from "@/components/Navigation";
-import {
-Calendar,
-MapPin,
-Users,
-Plus,
-Award,
-AlertTriangle,
-CheckCircle,
-Clock,
-Target,
-Gift,
-Camera,
-Edit,
-Trash2,
-MessageSquare,
-} from "lucide-react";
+import { Calendar, MapPin, Users, AlertCircle, RefreshCw } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useAuth } from "@/contexts/AuthContext";
+import { SufficientReportsTab } from "@/components/pagecomponents/organizer/SufficientReportsTab";
+import { MyEventsTab } from "@/components/pagecomponents/organizer/MyEventsTab";
+import { VolunteerManagementTab } from "@/components/pagecomponents/organizer/VolunteerManagementTab";
+import { EditEvent } from "@/components/pagecomponents/organizer/EditEvent";
+import { AreaDetails } from "@/components/pagecomponents/organizer/AreaDetails";
 
-// Mock data for areas with sufficient reports
-const eligibleAreas = [
-{
-    id: 1,
-    location: "Pasig River, Metro Manila",
-    coordinates: { lat: 14.5995, lng: 121.0008 },
-    reportCount: 23,
-    severityLevel: "High",
-    lastReported: "2024-01-15",
-    description: "Heavy industrial waste and plastic pollution along riverbank",
-    estimatedCleanupEffort: "Large",
-    priority: "critical",
-},
-{
-    id: 2,
-    location: "Manila Bay, Manila",
-    coordinates: { lat: 14.5794, lng: 120.9647 },
-    reportCount: 18,
-    severityLevel: "Critical",
-    lastReported: "2024-01-14",
-    description: "Chemical runoff and visible water discoloration",
-    estimatedCleanupEffort: "Medium",
-    priority: "high",
-},
-{
-    id: 3,
-    location: "Marikina River, Quezon City",
-    coordinates: { lat: 14.6349, lng: 121.1076 },
-    reportCount: 15,
-    severityLevel: "Medium",
-    lastReported: "2024-01-13",
-    description: "Plastic bottles and containers floating downstream",
-    estimatedCleanupEffort: "Small",
-    priority: "medium",
-},
-];
+interface Report {
+    id: number;
+    title: string;
+    content: string;
+    address: string;
+    latitude: number;
+    longitude: number;
+    pollutionType: string;
+    severityByUser: string;
+    status: string;
+    image: string;
+    user_id: number;
+    created_at: string;
+    updated_at: string;
+    // New location-based fields
+    region_code?: string;
+    region_name?: string;
+    province_name?: string;
+    municipality_name?: string;
+    barangay_name?: string;
+    report_group_id?: number;
+    geocoded_at?: string;
+    user?: {
+        firstName: string;
+        lastName: string;
+        email: string;
+    };
+}
 
-// Mock existing cleanup events
-const existingEvents = [
-{
-    id: 1,
-    title: "Manila Bay Restoration Drive",
-    location: "Manila Bay, Manila",
-    date: "2024-02-15",
-    time: "07:00 AM",
-    duration: "4 hours",
-    maxVolunteers: 50,
-    currentVolunteers: 32,
-    status: "active",
-    rewards: {
-    type: "Points & Certificate",
-    points: 100,
-    certificate: "Environmental Champion",
-    additional: "Meal provided",
-    },
-    organizer: "Manila Bay Coalition",
-    description:
-    "Large-scale cleanup focusing on plastic waste removal and water quality improvement.",
-},
-{
-    id: 2,
-    title: "Pasig River Community Clean",
-    location: "Pasig River, Metro Manila",
-    date: "2024-02-20",
-    time: "06:30 AM",
-    duration: "3 hours",
-    maxVolunteers: 30,
-    currentVolunteers: 12,
-    status: "recruiting",
-    rewards: {
-    type: "Environmental Badge",
-    points: 75,
-    certificate: "River Guardian",
-    additional: "Transportation allowance",
-    },
-    organizer: "Pasig River Watch",
-    description:
-    "Community-driven initiative to remove industrial waste and restore riverbank vegetation.",
-},
-];
+interface AreaReport {
+    id: number;
+    location: string;
+    coordinates: { lat: number; lng: number };
+    reportCount: number;
+    severityLevel: string;
+    lastReported: string;
+    description: string;
+    estimatedCleanupEffort: string;
+    priority: string;
+    reports: Report[];
+}
 
 export const OrganizerPortal = () => {
-const [activeTab, setActiveTab] = useState("areas");
-const [showCreateEvent, setShowCreateEvent] = useState(false);
-const [selectedArea, setSelectedArea] = useState<any>(null);
-const [newEvent, setNewEvent] = useState({
-    title: "",
-    area: "",
-    date: "",
-    time: "",
-    duration: "",
-    maxVolunteers: "",
-    description: "",
-    rewardType: "",
-    rewardPoints: "",
-    rewardCertificate: "",
-    rewardAdditional: "",
-});
+    const { token, user } = useAuth();
+    const [activeTab, setActiveTab] = useState("areas");
+    const [selectedArea, setSelectedArea] = useState<AreaReport | null>(null);
+    const [eligibleAreas, setEligibleAreas] = useState<AreaReport[]>([]);
+    const [isLoading, setIsLoading] = useState(true);
+    const [error, setError] = useState("");
+    const [showAreaDetails, setShowAreaDetails] = useState(false);
+    const [createdEvents, setCreatedEvents] = useState<any[]>([]);
+    const [isLoadingEvents, setIsLoadingEvents] = useState(false);
+    const [editingEvent, setEditingEvent] = useState<any>(null);
 
-const getSeverityColor = (severity: string) => {
-    switch (severity.toLowerCase()) {
-    case "critical":
-        return "bg-red-500 text-white";
-    case "high":
-        return "bg-orange-500 text-white";
-    case "medium":
-        return "bg-yellow-500 text-black";
-    default:
-        return "bg-gray-500 text-white";
-    }
-};
+    const fetchReports = async (eventsData?: any[]) => {
+        if (!token) {
+            console.log('No token available');
+            return;
+        }
 
-const getStatusColor = (status: string) => {
-    switch (status) {
-    case "active":
-        return "bg-green-100 text-green-800";
-    case "recruiting":
-        return "bg-blue-100 text-blue-800";
-    case "completed":
-        return "bg-gray-100 text-gray-800";
-    default:
-        return "bg-gray-100 text-gray-800";
-    }
-};
+        try {
+            setIsLoading(true);
+            setError("");
 
-const handleCreateEvent = () => {
-    console.log("Creating cleanup event:", newEvent);
-    setShowCreateEvent(false);
-    setNewEvent({
-    title: "",
-    area: "",
-    date: "",
-    time: "",
-    duration: "",
-    maxVolunteers: "",
-    description: "",
-    rewardType: "",
-    rewardPoints: "",
-    rewardCertificate: "",
-    rewardAdditional: "",
-    });
-};
+            console.log('Fetching accessible reports...');
+            console.log('Token:', token ? 'Present' : 'Missing');
+            console.log('API URL:', '/api/reports/accessible');
 
-return (
-    <div className="min-h-screen bg-gradient-to-br from-waterbase-50 to-enviro-50">
-    <Navigation />
+            // Fetch accessible reports based on user's area
+            const response = await fetch('/api/reports/accessible', {
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Accept': 'application/json',
+                },
+            });
 
-    <div className="max-w-7xl mx-auto py-8 px-4 sm:px-6 lg:px-8">
-        {/* Header */}
-        <div className="mb-8">
-        <h1 className="text-3xl font-bold text-waterbase-950 mb-2">
-            Organizer Portal
-        </h1>
-        <p className="text-waterbase-700 mb-4">
-            Manage cleanup events and coordinate with volunteers for water
-            pollution areas
-        </p>
-        <div className="flex items-center space-x-4">
-            <Badge variant="outline" className="bg-enviro-50 text-enviro-700">
-            LGU/NGO Access
-            </Badge>
-            <Badge
-            variant="outline"
-            className="bg-waterbase-50 text-waterbase-700"
-            >
-            Manila Bay Coalition
-            </Badge>
-        </div>
-        </div>
+            console.log('Response status:', response.status);
+            console.log('Response headers:', response.headers);
+            if (response.ok) {
+                const data = await response.json();
+                console.log('ACCESSIBLE REPORTS DATA:', data);
 
-        <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="grid w-full grid-cols-3 mb-6">
-            <TabsTrigger value="areas" className="flex items-center space-x-2">
-            <MapPin className="w-4 h-4" />
-            <span>Eligible Areas</span>
-            </TabsTrigger>
-            <TabsTrigger value="events" className="flex items-center space-x-2">
-            <Calendar className="w-4 h-4" />
-            <span>My Events</span>
-            </TabsTrigger>
-            <TabsTrigger
-            value="volunteers"
-            className="flex items-center space-x-2"
-            >
-            <Users className="w-4 h-4" />
-            <span>Volunteer Management</span>
-            </TabsTrigger>
-        </TabsList>
+                // The API should return reports directly as an array
+                const allReports = Array.isArray(data) ? data : (data.reports || data.data || []);
+                console.log('ALL REPORTS FROM API:', allReports);
 
-        <TabsContent value="areas">
-            <div className="space-y-6">
-            <div className="flex items-center justify-between">
-                <h2 className="text-xl font-semibold text-waterbase-950">
-                Areas with Sufficient Reports
-                </h2>
-                <Badge className="bg-waterbase-500 text-white">
-                {eligibleAreas.length} locations eligible
-                </Badge>
-            </div>
+                // Filter for verified reports only (for cleanup events)
+                const verifiedReports = allReports.filter((r: Report) => r.status === 'verified');
+                console.log('VERIFIED REPORTS:', verifiedReports);
+                console.log('USER AREA:', user?.areaOfResponsibility);
 
-            <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
-                {eligibleAreas.map((area) => (
-                <Card
-                    key={area.id}
-                    className="border-waterbase-200 hover:shadow-lg transition-shadow"
-                >
-                    <CardHeader>
-                    <div className="flex items-start justify-between">
-                        <div className="flex-1">
-                        <CardTitle className="text-lg text-waterbase-950">
-                            {area.location}
-                        </CardTitle>
-                        <CardDescription className="mt-2">
-                            {area.description}
-                        </CardDescription>
-                        </div>
-                        <Badge
-                        className={cn(
-                            "text-xs",
-                            getSeverityColor(area.severityLevel),
+                // Use the passed events data or current state
+                const eventsToUse = eventsData || createdEvents;
+                processEligibleAreas(verifiedReports, eventsToUse);
+            } else {
+                const errorText = await response.text();
+                console.error('API Error:', errorText);
+                throw new Error(`Failed to fetch accessible reports: ${response.status}`);
+            }
+        } catch (error) {
+            console.error('Error fetching accessible reports:', error);
+            setError('Failed to load accessible reports. Please try again.');
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    // Process reports into eligible areas using report groups or legacy grouping
+    const processEligibleAreas = (reports: Report[], eventsData: any[]) => {
+        console.log('Processing eligible areas with reports:', reports);
+        console.log('Current createdEvents from parameter:', eventsData);
+
+        if (!reports || reports.length === 0) {
+            console.log('No reports to process');
+            setEligibleAreas([]);
+            return;
+        }
+
+        // Check if reports have report_group_id (from the new system)
+        const reportsWithGroups = reports.filter(report => report.report_group_id);
+
+        if (reportsWithGroups.length > 0) {
+            console.log('Using report groups for area processing');
+            processAreasFromReportGroups(reports, eventsData);
+        } else {
+            console.log('Falling back to legacy coordinate-based grouping');
+            processAreasLegacy(reports, eventsData);
+        }
+    };
+
+    // Helper functions to check event-location relationships
+    const areLocationsMatching = (coord1: { lat: number; lng: number }, coord2: { lat: number; lng: number }) => {
+        const latDiff = Math.abs(coord1.lat - coord2.lat);
+        const lngDiff = Math.abs(coord1.lng - coord2.lng);
+        const distance = Math.sqrt(latDiff * latDiff + lngDiff * lngDiff);
+
+        return distance <= 0.001; // approximately 100m threshold
+    };
+
+    const checkIfLocationHasEvent = (coordinates: { lat: number; lng: number }, eventsData: any[]) => {
+        console.log('Checking if location has event:', coordinates);
+        console.log('Available events:', eventsData);
+
+        if (!eventsData || eventsData.length === 0) {
+            console.log('No events available');
+            return false;
+        }
+
+        const hasEvent = eventsData.some(event => {
+            const eventCoords = { lat: event.latitude, lng: event.longitude };
+            const isMatching = areLocationsMatching(eventCoords, coordinates);
+            console.log(`Event at ${eventCoords.lat}, ${eventCoords.lng} matches ${coordinates.lat}, ${coordinates.lng}:`, isMatching);
+            return isMatching;
+        });
+
+        console.log('Location has event:', hasEvent);
+        return hasEvent;
+    };
+
+    const getMostRecentEventDateForLocation = (coordinates: { lat: number; lng: number }, eventsData: any[]) => {
+        if (!eventsData || eventsData.length === 0) return new Date(0);
+
+        const eventsAtLocation = eventsData.filter(event => {
+            const eventCoords = { lat: event.latitude, lng: event.longitude };
+            return areLocationsMatching(eventCoords, coordinates);
+        });
+
+        if (eventsAtLocation.length === 0) return new Date(0);
+
+        // Find the most recent event date
+        const mostRecentEvent = eventsAtLocation.sort((a, b) =>
+            new Date(b.created_at || b.createdAt || b.date).getTime() - new Date(a.created_at || a.createdAt || a.date).getTime()
+        )[0];
+
+        return new Date(mostRecentEvent.created_at || mostRecentEvent.createdAt || mostRecentEvent.date);
+    };
+
+    // Helper function to get location string from report
+    const getLocationString = (report: Report) => {
+        return report.barangay_name
+            ? `${report.barangay_name}, ${report.municipality_name}, ${report.province_name}`
+            : report.municipality_name
+                ? `${report.municipality_name}, ${report.province_name}`
+                : report.province_name
+                    ? report.province_name
+                    : report.address || `Location ${report.latitude?.toFixed(4)}, ${report.longitude?.toFixed(4)}`;
+    };
+
+    // Process areas using the new report groups system
+    const processAreasFromReportGroups = (reports: Report[], eventsData: any[]) => {
+        // Group reports by report_group_id
+        const groupedReports: { [key: number]: Report[] } = {};
+
+        reports.forEach(report => {
+            if (report.report_group_id) {
+                if (!groupedReports[report.report_group_id]) {
+                    groupedReports[report.report_group_id] = [];
+                }
+                groupedReports[report.report_group_id].push(report);
+            }
+        });
+
+        // Convert groups to eligible areas with event-aware splitting
+        const areas: AreaReport[] = [];
+        let areaIdCounter = 1;
+
+        Object.entries(groupedReports).forEach(([, groupReports]) => {
+            // Filter out declined reports from the group
+            const activeReports = groupReports.filter(report => report.status !== 'declined');
+
+            // If all reports in the group are declined, skip this group entirely
+            if (activeReports.length === 0) {
+                return;
+            }
+
+            const mostRecentReport = activeReports.sort((a, b) =>
+                new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+            )[0];
+
+            const locationCoords = { lat: mostRecentReport.latitude, lng: mostRecentReport.longitude };
+            const hasExistingEvent = checkIfLocationHasEvent(locationCoords, eventsData);
+
+            if (hasExistingEvent) {
+                const mostRecentEventDate = getMostRecentEventDateForLocation(locationCoords, eventsData);
+
+                // Only get reports after the most recent event (skip older reports with existing events)
+                const reportsAfterEvent = activeReports.filter(report =>
+                    new Date(report.created_at) > mostRecentEventDate
+                );
+
+                // Skip creating area for old reports (with existing event) - we don't want to show these
+
+                // Create separate area for new reports (after the event)
+                if (reportsAfterEvent.length > 0) {
+                    const newestReport = reportsAfterEvent.sort((a, b) =>
+                        new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+                    )[0];
+
+                    const location = getLocationString(newestReport);
+
+                    const pollutionTypes = [...new Set(reportsAfterEvent.map(r => r.pollutionType))];
+                    const description = reportsAfterEvent.length === 1
+                        ? `${pollutionTypes[0]} pollution reported`
+                        : `Multiple pollution types: ${pollutionTypes.join(', ')} (${reportsAfterEvent.length} reports)`;
+
+                    areas.push({
+                        id: areaIdCounter++,
+                        location: `${location} (New Reports)`,
+                        coordinates: {
+                            lat: newestReport.latitude,
+                            lng: newestReport.longitude
+                        },
+                        reportCount: reportsAfterEvent.length,
+                        severityLevel: calculateSeverityLevel(reportsAfterEvent),
+                        lastReported: formatDistanceToNow(new Date(newestReport.created_at), { addSuffix: true }),
+                        description,
+                        estimatedCleanupEffort: estimateCleanupEffort(reportsAfterEvent),
+                        priority: calculatePriority(reportsAfterEvent),
+                        reports: reportsAfterEvent,
+                    });
+                }
+            } else {
+                // No existing event - create single area for all reports
+                const location = getLocationString(mostRecentReport);
+
+                const pollutionTypes = [...new Set(activeReports.map(r => r.pollutionType))];
+                const description = activeReports.length === 1
+                    ? `${pollutionTypes[0]} pollution reported`
+                    : `Multiple pollution types: ${pollutionTypes.join(', ')} (${activeReports.length} reports)`;
+
+                areas.push({
+                    id: areaIdCounter++,
+                    location: location,
+                    coordinates: {
+                        lat: mostRecentReport.latitude,
+                        lng: mostRecentReport.longitude
+                    },
+                    reportCount: activeReports.length,
+                    severityLevel: calculateSeverityLevel(activeReports),
+                    lastReported: formatDistanceToNow(new Date(mostRecentReport.created_at), { addSuffix: true }),
+                    description,
+                    estimatedCleanupEffort: estimateCleanupEffort(activeReports),
+                    priority: calculatePriority(activeReports),
+                    reports: activeReports,
+                });
+            }
+        });
+
+        console.log('Areas from report groups:', areas);
+        setEligibleAreas(areas);
+    };
+
+    // Legacy function for coordinate-based grouping (fallback)
+    const processAreasLegacy = (reports: Report[], eventsData: any[]) => {
+        // First filter out declined individual reports for legacy grouping
+        const activeReports = reports.filter(report => report.status !== 'declined');
+
+        // Group reports by location (using latitude/longitude proximity)
+        const locationGroups: { [key: string]: Report[] } = {};
+        const DISTANCE_THRESHOLD = 0.001; // approximately 100m
+
+        activeReports.forEach((report) => {
+            if (!report.latitude || !report.longitude) {
+                return;
+            }
+
+            let foundGroup = false;
+
+            Object.keys(locationGroups).forEach((groupKey) => {
+                if (foundGroup) return;
+
+                const [groupLat, groupLng] = groupKey.split(',').map(Number);
+                const distance = Math.sqrt(
+                    Math.pow(report.latitude - groupLat, 2) +
+                    Math.pow(report.longitude - groupLng, 2)
+                );
+
+                if (distance <= DISTANCE_THRESHOLD) {
+                    const existingReports = locationGroups[groupKey];
+                    const shouldGroup = canGroupReports(report, existingReports[0]);
+
+                    if (shouldGroup) {
+                        locationGroups[groupKey].push(report);
+                        foundGroup = true;
+                    }
+                }
+            });
+
+            if (!foundGroup) {
+                const newGroupKey = `${report.latitude},${report.longitude}`;
+                locationGroups[newGroupKey] = [report];
+            }
+        });
+
+        // Convert groups to eligible areas with event-aware splitting
+        const areas: AreaReport[] = [];
+        let areaIdCounter = 1;
+
+        Object.entries(locationGroups)
+            .filter(([_, groupReports]) => groupReports.length >= 1)
+            .forEach(([locationKey, groupReports]) => {
+                const [lat, lng] = locationKey.split(',').map(Number);
+
+                // Check if this location already has a cleanup event
+                const locationCoords = { lat, lng };
+                const hasExistingEvent = checkIfLocationHasEvent(locationCoords, eventsData);
+
+                if (hasExistingEvent) {
+                    const mostRecentEventDate = getMostRecentEventDateForLocation(locationCoords, eventsData);
+
+                    // Only get reports after the most recent event (skip older reports with existing events)
+                    const reportsAfterEvent = groupReports.filter(report =>
+                        new Date(report.created_at) > mostRecentEventDate
+                    );
+
+                    // Create separate area for new reports (after the event)
+                    if (reportsAfterEvent.length > 0) {
+                        const newestReport = reportsAfterEvent.sort((a, b) =>
+                            new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+                        )[0];
+
+                        const pollutionTypes = [...new Set(reportsAfterEvent.map(r => r.pollutionType))];
+                        const description = reportsAfterEvent.length === 1
+                            ? `${pollutionTypes[0]} pollution reported`
+                            : `Multiple pollution types: ${pollutionTypes.join(', ')} (${reportsAfterEvent.length} reports)`;
+
+                        const baseLocation = newestReport.address || `Location ${lat.toFixed(4)}, ${lng.toFixed(4)}`;
+
+                        areas.push({
+                            id: areaIdCounter++,
+                            location: `${baseLocation} (New Reports)`,
+                            coordinates: { lat, lng },
+                            reportCount: reportsAfterEvent.length,
+                            severityLevel: calculateSeverityLevel(reportsAfterEvent),
+                            lastReported: formatDistanceToNow(new Date(newestReport.created_at), { addSuffix: true }),
+                            description,
+                            estimatedCleanupEffort: estimateCleanupEffort(reportsAfterEvent),
+                            priority: calculatePriority(reportsAfterEvent),
+                            reports: reportsAfterEvent,
+                        });
+                    }
+                } else {
+                    // No existing event - create single area for all reports
+                    const mostRecentReport = groupReports.sort((a, b) =>
+                        new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+                    )[0];
+
+                    const pollutionTypes = [...new Set(groupReports.map(r => r.pollutionType))];
+                    const description = groupReports.length === 1
+                        ? `${pollutionTypes[0]} pollution reported`
+                        : `Multiple pollution types: ${pollutionTypes.join(', ')} (${groupReports.length} reports)`;
+
+                    const baseLocation = mostRecentReport.address || `Location ${lat.toFixed(4)}, ${lng.toFixed(4)}`;
+
+                    areas.push({
+                        id: areaIdCounter++,
+                        location: baseLocation,
+                        coordinates: { lat, lng },
+                        reportCount: groupReports.length,
+                        severityLevel: calculateSeverityLevel(groupReports),
+                        lastReported: formatDistanceToNow(new Date(mostRecentReport.created_at), { addSuffix: true }),
+                        description,
+                        estimatedCleanupEffort: estimateCleanupEffort(groupReports),
+                        priority: calculatePriority(groupReports),
+                        reports: groupReports,
+                    });
+                }
+            });
+
+        setEligibleAreas(areas);
+    };
+
+    // Helper function to determine if reports should be grouped
+    const canGroupReports = (newReport: Report, existingReport: Report): boolean => {
+        const latDiff = Math.abs(newReport.latitude - existingReport.latitude);
+        const lngDiff = Math.abs(newReport.longitude - existingReport.longitude);
+        const distance = Math.sqrt(latDiff * latDiff + lngDiff * lngDiff);
+
+        if (distance > 0.001) return false;
+        if (newReport.latitude === existingReport.latitude &&
+            newReport.longitude === existingReport.longitude) return true;
+
+        // Group by location and time only (ignore pollution type and severity)
+        const timeDiff = Math.abs(
+            new Date(newReport.created_at).getTime() - new Date(existingReport.created_at).getTime()
+        );
+        const daysDiff = timeDiff / (1000 * 60 * 60 * 24);
+
+        return daysDiff <= 7; // Group if within 7 days and same location
+    };
+
+    const calculateSeverityLevel = (reports: Report[]): string => {
+        if (reports.length === 0) return 'Low';
+
+        // Map severity levels to numerical values for averaging
+        const severityMap = {
+            'low': 1,
+            'medium': 2,
+            'high': 3,
+            'critical': 4
+        };
+
+        const reverseSeverityMap = {
+            1: 'Low',
+            2: 'Medium',
+            3: 'High',
+            4: 'Critical'
+        };
+
+        // Calculate average severity
+        const severityValues = reports.map(r => {
+            const severity = r.severityByUser?.toLowerCase() || 'low';
+            return severityMap[severity as keyof typeof severityMap] || 1;
+        });
+
+        const averageSeverity = severityValues.reduce((sum, val) => sum + val, 0) / severityValues.length;
+
+        // Round to nearest severity level
+        const roundedSeverity = Math.round(averageSeverity);
+
+        return reverseSeverityMap[roundedSeverity as keyof typeof reverseSeverityMap] || 'Low';
+    };
+
+    const estimateCleanupEffort = (reports: Report[]): string => {
+        const count = reports.length;
+        if (count >= 10) return 'High effort required';
+        if (count >= 5) return 'Medium effort required';
+        return 'Low effort required';
+    };
+
+    const calculatePriority = (reports: Report[]): string => {
+        const severityLevel = calculateSeverityLevel(reports);
+        const count = reports.length;
+
+        if (severityLevel === 'Critical' || count >= 10) return 'High';
+        if (severityLevel === 'High' || count >= 5) return 'Medium';
+        return 'Low';
+    };
+
+    useEffect(() => {
+        const loadData = async () => {
+            let eventsData: any[] = [];
+
+            // First fetch events if user exists
+            if (user?.id) {
+                try {
+                    setIsLoadingEvents(true);
+                    console.log('Fetching created events for user:', user.id);
+
+                    const response = await fetch(`/api/events?user_id=${user.id}`, {
+                        headers: {
+                            'Authorization': `Bearer ${token}`,
+                            'Accept': 'application/json',
+                        },
+                    });
+
+                    if (response.ok) {
+                        eventsData = await response.json();
+                        console.log('Fetched events in useEffect:', eventsData);
+                        setCreatedEvents(eventsData);
+                    } else {
+                        console.error('Failed to fetch events:', response.status);
+                    }
+                } catch (error) {
+                    console.error('Error fetching events in useEffect:', error);
+                } finally {
+                    setIsLoadingEvents(false);
+                }
+            }
+
+            // Then fetch reports with the events data
+            await fetchReports(eventsData);
+        };
+
+        if (token) {
+            loadData();
+        }
+    }, [user?.id, token]);
+
+    const handleRefreshData = async () => {
+        let eventsData: any[] = [];
+
+        // First fetch events if user exists
+        if (user?.id) {
+            try {
+                setIsLoadingEvents(true);
+                console.log('Fetching created events for user:', user.id);
+
+                const response = await fetch(`/api/events?user_id=${user.id}`, {
+                    headers: {
+                        'Authorization': `Bearer ${token}`,
+                        'Accept': 'application/json',
+                    },
+                });
+
+                if (response.ok) {
+                    eventsData = await response.json();
+                    console.log('Fetched events in handleRefreshData:', eventsData);
+                    setCreatedEvents(eventsData);
+                } else {
+                    console.error('Failed to fetch events:', response.status);
+                }
+            } catch (error) {
+                console.error('Error fetching events in handleRefreshData:', error);
+            } finally {
+                setIsLoadingEvents(false);
+            }
+        }
+
+        // Then fetch reports with the events data
+        await fetchReports(eventsData);
+    };
+
+    // Handle tab changes and load data as needed
+    const handleTabChange = async (newTab: string) => {
+        setActiveTab(newTab);
+
+        // For now, we don't need lazy loading since we load everything initially
+        // This ensures consistent behavior between initial load and refresh
+    };
+
+    const handleViewReport = (report: Report) => {
+        console.log('Viewing report:', report);
+        // Functionality can be implemented later if needed
+    };
+
+
+    const handleDeclineReport = async (reportId: number) => {
+        if (!confirm('Are you sure you want to decline this report? This action cannot be undone.')) {
+            return;
+        }
+
+        try {
+            const response = await fetch(`/api/reports/${reportId}/status`, {
+                method: 'PATCH',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`,
+                    'Accept': 'application/json',
+                },
+                body: JSON.stringify({ status: 'declined' }),
+            });
+
+            if (response.ok) {
+                await handleRefreshData();
+                alert('Report declined successfully!');
+            } else {
+                throw new Error('Failed to decline report');
+            }
+        } catch (error) {
+            console.error('Error declining report:', error);
+            alert('Failed to decline report. Please try again.');
+        }
+    };
+
+
+    const handleBulkDeclineReports = async (pendingReports: Report[]) => {
+        if (pendingReports.length === 0) return;
+
+        if (!confirm(`Are you sure you want to decline all ${pendingReports.length} pending reports?`)) {
+            return;
+        }
+
+        try {
+            const reportIds = pendingReports.map(r => r.id);
+            console.log('Bulk declining report IDs:', reportIds);
+
+            const response = await fetch('/api/reports/bulk-status', {
+                method: 'PATCH',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${token}`,
+                    'Accept': 'application/json',
+                },
+                body: JSON.stringify({
+                    report_ids: reportIds,
+                    status: 'declined'
+                }),
+            });
+
+            console.log('Bulk decline response status:', response.status);
+
+            if (response.ok) {
+                const responseData = await response.json();
+                console.log('Bulk decline success:', responseData);
+                await handleRefreshData();
+                alert(`Successfully declined ${pendingReports.length} reports!`);
+            } else {
+                const errorData = await response.json();
+                console.error('Bulk decline error:', errorData);
+                throw new Error(errorData.message || 'Failed to decline reports');
+            }
+        } catch (error) {
+            console.error('Error bulk declining reports:', error);
+            alert('Failed to decline all reports. Please try again.');
+        }
+    };
+
+    return (
+        <div className="min-h-screen bg-gradient-to-br from-waterbase-50 to-enviro-50">
+            <Navigation />
+
+            <div className="max-w-7xl mx-auto py-8 px-4 sm:px-6 lg:px-8">
+                {/* Header */}
+                <div className="mb-8">
+                    <h1 className="text-2xl sm:text-3xl font-bold text-waterbase-950 mb-2">
+                        Organizer Portal
+                    </h1>
+                    <p className="text-sm sm:text-base text-waterbase-700 mb-4">
+                        Manage cleanup events with location-based access control
+                        {user?.areaOfResponsibility && (
+                            <span className="block text-xs sm:text-sm mt-1">
+                                📍 Your area of responsibility: <strong>{user.areaOfResponsibility}</strong>
+                            </span>
                         )}
-                        >
-                        {area.severityLevel}
-                        </Badge>
-                    </div>
-                    </CardHeader>
-
-                    <CardContent className="space-y-4">
-                    <div className="grid grid-cols-2 gap-4 text-sm">
-                        <div>
-                        <span className="text-gray-600">Reports:</span>
-                        <div className="font-semibold text-waterbase-950">
-                            {area.reportCount} verified
-                        </div>
-                        </div>
-                        <div>
-                        <span className="text-gray-600">Effort:</span>
-                        <div className="font-semibold text-waterbase-950">
-                            {area.estimatedCleanupEffort}
-                        </div>
-                        </div>
-                        <div>
-                        <span className="text-gray-600">Last Report:</span>
-                        <div className="font-semibold text-waterbase-950">
-                            {area.lastReported}
-                        </div>
-                        </div>
-                        <div>
-                        <span className="text-gray-600">Priority:</span>
-                        <div className="font-semibold capitalize text-waterbase-950">
-                            {area.priority}
-                        </div>
-                        </div>
-                    </div>
-
-                    <Dialog
-                        open={showCreateEvent && selectedArea?.id === area.id}
-                        onOpenChange={setShowCreateEvent}
-                    >
-                        <DialogTrigger asChild>
-                        <Button
-                            className="w-full bg-waterbase-500 hover:bg-waterbase-600"
-                            onClick={() => setSelectedArea(area)}
-                        >
-                            <Plus className="w-4 h-4 mr-2" />
-                            Create Cleanup Event
-                        </Button>
-                        </DialogTrigger>
-                        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
-                        <DialogHeader>
-                            <DialogTitle>Create Cleanup Event</DialogTitle>
-                            <DialogDescription>
-                            Organize a cleanup event for{" "}
-                            {selectedArea?.location}
-                            </DialogDescription>
-                        </DialogHeader>
-
-                        <div className="space-y-4">
-                            <div>
-                            <Label htmlFor="title">Event Title</Label>
-                            <Input
-                                id="title"
-                                placeholder="e.g., Manila Bay Restoration Drive"
-                                value={newEvent.title}
-                                onChange={(e) =>
-                                setNewEvent({
-                                    ...newEvent,
-                                    title: e.target.value,
-                                })
-                                }
-                            />
-                            </div>
-
-                            <div className="grid grid-cols-2 gap-4">
-                            <div>
-                                <Label htmlFor="date">Date</Label>
-                                <Input
-                                id="date"
-                                type="date"
-                                value={newEvent.date}
-                                onChange={(e) =>
-                                    setNewEvent({
-                                    ...newEvent,
-                                    date: e.target.value,
-                                    })
-                                }
-                                />
-                            </div>
-                            <div>
-                                <Label htmlFor="time">Time</Label>
-                                <Input
-                                id="time"
-                                type="time"
-                                value={newEvent.time}
-                                onChange={(e) =>
-                                    setNewEvent({
-                                    ...newEvent,
-                                    time: e.target.value,
-                                    })
-                                }
-                                />
-                            </div>
-                            </div>
-
-                            <div className="grid grid-cols-2 gap-4">
-                            <div>
-                                <Label htmlFor="duration">Duration</Label>
-                                <Select
-                                value={newEvent.duration}
-                                onValueChange={(value) =>
-                                    setNewEvent({
-                                    ...newEvent,
-                                    duration: value,
-                                    })
-                                }
-                                >
-                                <SelectTrigger>
-                                    <SelectValue placeholder="Select duration" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem value="2 hours">
-                                    2 hours
-                                    </SelectItem>
-                                    <SelectItem value="3 hours">
-                                    3 hours
-                                    </SelectItem>
-                                    <SelectItem value="4 hours">
-                                    4 hours
-                                    </SelectItem>
-                                    <SelectItem value="Half day">
-                                    Half day
-                                    </SelectItem>
-                                    <SelectItem value="Full day">
-                                    Full day
-                                    </SelectItem>
-                                </SelectContent>
-                                </Select>
-                            </div>
-                            <div>
-                                <Label htmlFor="maxVolunteers">
-                                Max Volunteers
-                                </Label>
-                                <Input
-                                id="maxVolunteers"
-                                type="number"
-                                placeholder="50"
-                                value={newEvent.maxVolunteers}
-                                onChange={(e) =>
-                                    setNewEvent({
-                                    ...newEvent,
-                                    maxVolunteers: e.target.value,
-                                    })
-                                }
-                                />
-                            </div>
-                            </div>
-
-                            <div>
-                            <Label htmlFor="description">
-                                Event Description
-                            </Label>
-                            <Textarea
-                                id="description"
-                                placeholder="Describe the cleanup objectives, what volunteers should bring, meeting point, etc."
-                                value={newEvent.description}
-                                onChange={(e) =>
-                                setNewEvent({
-                                    ...newEvent,
-                                    description: e.target.value,
-                                })
-                                }
-                                rows={3}
-                            />
-                            </div>
-
-                            {/* Rewards Section */}
-                            <div className="space-y-4 border-t pt-4">
-                            <h4 className="font-semibold text-waterbase-950 flex items-center">
-                                <Gift className="w-4 h-4 mr-2" />
-                                Volunteer Rewards
-                            </h4>
-
-                            <div className="grid grid-cols-2 gap-4">
-                                <div>
-                                <Label htmlFor="rewardPoints">Points</Label>
-                                <Input
-                                    id="rewardPoints"
-                                    type="number"
-                                    placeholder="100"
-                                    value={newEvent.rewardPoints}
-                                    onChange={(e) =>
-                                    setNewEvent({
-                                        ...newEvent,
-                                        rewardPoints: e.target.value,
-                                    })
-                                    }
-                                />
-                                </div>
-                                <div>
-                                <Label htmlFor="rewardType">
-                                    Reward Type
-                                </Label>
-                                <Select
-                                    value={newEvent.rewardType}
-                                    onValueChange={(value) =>
-                                    setNewEvent({
-                                        ...newEvent,
-                                        rewardType: value,
-                                    })
-                                    }
-                                >
-                                    <SelectTrigger>
-                                    <SelectValue placeholder="Select reward type" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                    <SelectItem value="certificate">
-                                        Certificate Only
-                                    </SelectItem>
-                                    <SelectItem value="points">
-                                        Points & Badge
-                                    </SelectItem>
-                                    <SelectItem value="premium">
-                                        Points, Certificate & Perks
-                                    </SelectItem>
-                                    </SelectContent>
-                                </Select>
-                                </div>
-                            </div>
-
-                            <div>
-                                <Label htmlFor="rewardCertificate">
-                                Certificate Title
-                                </Label>
-                                <Input
-                                id="rewardCertificate"
-                                placeholder="e.g., Environmental Champion, River Guardian"
-                                value={newEvent.rewardCertificate}
-                                onChange={(e) =>
-                                    setNewEvent({
-                                    ...newEvent,
-                                    rewardCertificate: e.target.value,
-                                    })
-                                }
-                                />
-                            </div>
-
-                            <div>
-                                <Label htmlFor="rewardAdditional">
-                                Additional Rewards
-                                </Label>
-                                <Input
-                                id="rewardAdditional"
-                                placeholder="e.g., Meal provided, Transportation allowance, T-shirt"
-                                value={newEvent.rewardAdditional}
-                                onChange={(e) =>
-                                    setNewEvent({
-                                    ...newEvent,
-                                    rewardAdditional: e.target.value,
-                                    })
-                                }
-                                />
-                            </div>
-                            </div>
-
-                            <div className="flex space-x-2 pt-4">
-                            <Button
-                                onClick={handleCreateEvent}
-                                className="flex-1 bg-waterbase-500 hover:bg-waterbase-600"
-                            >
-                                Create Event
-                            </Button>
-                            <Button
-                                variant="outline"
-                                onClick={() => setShowCreateEvent(false)}
-                                className="flex-1"
-                            >
-                                Cancel
-                            </Button>
-                            </div>
-                        </div>
-                        </DialogContent>
-                    </Dialog>
-                    </CardContent>
-                </Card>
-                ))}
-            </div>
-            </div>
-        </TabsContent>
-
-        <TabsContent value="events">
-            <div className="space-y-6">
-            <div className="flex items-center justify-between">
-                <h2 className="text-xl font-semibold text-waterbase-950">
-                Your Cleanup Events
-                </h2>
-                <Badge className="bg-enviro-500 text-white">
-                {existingEvents.length} active events
-                </Badge>
-            </div>
-
-            <div className="space-y-4">
-                {existingEvents.map((event) => (
-                <Card key={event.id} className="border-waterbase-200">
-                    <CardContent className="p-6">
-                    <div className="flex items-start justify-between mb-4">
-                        <div className="flex-1">
-                        <h3 className="text-lg font-semibold text-waterbase-950 mb-2">
-                            {event.title}
-                        </h3>
-                        <div className="flex items-center space-x-4 text-sm text-gray-600 mb-2">
-                            <div className="flex items-center space-x-1">
-                            <MapPin className="w-4 h-4" />
-                            <span>{event.location}</span>
-                            </div>
-                            <div className="flex items-center space-x-1">
-                            <Calendar className="w-4 h-4" />
-                            <span>
-                                {event.date} at {event.time}
-                            </span>
-                            </div>
-                            <div className="flex items-center space-x-1">
-                            <Clock className="w-4 h-4" />
-                            <span>{event.duration}</span>
-                            </div>
-                        </div>
-                        <p className="text-sm text-gray-700">
-                            {event.description}
-                        </p>
-                        </div>
-                        <div className="flex items-center space-x-2">
-                        <Badge
-                            className={cn(
-                            "text-xs",
-                            getStatusColor(event.status),
-                            )}
-                        >
-                            {event.status}
-                        </Badge>
-                        <Button variant="outline" size="sm">
-                            <Edit className="w-4 h-4" />
-                        </Button>
-                        </div>
-                    </div>
-
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                        {/* Volunteer Progress */}
-                        <Card className="border-gray-200">
-                        <CardContent className="p-4">
-                            <div className="flex items-center justify-between mb-2">
-                            <span className="text-sm font-medium">
-                                Volunteers
-                            </span>
-                            <Users className="w-4 h-4 text-waterbase-600" />
-                            </div>
-                            <div className="text-2xl font-bold text-waterbase-950 mb-1">
-                            {event.currentVolunteers}/{event.maxVolunteers}
-                            </div>
-                            <div className="w-full bg-gray-200 rounded-full h-2">
-                            <div
-                                className="bg-waterbase-500 h-2 rounded-full"
-                                style={{
-                                width: `${(event.currentVolunteers / event.maxVolunteers) * 100}%`,
-                                }}
-                            />
-                            </div>
-                        </CardContent>
-                        </Card>
-
-                        {/* Rewards Info */}
-                        <Card className="border-gray-200">
-                        <CardContent className="p-4">
-                            <div className="flex items-center justify-between mb-2">
-                            <span className="text-sm font-medium">
-                                Rewards
-                            </span>
-                            <Award className="w-4 h-4 text-enviro-600" />
-                            </div>
-                            <div className="text-sm space-y-1">
-                            <div>
-                                <strong>{event.rewards.points}</strong> points
-                            </div>
-                            <div className="text-xs text-gray-600">
-                                {event.rewards.certificate}
-                            </div>
-                            <div className="text-xs text-gray-600">
-                                {event.rewards.additional}
-                            </div>
-                            </div>
-                        </CardContent>
-                        </Card>
-
-                        {/* Quick Actions */}
-                        <Card className="border-gray-200">
-                        <CardContent className="p-4">
-                            <div className="flex items-center justify-between mb-2">
-                            <span className="text-sm font-medium">
-                                Actions
-                            </span>
-                            <Target className="w-4 h-4 text-gray-600" />
-                            </div>
-                            <div className="space-y-2">
-                            <Button
-                                variant="outline"
-                                size="sm"
-                                className="w-full text-xs"
-                            >
-                                <MessageSquare className="w-3 h-3 mr-1" />
-                                Message Volunteers
-                            </Button>
-                            <Button
-                                variant="outline"
-                                size="sm"
-                                className="w-full text-xs"
-                            >
-                                <Camera className="w-3 h-3 mr-1" />
-                                Event Updates
-                            </Button>
-                            </div>
-                        </CardContent>
-                        </Card>
-                    </div>
-                    </CardContent>
-                </Card>
-                ))}
-            </div>
-            </div>
-        </TabsContent>
-
-        <TabsContent value="volunteers">
-            <div className="space-y-6">
-            <h2 className="text-xl font-semibold text-waterbase-950">
-                Volunteer Management
-            </h2>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                <Card className="border-waterbase-200">
-                <CardContent className="p-6 text-center">
-                    <Users className="w-12 h-12 text-waterbase-600 mx-auto mb-4" />
-                    <h3 className="text-2xl font-bold text-waterbase-950">
-                    127
-                    </h3>
-                    <p className="text-waterbase-600">Total Volunteers</p>
-                </CardContent>
-                </Card>
-
-                <Card className="border-waterbase-200">
-                <CardContent className="p-6 text-center">
-                    <CheckCircle className="w-12 h-12 text-enviro-600 mx-auto mb-4" />
-                    <h3 className="text-2xl font-bold text-waterbase-950">
-                    89
-                    </h3>
-                    <p className="text-waterbase-600">Active This Month</p>
-                </CardContent>
-                </Card>
-
-                <Card className="border-waterbase-200">
-                <CardContent className="p-6 text-center">
-                    <Award className="w-12 h-12 text-yellow-600 mx-auto mb-4" />
-                    <h3 className="text-2xl font-bold text-waterbase-950">
-                    1,254
-                    </h3>
-                    <p className="text-waterbase-600">Points Awarded</p>
-                </CardContent>
-                </Card>
-            </div>
-
-            <Card className="border-waterbase-200">
-                <CardHeader>
-                <CardTitle>Recent Volunteer Activity</CardTitle>
-                <CardDescription>
-                    Latest volunteers who signed up for your events
-                </CardDescription>
-                </CardHeader>
-                <CardContent>
-                <div className="text-center py-8 text-gray-500">
-                    <Users className="w-12 h-12 mx-auto mb-4 text-gray-400" />
-                    <p>Volunteer management features coming soon</p>
-                    <p className="text-sm">
-                    You'll be able to view, communicate with, and reward your
-                    volunteers here
                     </p>
+                    <div className="flex flex-wrap items-center gap-2 sm:gap-4">
+                        <Badge variant="outline" className="bg-enviro-50 text-enviro-700 text-xs sm:text-sm px-2 py-1 h-auto">
+                            {user?.role?.toUpperCase()} Access
+                        </Badge>
+                        {user?.organization && (
+                            <Badge variant="outline" className="bg-waterbase-50 text-waterbase-700 text-xs sm:text-sm px-2 py-1 h-auto">
+                                {user.organization}
+                            </Badge>
+                        )}
+                        {user?.areaOfResponsibility && (
+                            <Badge variant="outline" className="bg-yellow-50 text-yellow-700 text-xs sm:text-sm px-2 py-1 h-auto">
+                                Area: {user.areaOfResponsibility}
+                            </Badge>
+                        )}
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={handleRefreshData}
+                            disabled={isLoading}
+                        >
+                            <RefreshCw className={cn("w-4 h-4 mr-2", isLoading && "animate-spin")} />
+                            Refresh Data
+                        </Button>
+                    </div>
                 </div>
-                </CardContent>
-            </Card>
+
+                {/* Error Alert */}
+                {error && (
+                    <Alert variant="destructive" className="mb-6">
+                        <AlertCircle className="h-4 w-4" />
+                        <AlertDescription>{error}</AlertDescription>
+                    </Alert>
+                )}
+
+                <Tabs value={activeTab} onValueChange={handleTabChange}>
+                    <TabsList className="grid w-full grid-cols-3 mb-6 h-auto">
+                        <TabsTrigger value="areas" className="flex flex-col sm:flex-row items-center space-y-1 sm:space-y-0 sm:space-x-2 px-2 py-2 sm:px-4 sm:py-2 text-xs sm:text-sm h-auto min-h-[3rem] sm:min-h-[2.5rem]">
+                            <MapPin className="w-3 h-3 sm:w-4 sm:h-4" />
+                            <span className="text-center leading-tight">Reports</span>
+                        </TabsTrigger>
+                        <TabsTrigger value="events" className="flex flex-col sm:flex-row items-center space-y-1 sm:space-y-0 sm:space-x-2 px-2 py-2 sm:px-4 sm:py-2 text-xs sm:text-sm h-auto min-h-[3rem] sm:min-h-[2.5rem]">
+                            <Calendar className="w-3 h-3 sm:w-4 sm:h-4" />
+                            <span className="text-center leading-tight">My Events</span>
+                        </TabsTrigger>
+                        <TabsTrigger value="volunteers" className="flex flex-col sm:flex-row items-center space-y-1 sm:space-y-0 sm:space-x-2 px-2 py-2 sm:px-4 sm:py-2 text-xs sm:text-sm h-auto min-h-[3rem] sm:min-h-[2.5rem]">
+                            <Users className="w-3 h-3 sm:w-4 sm:h-4" />
+                            <span className="text-center leading-tight">Volunteers </span>
+                        </TabsTrigger>
+                    </TabsList>
+
+                    {/* Reported Areas Tab */}
+                    <TabsContent value="areas">
+                        <SufficientReportsTab
+                            eligibleAreas={eligibleAreas}
+                            isLoading={isLoading}
+                            onSelectArea={(area) => {
+                                setSelectedArea(area);
+                                setShowAreaDetails(true);
+                            }}
+                            onRefresh={() => {
+                                handleRefreshData();
+                            }}
+                        />
+                    </TabsContent>
+
+                    {/* Events Tab */}
+                    <TabsContent value="events">
+                        <MyEventsTab
+                            createdEvents={createdEvents}
+                            isLoadingEvents={isLoadingEvents}
+                            onEditEvent={setEditingEvent}
+                            onRefresh={handleRefreshData}
+                            onTabChange={handleTabChange}
+                        />
+                    </TabsContent>
+
+                    {/* Volunteers Tab */}
+                    <TabsContent value="volunteers">
+                        <VolunteerManagementTab />
+                    </TabsContent>
+                </Tabs>
+
+                {/* Area Details Dialog */}
+                <AreaDetails
+                    isOpen={showAreaDetails}
+                    onClose={() => setShowAreaDetails(false)}
+                    selectedArea={selectedArea}
+                    onCreateEvent={() => console.log('Create event from area details')}
+                    onDeclineReport={handleDeclineReport}
+                    onBulkDeclineReports={handleBulkDeclineReports}
+                    onViewReport={handleViewReport}
+                />
+
+                {/* Edit Event Dialog */}
+                <EditEvent
+                    isOpen={!!editingEvent}
+                    onClose={() => setEditingEvent(null)}
+                    event={editingEvent}
+                    onSuccess={handleRefreshData}
+                />
             </div>
-        </TabsContent>
-        </Tabs>
-    </div>
-    </div>
-);
+        </div>
+    );
 };
