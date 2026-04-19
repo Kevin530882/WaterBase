@@ -27,11 +27,12 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { AlertCircle, CheckCircle, Loader2 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { Switch } from "@/components/ui/switch";
 import { MapPin, Upload } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { OpenStreetMapSearchableSelect } from "@/components/pagecomponents/openstreetmap-searchable-select";
 import { formatDisplayName, NominatimResult } from '@/utils/location';
-export const ReportPollution = () => {
+export const ReportPollutionDebug = () => {
   const { user, isAuthenticated } = useAuth();
   const [showReportForm, setShowReportForm] = useState(false);
   // Quick Photo flow modal
@@ -64,9 +65,12 @@ export const ReportPollution = () => {
     ai_verified: boolean;
   }>(null);
   const [showAiResultModal, setShowAiResultModal] = useState(false);
-  const [aiAnalysisViewMode, setAiAnalysisViewMode] = useState<'quick'|'detailed'>('quick');
+  const [, setAiAnalysisViewMode] = useState<'quick'|'detailed'>('quick');
   const [waterDetectedByAI, setWaterDetectedByAI] = useState<boolean | null>(null);
   const waterRequiredMessage = 'The uploaded image should show bodies of water. Please upload a photo with a visible body of water.';
+  const [disableMetadataCheck, setDisableMetadataCheck] = useState(false);
+  const [disableWaterCheck, setDisableWaterCheck] = useState(false);
+  const [disableFormValidation, setDisableFormValidation] = useState(false);
 
   const [newReport, setNewReport] = useState({
     title: "",
@@ -136,14 +140,27 @@ export const ReportPollution = () => {
     const file = e.target.files?.[0];
     console.log('Selected file:', file);
     if (file) {
-      if (file.type.startsWith('image/') && ['image/jpeg', 'image/png', 'image/jpg', 'image/gif'].includes(file.type)) {
+      const isValidImageType = file.type.startsWith('image/') && ['image/jpeg', 'image/png', 'image/jpg', 'image/gif'].includes(file.type);
+      if (disableFormValidation || isValidImageType) {
         setErrorMessage('');
         setWaterDetectedByAI(null);
-        setNewReport({ ...newReport, image: file });
+        setNewReport((prev) => ({ ...prev, image: file }));
         console.log('Image set in state:', file.name);
-        const metadataOk = await verifyImageMetadata(file);
-        if (!metadataOk) {
-          setNewReport({ ...newReport, image: file, latitude: '', longitude: '' });
+        if (disableMetadataCheck) {
+          setVerificationStatus('idle');
+          setShowLocationFields(true);
+          setNewReport((prev) => ({
+            ...prev,
+            image: file,
+            address: '',
+            latitude: '',
+            longitude: '',
+          }));
+        } else {
+          const metadataOk = await verifyImageMetadata(file);
+          if (!metadataOk) {
+            setNewReport((prev) => ({ ...prev, image: file, latitude: '', longitude: '' }));
+          }
         }
 
         // Run AI verification immediately after metadata verification
@@ -183,7 +200,7 @@ export const ReportPollution = () => {
           const hasTrash = trashPreds.length > 0;
           const hasUnnatural = pollutionPreds.length > 0;
 
-          if (!hasWater) {
+          if (!disableWaterCheck && !hasWater) {
             setAiResults(null);
             setAiScanStatus('error');
             setWaterDetectedByAI(false);
@@ -227,7 +244,7 @@ export const ReportPollution = () => {
             ai_verified,
           });
           setAiScanStatus('success');
-          setWaterDetectedByAI(true);
+          setWaterDetectedByAI(disableWaterCheck ? null : true);
           setErrorMessage('');
 
           // Quick Photo flow: auto-fill and lock only in quick flow
@@ -257,6 +274,10 @@ export const ReportPollution = () => {
   };
 
   const validateForm = () => {
+    if (disableFormValidation) {
+      return true;
+    }
+
     console.log('Form values before validation:', newReport);
     if (!newReport.title.trim()) {
       setErrorMessage('Title is required');
@@ -303,12 +324,12 @@ export const ReportPollution = () => {
   };
 
   const handleSubmitReport = async () => {
-    if (waterDetectedByAI === false) {
+    if (!disableWaterCheck && waterDetectedByAI === false) {
       setErrorMessage(waterRequiredMessage);
       return;
     }
 
-    if (!validateForm()) {
+    if (!disableFormValidation && !validateForm()) {
       return;
     }
 
@@ -496,6 +517,70 @@ const handleGetCurrentLocation = () => {
             environmental protection efforts.
           </p>
         </div>
+
+        <Card className="border-amber-200 bg-amber-50/70 mb-8">
+          <CardHeader>
+            <CardTitle className="text-lg text-waterbase-950">Debug Controls</CardTitle>
+            <CardDescription className="text-waterbase-700">
+              These toggles only affect this debug page and let you bypass client-side checks.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <p className="text-sm font-medium text-waterbase-950">Disable Metadata Check</p>
+                <p className="text-xs text-waterbase-700">Skip metadata verification and force manual location input in both modals.</p>
+              </div>
+              <Switch
+                checked={disableMetadataCheck}
+                onCheckedChange={(checked) => {
+                  setDisableMetadataCheck(checked);
+                  setVerificationStatus('idle');
+                  setVerificationStatusDetailed('idle');
+                  setErrorMessage('');
+                }}
+                aria-label="Disable metadata check"
+              />
+            </div>
+
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <p className="text-sm font-medium text-waterbase-950">Disable Water Check</p>
+                <p className="text-xs text-waterbase-700">Allow submission even when AI does not detect water.</p>
+              </div>
+              <Switch
+                checked={disableWaterCheck}
+                onCheckedChange={(checked) => {
+                  setDisableWaterCheck(checked);
+                  if (checked) {
+                    setWaterDetectedByAI(null);
+                    if (errorMessage === waterRequiredMessage) {
+                      setErrorMessage('');
+                    }
+                  }
+                }}
+                aria-label="Disable water check"
+              />
+            </div>
+
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <p className="text-sm font-medium text-waterbase-950">Disable Other Form Validations</p>
+                <p className="text-xs text-waterbase-700">Bypass file type, required fields, and coordinate validations on submit.</p>
+              </div>
+              <Switch
+                checked={disableFormValidation}
+                onCheckedChange={(checked) => {
+                  setDisableFormValidation(checked);
+                  if (checked) {
+                    setErrorMessage('');
+                  }
+                }}
+                aria-label="Disable other form validations"
+              />
+            </div>
+          </CardContent>
+        </Card>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
           <Card className="border-waterbase-200">
@@ -704,7 +789,7 @@ const handleGetCurrentLocation = () => {
                 className="w-full"
               />
 
-              {verificationStatus === 'verifying' && (
+              {!disableMetadataCheck && verificationStatus === 'verifying' && (
                 <div className="text-center py-4">
                   <Loader2 className="w-8 h-8 mx-auto animate-spin text-waterbase-500" />
                   <p className="mt-2 text-waterbase-600">Verifying image metadata...</p>
@@ -749,7 +834,7 @@ const handleGetCurrentLocation = () => {
                         });
                       }}
                       placeholder="Search for region, province, city, or barangay..."
-                      disabled={verificationStatus === 'verifying'}
+                      disabled={!disableMetadataCheck && verificationStatus === 'verifying'}
                     />
                   </div>
 
@@ -760,7 +845,7 @@ const handleGetCurrentLocation = () => {
                         placeholder="14.5995"
                         value={newReport.latitude}
                         onChange={(e) => setNewReport({ ...newReport, latitude: e.target.value })}
-                        disabled={verificationStatus === 'verifying'}
+                        disabled={!disableMetadataCheck && verificationStatus === 'verifying'}
                       />
                     </div>
                     <div>
@@ -769,7 +854,7 @@ const handleGetCurrentLocation = () => {
                         placeholder="121.0008"
                         value={newReport.longitude}
                         onChange={(e) => setNewReport({ ...newReport, longitude: e.target.value })}
-                        disabled={verificationStatus === 'verifying'}
+                        disabled={!disableMetadataCheck && verificationStatus === 'verifying'}
                       />
                     </div>
                   </div>
@@ -780,7 +865,7 @@ const handleGetCurrentLocation = () => {
                       variant="outline"
                       size="sm"
                       onClick={handleGetCurrentLocation}
-                      disabled={verificationStatus === 'verifying'}
+                      disabled={!disableMetadataCheck && verificationStatus === 'verifying'}
                     >
                       <MapPin className="w-4 h-4 mr-2" />
                       Use Current Location
@@ -798,7 +883,13 @@ const handleGetCurrentLocation = () => {
               <div className="pt-2">
                 <Button
                   onClick={handleSubmitReport}
-                  disabled={!newReport.image || isSubmitting || aiScanStatus === 'scanning' || verificationStatus === 'verifying' || waterDetectedByAI === false}
+                  disabled={
+                    (!disableFormValidation && !newReport.image) ||
+                    isSubmitting ||
+                    aiScanStatus === 'scanning' ||
+                    (!disableMetadataCheck && verificationStatus === 'verifying') ||
+                    (!disableWaterCheck && waterDetectedByAI === false)
+                  }
                   className="w-full bg-waterbase-500 hover:bg-waterbase-600"
                 >
                   {isSubmitting ? (
@@ -840,40 +931,52 @@ const handleGetCurrentLocation = () => {
                   setNewReport((prev) => ({ ...prev, image: file }));
 
                   // 1) Metadata verification
-                  setVerificationStatusDetailed('verifying');
-                  setShowLocationFieldsDetailed(false);
-                  try {
-                    const fd = new FormData();
-                    fd.append('image', file);
-                    const resp = await fetch('/api/reports/verify-image', {
-                      method: 'POST',
-                      headers: { 'Authorization': `Bearer ${localStorage.getItem('auth_token')}` },
-                      body: fd,
-                    });
-                    const data = await resp.json();
-                    if (resp.ok && data.tampered === false && data.gps != null) {
-                      const address = await fetchAddressFromCoordinates(data.gps.latitude, data.gps.longitude);
-                      setNewReport((prev) => ({
-                        ...prev,
-                        address: address || prev.address,
-                        latitude: data.gps.latitude?.toString() || prev.latitude,
-                        longitude: data.gps.longitude?.toString() || prev.longitude,
-                      }));
-                      setVerificationStatusDetailed('success');
-                      setShowLocationFieldsDetailed(false);
-                    } else if (resp.ok === true && data.tampered === true && data.gps != null) {
-                      setVerificationStatusDetailed('failed');
-                      setShowLocationFieldsDetailed(false);
-                      setErrorMessage('Error: Image flagged as tampered. Please upload an original, unedited camera photo.');
-                    } else {
+                  if (disableMetadataCheck) {
+                    setVerificationStatusDetailed('idle');
+                    setShowLocationFieldsDetailed(true);
+                    setNewReport((prev) => ({
+                      ...prev,
+                      image: file,
+                      address: '',
+                      latitude: '',
+                      longitude: '',
+                    }));
+                  } else {
+                    setVerificationStatusDetailed('verifying');
+                    setShowLocationFieldsDetailed(false);
+                    try {
+                      const fd = new FormData();
+                      fd.append('image', file);
+                      const resp = await fetch('/api/reports/verify-image', {
+                        method: 'POST',
+                        headers: { 'Authorization': `Bearer ${localStorage.getItem('auth_token')}` },
+                        body: fd,
+                      });
+                      const data = await resp.json();
+                      if (resp.ok && data.tampered === false && data.gps != null) {
+                        const address = await fetchAddressFromCoordinates(data.gps.latitude, data.gps.longitude);
+                        setNewReport((prev) => ({
+                          ...prev,
+                          address: address || prev.address,
+                          latitude: data.gps.latitude?.toString() || prev.latitude,
+                          longitude: data.gps.longitude?.toString() || prev.longitude,
+                        }));
+                        setVerificationStatusDetailed('success');
+                        setShowLocationFieldsDetailed(false);
+                      } else if (resp.ok === true && data.tampered === true && data.gps != null) {
+                        setVerificationStatusDetailed('failed');
+                        setShowLocationFieldsDetailed(false);
+                        setErrorMessage('Error: Image flagged as tampered. Please upload an original, unedited camera photo.');
+                      } else {
+                        setVerificationStatusDetailed('failed');
+                        setShowLocationFieldsDetailed(true);
+                        setErrorMessage('No location metadata found. Please enter location manually.');
+                      }
+                    } catch (err) {
                       setVerificationStatusDetailed('failed');
                       setShowLocationFieldsDetailed(true);
-                      setErrorMessage('No location metadata found. Please enter location manually.');
+                      setErrorMessage('Failed to verify image metadata. Please enter location manually.');
                     }
-                  } catch (err) {
-                    setVerificationStatusDetailed('failed');
-                    setShowLocationFieldsDetailed(true);
-                    setErrorMessage('Failed to verify image metadata. Please enter location manually.');
                   }
 
                   // 2) AI scan (do not auto-fill form fields)
@@ -895,7 +998,7 @@ const handleGetCurrentLocation = () => {
                     const trashPreds = Array.isArray(pred.trash_predictions) ? pred.trash_predictions : [];
                     const pollutionPreds = Array.isArray(pred.pollution_predictions) ? pred.pollution_predictions : [];
 
-                    if (!hasWaterPrediction(waterPreds)) {
+                    if (!disableWaterCheck && !hasWaterPrediction(waterPreds)) {
                       setAiResults(null);
                       setAiScanStatusDetailed('error');
                       setWaterDetectedByAI(false);
@@ -913,7 +1016,7 @@ const handleGetCurrentLocation = () => {
                       ai_verified,
                     });
                     setAiScanStatusDetailed('success');
-                    setWaterDetectedByAI(true);
+                    setWaterDetectedByAI(disableWaterCheck ? null : true);
                     setErrorMessage('');
                   } catch (err) {
                     setAiScanStatusDetailed('error');
@@ -923,7 +1026,7 @@ const handleGetCurrentLocation = () => {
                 className="w-full"
               />
 
-              {verificationStatusDetailed === 'verifying' && (
+              {!disableMetadataCheck && verificationStatusDetailed === 'verifying' && (
                 <div className="text-center py-2">
                   <Loader2 className="w-6 h-6 mx-auto animate-spin text-waterbase-500" />
                   <p className="mt-1 text-waterbase-600">Verifying image metadata...</p>
@@ -968,7 +1071,7 @@ const handleGetCurrentLocation = () => {
                         });
                       }}
                       placeholder="Search for region, province, city, or barangay..."
-                      disabled={verificationStatusDetailed === 'verifying'}
+                      disabled={!disableMetadataCheck && verificationStatusDetailed === 'verifying'}
                     />
                   </div>
 
@@ -979,7 +1082,7 @@ const handleGetCurrentLocation = () => {
                         placeholder="14.5995"
                         value={newReport.latitude}
                         onChange={(e) => setNewReport({ ...newReport, latitude: e.target.value })}
-                        disabled={verificationStatusDetailed === 'verifying'}
+                        disabled={!disableMetadataCheck && verificationStatusDetailed === 'verifying'}
                       />
                     </div>
                     <div>
@@ -988,7 +1091,7 @@ const handleGetCurrentLocation = () => {
                         placeholder="121.0008"
                         value={newReport.longitude}
                         onChange={(e) => setNewReport({ ...newReport, longitude: e.target.value })}
-                        disabled={verificationStatusDetailed === 'verifying'}
+                        disabled={!disableMetadataCheck && verificationStatusDetailed === 'verifying'}
                       />
                     </div>
                   </div>
@@ -999,7 +1102,7 @@ const handleGetCurrentLocation = () => {
                       variant="outline"
                       size="sm"
                       onClick={handleGetCurrentLocation}
-                      disabled={verificationStatusDetailed === 'verifying'}
+                      disabled={!disableMetadataCheck && verificationStatusDetailed === 'verifying'}
                     >
                       <MapPin className="w-4 h-4 mr-2" />
                       Use Current Location
@@ -1015,11 +1118,15 @@ const handleGetCurrentLocation = () => {
                 <Button
                   onClick={handleSubmitReport}
                   disabled={
-                    !newReport.image || isSubmitting ||
-                    verificationStatusDetailed === 'verifying' || aiScanStatusDetailed === 'scanning' ||
-                    waterDetectedByAI === false ||
-                    !newReport.title.trim() || !newReport.content.trim() || !newReport.pollutionType || !newReport.severityByUser ||
-                    !newReport.address.trim() || !newReport.latitude || !newReport.longitude
+                    (!disableFormValidation && !newReport.image) ||
+                    isSubmitting ||
+                    (!disableMetadataCheck && verificationStatusDetailed === 'verifying') ||
+                    aiScanStatusDetailed === 'scanning' ||
+                    (!disableWaterCheck && waterDetectedByAI === false) ||
+                    (!disableFormValidation && (
+                      !newReport.title.trim() || !newReport.content.trim() || !newReport.pollutionType || !newReport.severityByUser ||
+                      !newReport.address.trim() || !newReport.latitude || !newReport.longitude
+                    ))
                   }
                   className="bg-waterbase-500 hover:bg-waterbase-600"
                 >

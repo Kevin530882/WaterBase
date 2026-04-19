@@ -192,7 +192,10 @@ def main(image_path):
         #         "polluted_area": 0.0,
         #         "total_water_area": 0.0,
         #         "pollution_percentage": 0.0,
-        #         "annotated_image_path": annotated_path
+        #         "annotated_image_path": annotated_path,
+        #         "overall_confidence": 0.0,
+        #         "has_pollution": False,
+        #         "severity_level": "low"
         #     }
         #     print(json.dumps(output))
         #     os.remove(resized_image_path)  # Clean up temporary file

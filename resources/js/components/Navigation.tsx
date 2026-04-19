@@ -2,7 +2,7 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger, } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
-import { MapPin, Home, Upload, User, Users, BarChart3, Menu, X, LogOut, ChevronDown } from "lucide-react";
+import { MapPin, Home, Upload, User, Users, BarChart3, Menu, X, LogOut, ChevronDown, Info } from "lucide-react";
 import { useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 
@@ -20,6 +20,7 @@ const Navigation = () => {
       { href: "/", label: "Home", icon: Home },
       { href: "/map", label: "Live Map", icon: MapPin },
       { href: "/report", label: "Report Pollution", icon: Upload },
+      { href: "/report-pollution-debug", label: "Report Pollution Debug", icon: Info },
     ];
 
     if (!user) return baseItems;
@@ -28,6 +29,7 @@ const Navigation = () => {
     switch (user.role) {
       case 'admin':
         return [
+          { href: "/report-pollution-debug", label: "Report Pollution Debug", icon: Info },
           { href: "/admin/dashboard", label: "Admin Dashboard", icon: BarChart3 },
           { href: "/admin/reports", label: "Admin Reports", icon: Upload },
         ];

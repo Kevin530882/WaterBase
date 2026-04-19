@@ -23,6 +23,10 @@ export const ROUTE = {
         path: "/report",
         name: "Report Pollution",
     },
+    REPORT_POLLUTION_DEBUG : {
+        path: "/report-pollution-debug",
+        name: "Report Pollution Debug",
+    },
     COMMUNITY : {
         path: "/community",
         name: "Community",
