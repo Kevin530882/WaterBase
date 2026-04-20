@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -28,7 +28,8 @@ interface UserStats {
 }
 
 export const Profile = () => {
-    const { user, token } = useAuth();
+    const { user, token, updateUser } = useAuth();
+    const profilePhotoInputRef = useRef<HTMLInputElement>(null);
     const [profileData, setProfileData] = useState({
         firstName: user?.firstName || "",
         lastName: user?.lastName || "",
@@ -40,6 +41,20 @@ export const Profile = () => {
 
     const [userStats, setUserStats] = useState<UserStats>({});
     const [isLoading, setIsLoading] = useState(true);
+    const [isPhotoUploading, setIsPhotoUploading] = useState(false);
+    const [profilePhotoUrl, setProfilePhotoUrl] = useState<string | null>(user?.profile_photo || null);
+
+    useEffect(() => {
+        setProfileData({
+            firstName: user?.firstName || "",
+            lastName: user?.lastName || "",
+            email: user?.email || "",
+            phoneNumber: user?.phoneNumber || "",
+            organization: user?.organization || "",
+            areaOfResponsibility: user?.areaOfResponsibility || "",
+        });
+        setProfilePhotoUrl(user?.profile_photo || null);
+    }, [user]);
 
     useEffect(() => {
         if (user && token) {
@@ -70,7 +85,101 @@ export const Profile = () => {
     };
 
     const handleProfileUpdate = (updatedData: any) => {
+        updateUser(updatedData);
         setProfileData(updatedData);
+        setProfilePhotoUrl(updatedData?.profile_photo || null);
+    };
+
+    const cropImageToSquare = async (file: File): Promise<File> => {
+        const imageUrl = URL.createObjectURL(file);
+
+        try {
+            const image = await new Promise<HTMLImageElement>((resolve, reject) => {
+                const img = new Image();
+                img.onload = () => resolve(img);
+                img.onerror = () => reject(new Error('Failed to load image'));
+                img.src = imageUrl;
+            });
+
+            const cropSize = Math.min(image.width, image.height);
+            const offsetX = Math.floor((image.width - cropSize) / 2);
+            const offsetY = Math.floor((image.height - cropSize) / 2);
+
+            const canvas = document.createElement('canvas');
+            canvas.width = cropSize;
+            canvas.height = cropSize;
+
+            const ctx = canvas.getContext('2d');
+            if (!ctx) {
+                throw new Error('Unable to initialize image editor');
+            }
+
+            ctx.drawImage(
+                image,
+                offsetX,
+                offsetY,
+                cropSize,
+                cropSize,
+                0,
+                0,
+                cropSize,
+                cropSize
+            );
+
+            const blob = await new Promise<Blob>((resolve, reject) => {
+                canvas.toBlob((result) => {
+                    if (result) {
+                        resolve(result);
+                    } else {
+                        reject(new Error('Failed to process image'));
+                    }
+                }, 'image/jpeg', 0.92);
+            });
+
+            const baseName = file.name.includes('.') ? file.name.substring(0, file.name.lastIndexOf('.')) : file.name;
+            return new File([blob], `${baseName}_square.jpg`, { type: 'image/jpeg' });
+        } finally {
+            URL.revokeObjectURL(imageUrl);
+        }
+    };
+
+    const handleProfilePhotoSelect = async (event: React.ChangeEvent<HTMLInputElement>) => {
+        const file = event.target.files?.[0];
+        if (!file || !token) return;
+
+        try {
+            setIsPhotoUploading(true);
+            const croppedFile = await cropImageToSquare(file);
+            const formData = new FormData();
+            formData.append('_method', 'PUT');
+            formData.append('profile_photo', croppedFile);
+
+            const response = await fetch('/api/user/profile', {
+                method: 'POST',
+                headers: {
+                    Authorization: `Bearer ${token}`,
+                    Accept: 'application/json'
+                },
+                body: formData
+            });
+
+            const result = await response.json();
+
+            if (!response.ok) {
+                throw new Error(result.message || 'Failed to upload profile photo');
+            }
+
+            setProfilePhotoUrl(result.user?.profile_photo || null);
+            handleProfileUpdate(result.user);
+        } catch (error) {
+            console.error('Error uploading profile photo:', error);
+            alert('Error: ' + (error instanceof Error ? error.message : String(error)));
+        } finally {
+            if (profilePhotoInputRef.current) {
+                profilePhotoInputRef.current.value = '';
+            }
+            setIsPhotoUploading(false);
+        }
     };
 
     const getBadgeIcon = (badgeName: string) => {
@@ -214,17 +323,27 @@ export const Profile = () => {
                     <CardContent className="p-4 sm:p-6">
                         <div className="flex flex-col sm:flex-row items-center sm:items-start gap-4 sm:gap-6">
                             <div className="relative flex-shrink-0">
+                                <input
+                                    ref={profilePhotoInputRef}
+                                    type="file"
+                                    accept="image/*"
+                                    className="hidden"
+                                    onChange={handleProfilePhotoSelect}
+                                />
                                 <Avatar className="w-20 h-20 sm:w-24 sm:h-24">
-                                    <AvatarImage src="/placeholder-avatar.jpg" />
+                                    <AvatarImage src={profilePhotoUrl || "/placeholder-avatar.jpg"} />
                                     <AvatarFallback className="bg-waterbase-100 text-waterbase-700 text-lg sm:text-xl">
-                                        {profileData.firstName[0] || 'U'}
-                                        {profileData.lastName[0] || 'U'}
+                                        {user?.firstName[0] || profileData.firstName[0] || 'U'}
+                                        {user?.lastName[0] || profileData.lastName[0] || 'U'}
                                     </AvatarFallback>
                                 </Avatar>
                                 <Button
                                     size="icon"
                                     variant="outline"
                                     className="absolute -bottom-2 -right-2 h-6 w-6 sm:h-8 sm:w-8 rounded-full"
+                                    onClick={() => profilePhotoInputRef.current?.click()}
+                                    title="Change profile photo"
+                                    disabled={isPhotoUploading}
                                 >
                                     <Camera className="w-3 h-3 sm:w-4 sm:h-4" />
                                 </Button>

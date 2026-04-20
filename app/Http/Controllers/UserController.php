@@ -8,6 +8,7 @@ use App\Services\GeographicService;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\ValidationException;
 
 class UserController extends Controller
@@ -136,7 +137,25 @@ class UserController extends Controller
                 'phoneNumber' => 'sometimes|string|max:20',
                 'organization' => 'sometimes|string|max:255',
                 'areaOfResponsibility' => 'sometimes|string|max:255',
+                'profile_photo' => 'sometimes|image|mimes:jpeg,png,jpg,gif|max:5120',
             ]);
+
+            // Handle profile photo upload if present
+            if ($request->hasFile('profile_photo')) {
+                // Delete old profile photo if it exists
+                if ($user->profile_photo) {
+                    $oldPath = str_replace('/storage/', '', $user->profile_photo);
+                    if (\Storage::disk('public')->exists($oldPath)) {
+                        \Storage::disk('public')->delete($oldPath);
+                    }
+                }
+
+                // Store new profile photo
+                $file = $request->file('profile_photo');
+                $fileName = 'profile_' . $user->id . '_' . time() . '.' . $file->getClientOriginalExtension();
+                $filePath = $file->storeAs('profile_photos', $fileName, 'public');
+                $validated['profile_photo'] = '/storage/' . $filePath;
+            }
 
             $user->update($validated);
 

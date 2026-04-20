@@ -18,6 +18,9 @@
 /public/storage
 /storage/*.key
 /storage/pail
+# User uploaded files (profile photos, images, etc.)
+/storage/app/public/profile_photos/*
+!storage/app/public/profile_photos/.gitignore
 /vendor
 Homestead.json
 Homestead.yaml

@@ -21,6 +21,7 @@ class User extends Authenticatable
         'role',
         'organization',
         'areaOfResponsibility',
+        'profile_photo',
         'bbox_south',
         'bbox_north',
         'bbox_west',

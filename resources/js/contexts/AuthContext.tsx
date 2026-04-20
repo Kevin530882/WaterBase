@@ -6,8 +6,10 @@ interface User {
     lastName: string;
     email: string;
     role: string;
+    phoneNumber?: string;
     organization?: string;
     areaOfResponsibility?: string;
+    profile_photo?: string;
 }
 
 interface AuthContextType {
@@ -15,6 +17,7 @@ interface AuthContextType {
     token: string | null;
     login: (token: string, user: User) => void;
     logout: () => void;
+    updateUser: (updates: Partial<User>) => void;
     isAuthenticated: boolean;
     isLoading: boolean; // Add loading state
 }
@@ -72,11 +75,22 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
     };
 
+    const updateUser = (updates: Partial<User>) => {
+        setUser((currentUser) => {
+            if (!currentUser) return currentUser;
+
+            const mergedUser = { ...currentUser, ...updates };
+            localStorage.setItem('user', JSON.stringify(mergedUser));
+            return mergedUser;
+        });
+    };
+
     const value = {
         user,
         token,
         login,
         logout,
+        updateUser,
         isAuthenticated: !!token && !!user,
         isLoading, // Include loading state
     };
