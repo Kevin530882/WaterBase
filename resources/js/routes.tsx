@@ -27,6 +27,7 @@ export const AppRoutes = () => {
                         <Route path="/" element={<VIEWS.Home />} />
                         <Route path={ROUTE.REGISTER.path} element={<VIEWS.Register />} />
                         <Route path={ROUTE.LOGIN.path} element={<VIEWS.Login />} />
+                        <Route path={ROUTE.REPORT_POLLUTION_DEBUG.path} element={<VIEWS.ReportPollutionDebug />} />
                         {/* PRIVATE ROUTES - All with Navigation */}
                         <Route path={ROUTE.MAP.path} element={<ProtectedRoute><VIEWS.MapView /></ProtectedRoute>} />
                         <Route path={ROUTE.RESEARCH_MAP.path} element={<ProtectedRoute><VIEWS.ResearchMap /></ProtectedRoute>} />
