@@ -2,15 +2,17 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger, } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
-import { MapPin, Home, Upload, User, Users, BarChart3, Menu, X, LogOut, ChevronDown, Info } from "lucide-react";
-import { useState } from "react";
+import { MapPin, Home, Upload, User, Users, BarChart3, Menu, X, LogOut, ChevronDown, Info, Bell } from "lucide-react";
+import { useEffect, useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
+import { fetchUnreadCount } from "@/services/notificationService";
 
 const Navigation = () => {
   const location = useLocation();
   const navigate = useNavigate();
-  const { user, logout, isAuthenticated } = useAuth();
+  const { user, logout, isAuthenticated, token } = useAuth();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [unreadCount, setUnreadCount] = useState(0);
 
   // Check if we're on auth pages
   const isAuthPage = location.pathname === '/login' || location.pathname === '/register';
@@ -82,6 +84,34 @@ const Navigation = () => {
 
   const navigationItems = getNavigationItems();
 
+  useEffect(() => {
+    if (!token || !isAuthenticated) {
+      setUnreadCount(0);
+      return;
+    }
+
+    let mounted = true;
+
+    const loadUnreadCount = async () => {
+      try {
+        const count = await fetchUnreadCount(token);
+        if (mounted) {
+          setUnreadCount(count);
+        }
+      } catch {
+        // Keep the nav resilient even if notifications endpoint is unavailable.
+      }
+    };
+
+    loadUnreadCount();
+    const intervalId = window.setInterval(loadUnreadCount, 30000);
+
+    return () => {
+      mounted = false;
+      window.clearInterval(intervalId);
+    };
+  }, [token, isAuthenticated, location.pathname]);
+
   const handleLogout = async () => {
     try {
       await logout();
@@ -151,6 +181,22 @@ const Navigation = () => {
                     </Link>
                   );
                 })}
+
+                {isAuthenticated && (
+                  <Button
+                    variant="ghost"
+                    className="relative text-waterbase-700 hover:text-waterbase-900 hover:bg-waterbase-50"
+                    onClick={() => navigate('/profile?tab=notifications')}
+                    aria-label="Open notifications"
+                  >
+                    <Bell className="w-4 h-4" />
+                    {unreadCount > 0 && (
+                      <span className="absolute -top-1 -right-1 min-w-5 h-5 px-1 rounded-full bg-red-500 text-white text-[10px] font-semibold flex items-center justify-center">
+                        {unreadCount > 99 ? '99+' : unreadCount}
+                      </span>
+                    )}
+                  </Button>
+                )}
 
                 {/* Profile Dropdown - only show when authenticated and not on auth pages */}
                 {isAuthenticated && (
@@ -318,6 +364,26 @@ const Navigation = () => {
                   {/* Mobile Profile - only show when authenticated and not on auth pages */}
                   {isAuthenticated && (
                     <>
+                      <Button
+                        variant="ghost"
+                        className={cn(
+                          "w-full justify-start space-x-2 relative",
+                          "text-waterbase-700 hover:text-waterbase-900 hover:bg-waterbase-50"
+                        )}
+                        onClick={() => {
+                          setIsMobileMenuOpen(false);
+                          navigate('/profile?tab=notifications');
+                        }}
+                      >
+                        <Bell className="w-4 h-4" />
+                        <span>Notifications</span>
+                        {unreadCount > 0 && (
+                          <span className="ml-auto min-w-5 h-5 px-1 rounded-full bg-red-500 text-white text-[10px] font-semibold flex items-center justify-center">
+                            {unreadCount > 99 ? '99+' : unreadCount}
+                          </span>
+                        )}
+                      </Button>
+
                       <Link
                         to="/profile"
                         onClick={() => setIsMobileMenuOpen(false)}

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -39,6 +39,7 @@ interface OrganizationSummary {
 
 export const Profile = () => {
     const navigate = useNavigate();
+    const [searchParams, setSearchParams] = useSearchParams();
     const { user, token, updateUser } = useAuth();
     const profilePhotoInputRef = useRef<HTMLInputElement>(null);
     const [profileData, setProfileData] = useState({
@@ -57,6 +58,12 @@ export const Profile = () => {
     const [isOrganizationsLoading, setIsOrganizationsLoading] = useState(false);
     const [joinedOrganizations, setJoinedOrganizations] = useState<OrganizationSummary[]>([]);
     const [followedOrganizations, setFollowedOrganizations] = useState<OrganizationSummary[]>([]);
+    const activeTabFromQuery = searchParams.get('tab') || 'activity';
+    const [activeTab, setActiveTab] = useState(activeTabFromQuery);
+
+    useEffect(() => {
+        setActiveTab(activeTabFromQuery);
+    }, [activeTabFromQuery]);
 
     useEffect(() => {
         setProfileData({
@@ -537,7 +544,18 @@ export const Profile = () => {
                 </div>
 
                 {/* Tabbed Content */}
-                <Tabs defaultValue="activity" className="space-y-3">
+                <Tabs
+                    value={activeTab}
+                    onValueChange={(value) => {
+                        setActiveTab(value);
+                        setSearchParams((current) => {
+                            const next = new URLSearchParams(current);
+                            next.set('tab', value);
+                            return next;
+                        });
+                    }}
+                    className="space-y-3"
+                >
                     <TabsList className="grid w-full grid-cols-5">
                         <TabsTrigger value="activity">Recent Activity</TabsTrigger>
                         <TabsTrigger value="joined">Groups Joined</TabsTrigger>

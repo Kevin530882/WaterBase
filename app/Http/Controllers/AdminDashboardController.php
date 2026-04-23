@@ -12,14 +12,17 @@ use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Validation\ValidationException;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
+use App\Services\NotificationService;
 
 class AdminDashboardController extends Controller
 {
     protected GeographicService $geographicService;
+    protected NotificationService $notificationService;
 
-    public function __construct(GeographicService $geographicService)
+    public function __construct(GeographicService $geographicService, NotificationService $notificationService)
     {
         $this->geographicService = $geographicService;
+        $this->notificationService = $notificationService;
     }
 
     public function getPendingReports(Request $request)
@@ -82,11 +85,23 @@ class AdminDashboardController extends Controller
             'admin_notes'=> 'required',
         ]);
 
+        $oldStatus = (string) $report->status;
+
         $report->status = $validated['status'];
         $report->admin_notes = $validated['admin_notes'];
         $report->verifiedBy = $validated['verifiedBy'];
         $report->verified_at = Carbon::now();
         $report->save();
+
+        if ($oldStatus !== (string) $report->status) {
+            $this->notificationService->notifyReportStatusChanged(
+                report: $report,
+                oldStatus: $oldStatus,
+                newStatus: (string) $report->status,
+                actor: $request->user(),
+                extra: ['source' => 'admin_dashboard_status_update']
+            );
+        }
 
         return response()->json(['message' => 'Report status updated successfully']);
     }

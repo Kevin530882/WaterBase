@@ -39,11 +39,47 @@ interface RecentReport {
   reporter: string;
 }
 
+interface ForecastPoint {
+  date: string;
+  predicted: number;
+  lower: number;
+  upper: number;
+  confidence: number;
+}
+
+interface ForecastResponse {
+  metric: string;
+  region: string;
+  horizon_days: number;
+  evaluation: {
+    best_model: string;
+    models: Array<{ name: string; mae: number; rmse: number; directional_accuracy: number }>;
+  };
+  drift: {
+    status: string;
+    mean_shift: number;
+    variance_shift: number;
+  };
+  forecast: ForecastPoint[];
+  model: {
+    version: string;
+    rollback_version: string;
+    retrain_schedule: string;
+    generated_at: string;
+  };
+}
+
 export const Dashboard = () => {
   const { token } = useAuth();
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [recentReports, setRecentReports] = useState<RecentReport[]>([]);
+  const [forecast, setForecast] = useState<ForecastResponse | null>(null);
   const [loading, setLoading] = useState(true);
+  const [forecastLoading, setForecastLoading] = useState(false);
+  const [forecastMetric, setForecastMetric] = useState('report_volume');
+  const [horizon, setHorizon] = useState(30);
+  const [cleanupIntensity, setCleanupIntensity] = useState(1);
+  const [interventionDelayDays, setInterventionDelayDays] = useState(0);
 
   const getSeverityColor = (severity: string) => {
     const severityLower = severity.toLowerCase();
@@ -63,7 +99,11 @@ export const Dashboard = () => {
 
   useEffect(() => {
     fetchDashboardData();
-  }, []);
+  }, [token]);
+
+  useEffect(() => {
+    fetchForecast();
+  }, [token, forecastMetric, horizon, cleanupIntensity, interventionDelayDays]);
 
   const fetchDashboardData = async () => {
     try {
@@ -123,6 +163,40 @@ export const Dashboard = () => {
       console.error('Error fetching dashboard data:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchForecast = async () => {
+    if (!token) {
+      return;
+    }
+
+    setForecastLoading(true);
+    try {
+      const params = new URLSearchParams({
+        metric: forecastMetric,
+        horizon: String(horizon),
+        cleanup_intensity: String(cleanupIntensity),
+        intervention_delay_days: String(interventionDelayDays),
+      });
+
+      const response = await fetch(`/api/forecast?${params.toString()}`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to fetch forecast');
+      }
+
+      const payload = await response.json();
+      setForecast(payload);
+    } catch (error) {
+      console.error('Error fetching forecast:', error);
+    } finally {
+      setForecastLoading(false);
     }
   };
   return (
@@ -295,18 +369,97 @@ export const Dashboard = () => {
                 Pollution Trends
               </CardTitle>
               <CardDescription className="text-waterbase-600">
-                Monthly trends in pollution reporting and cleanup
+                Forecast with confidence bands and scenario controls
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="h-64 bg-gradient-to-br from-waterbase-100 to-enviro-100 rounded-lg flex items-center justify-center">
-                <div className="text-center">
-                  <TrendingUp className="w-12 h-12 text-enviro-500 mx-auto mb-4" />
-                  <p className="text-waterbase-600">
-                    Trend analysis coming soon
-                  </p>
+              <div className="space-y-4">
+                <div className="grid grid-cols-2 gap-2">
+                  <select
+                    value={forecastMetric}
+                    onChange={(e) => setForecastMetric(e.target.value)}
+                    className="border border-waterbase-200 rounded-md px-2 py-1 text-sm"
+                  >
+                    <option value="report_volume">Report Volume</option>
+                    <option value="severity_mix">Severity Mix</option>
+                    <option value="hotspot_recurrence">Hotspot Recurrence</option>
+                    <option value="cleanup_completion_lead_time">Cleanup Lead Time</option>
+                  </select>
+                  <select
+                    value={horizon}
+                    onChange={(e) => setHorizon(Number(e.target.value))}
+                    className="border border-waterbase-200 rounded-md px-2 py-1 text-sm"
+                  >
+                    <option value={7}>7 days</option>
+                    <option value={30}>30 days</option>
+                    <option value={90}>90 days</option>
+                  </select>
+                  <label className="text-xs text-waterbase-700">
+                    Cleanup intensity: {cleanupIntensity.toFixed(1)}x
+                    <input
+                      type="range"
+                      min={0.5}
+                      max={2}
+                      step={0.1}
+                      value={cleanupIntensity}
+                      onChange={(e) => setCleanupIntensity(Number(e.target.value))}
+                      className="w-full"
+                    />
+                  </label>
+                  <label className="text-xs text-waterbase-700">
+                    Intervention delay: {interventionDelayDays}d
+                    <input
+                      type="range"
+                      min={0}
+                      max={30}
+                      step={1}
+                      value={interventionDelayDays}
+                      onChange={(e) => setInterventionDelayDays(Number(e.target.value))}
+                      className="w-full"
+                    />
+                  </label>
                 </div>
-              </div>
+
+                {forecastLoading ? (
+                  <div className="h-48 bg-gradient-to-br from-waterbase-100 to-enviro-100 rounded-lg flex items-center justify-center">
+                    <p className="text-waterbase-600">Generating forecast...</p>
+                  </div>
+                ) : forecast && forecast.forecast.length > 0 ? (
+                  <div className="space-y-3">
+                    <div className="p-3 rounded-md bg-waterbase-50 border border-waterbase-200 text-xs text-waterbase-700">
+                      <div>Model: <span className="font-semibold">{forecast.evaluation.best_model}</span> | Version: {forecast.model.version}</div>
+                      <div>Drift: <span className="font-semibold">{forecast.drift.status}</span> (mean shift {forecast.drift.mean_shift}, variance shift {forecast.drift.variance_shift})</div>
+                    </div>
+
+                    <div className="h-48 overflow-auto space-y-1">
+                      {forecast.forecast.slice(0, 20).map((point) => {
+                        const upper = Math.max(point.upper, 0.001);
+                        const pct = Math.min(100, Math.round((point.predicted / upper) * 100));
+                        return (
+                          <div key={point.date} className="text-xs">
+                            <div className="flex justify-between text-waterbase-700 mb-1">
+                              <span>{point.date}</span>
+                              <span>
+                                {point.predicted.toFixed(2)} ({point.lower.toFixed(2)} - {point.upper.toFixed(2)})
+                              </span>
+                            </div>
+                            <div className="h-2 bg-waterbase-100 rounded">
+                              <div className="h-2 bg-enviro-500 rounded" style={{ width: `${pct}%` }} />
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="h-48 bg-gradient-to-br from-waterbase-100 to-enviro-100 rounded-lg flex items-center justify-center">
+                    <div className="text-center">
+                      <TrendingUp className="w-12 h-12 text-enviro-500 mx-auto mb-4" />
+                      <p className="text-waterbase-600">No forecast data available yet</p>
+                    </div>
+                  </div>
+                )}
+                </div>
             </CardContent>
           </Card>
         </div>

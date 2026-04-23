@@ -5,11 +5,19 @@ namespace App\Http\Controllers;
 use Illuminate\Http\Request;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use App\Models\Event;
+use App\Models\User;
 use Illuminate\Validation\Rules\Enum;
 use App\Enums\EventStatus;
+use App\Services\NotificationService;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Log;
 
 class EventController extends Controller
 {
+    public function __construct(private readonly NotificationService $notificationService)
+    {
+    }
+
     public function index(Request $request)
     {
         try {
@@ -51,6 +59,12 @@ class EventController extends Controller
         }
 
         $event = Event::create($validated);
+
+        $this->notificationService->notifyEventCreated(
+            event: $event->load('creator'),
+            actor: Auth::user()
+        );
+
         return response()->json([
             'success' => 'Event Created Successfully',
             'event' => $event
@@ -73,7 +87,7 @@ class EventController extends Controller
             $event = Event::findOrFail($id);
 
             // Check if user owns this event
-            if ($event->user_id !== auth()->id()) {
+            if ($event->user_id !== Auth::id()) {
                 return response()->json(['message' => 'Unauthorized'], 403);
             }
 
@@ -89,7 +103,19 @@ class EventController extends Controller
                 'status' => ['sometimes', new Enum(EventStatus::class)],
             ]);
 
+            $oldStatus = $event->status;
+
             $event->update($validated);
+
+            if (isset($validated['status']) && $validated['status'] !== $oldStatus) {
+                $this->notificationService->notifyEventStatusChanged(
+                    event: $event->fresh(),
+                    oldStatus: (string) $oldStatus,
+                    newStatus: (string) $validated['status'],
+                    actor: Auth::user()
+                );
+            }
+
             return response()->json([
                 'success' => 'Event Updated Successfully',
                 'event' => $event->fresh()
@@ -105,7 +131,7 @@ class EventController extends Controller
             $event = Event::findOrFail($id);
 
             // Check if user owns this event
-            if ($event->user_id !== auth()->id()) {
+            if ($event->user_id !== Auth::id()) {
                 return response()->json(['message' => 'Unauthorized'], 403);
             }
 
@@ -120,7 +146,11 @@ class EventController extends Controller
     {
         try {
             $event = Event::findOrFail($id);
-            $user = auth()->user();
+            $user = Auth::user();
+
+            if (!$user instanceof User) {
+                return response()->json(['message' => 'Unauthorized'], 401);
+            }
 
             // Check if event is still recruiting
             if ($event->status !== 'recruiting') {
@@ -160,7 +190,11 @@ class EventController extends Controller
     public function getUserEvents(Request $request)
     {
         try {
-            $user = auth()->user();
+            $user = Auth::user();
+
+            if (!$user instanceof User) {
+                return response()->json(['message' => 'Unauthorized'], 401);
+            }
 
             // Get events the user has joined
             $joinedEvents = $user->attendedEvents()
@@ -208,7 +242,7 @@ class EventController extends Controller
         } catch (ModelNotFoundException $e) {
             return response()->json(['message' => 'Event not found'], 404);
         } catch (\Exception $e) {
-            \Log::error('Error fetching volunteers: ' . $e->getMessage());
+            Log::error('Error fetching volunteers: ' . $e->getMessage());
             return response()->json(['message' => 'Failed to fetch volunteers: ' . $e->getMessage()], 500);
         }
     }

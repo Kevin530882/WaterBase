@@ -35,6 +35,11 @@ class User extends Authenticatable
         return $this->hasMany(Report::class, 'user_id');
     }
 
+    public function notifications()
+    {
+        return $this->hasMany(UserNotification::class, 'user_id');
+    }
+
     public function attendedEvents()
     {
         return $this->belongsToMany(Event::class);

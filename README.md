@@ -23,6 +23,37 @@ then deactivate:
 deactivate
 ```
 
+## Notifications and Report Queue
+
+The web backend now includes queue-backed in-app notifications for event and report lifecycle changes.
+
+### Notification taxonomy
+
+- `event_created`
+- `event_ongoing`
+- `event_completed`
+- `report_status_changed`
+- `report_processing_failed`
+
+### API endpoints (auth required)
+
+- `GET /api/notifications` list notifications with optional `read`, `type`, `channel`, and `per_page` query params
+- `PATCH /api/notifications/{notification}/read-state` body: `{ "read": true|false }`
+- `PATCH /api/notifications/mark-all-read` mark all unread notifications as read
+- `GET /api/notifications/unread-count` get unread notification count
+
+### Queue and operations
+
+- Run workers for reliable delivery and retry handling:
+	- `php artisan queue:work --tries=5`
+- Failed deliveries are written to `failed_jobs` for dead-letter inspection and replay.
+
+### Feature flag and rollout
+
+- Environment variable: `WATERBASE_NOTIFICATIONS_ENABLED=true`
+- Set to `false` for safe rollback if notification fan-out must be paused.
+- Delivery emits structured logs under `notification.enqueued`, `notification.delivered`, and `notification.delivery_failed`.
+
 ## Laravel
 
 <p align="center"><a href="https://laravel.com" target="_blank"><img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="400" alt="Laravel Logo"></a></p>

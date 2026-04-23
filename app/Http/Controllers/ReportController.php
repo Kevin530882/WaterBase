@@ -2,8 +2,6 @@
 
 namespace App\Http\Controllers;
 
-use finfo;
-use Exception;
 use App\Models\Report;
 use App\Enums\ReportStatus;
 use App\Enums\SeverityLevel;
@@ -15,21 +13,24 @@ use Illuminate\Support\Facades\Storage;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Validation\ValidationException;
 use App\Models\SystemSetting;
+use App\Services\NotificationService;
 
 class ReportController extends Controller
 {
     protected GeographicService $geographicService;
+    protected NotificationService $notificationService;
 
-    public function __construct(GeographicService $geographicService)
+    public function __construct(GeographicService $geographicService, NotificationService $notificationService)
     {
         $this->geographicService = $geographicService;
+        $this->notificationService = $notificationService;
     }
 
     public function index(Request $request)
     {
         $user = $request->user();
 
-        \Log::info('Reports index called', [
+        Log::info('Reports index called', [
             'user_id' => $user->id,
             'user_role' => $user->role,
             'user_area' => $user->areaOfResponsibility ?? 'none'
@@ -39,7 +40,7 @@ class ReportController extends Controller
         $query = Report::with(['user:id,firstName,lastName,email']);
 
         if ($user->areaOfResponsibility) {
-            \Log::info('Applying area filtering', [
+            Log::info('Applying area filtering', [
                 'user_area' => $user->areaOfResponsibility,
                 'total_reports_before_filter' => Report::count()
             ]);
@@ -47,16 +48,16 @@ class ReportController extends Controller
             // Use geographic filtering if bounding box data is available
             if ($this->hasGeographicBounds($user)) {
                 $query = $this->filterByGeographicBounds($query, $user);
-                \Log::info('Using geographic bounds filtering');
+                Log::info('Using geographic bounds filtering');
             } else {
                 // Fallback to text-based filtering
                 $query = $this->filterByAreaOfResponsibility($query, $user->areaOfResponsibility);
-                \Log::info('Using text-based area filtering (fallback)');
+                Log::info('Using text-based area filtering (fallback)');
             }
 
             // Get count after filtering for debugging
             $filteredCount = clone $query;
-            \Log::info('Reports after area filtering', [
+            Log::info('Reports after area filtering', [
                 'filtered_count' => $filteredCount->count(),
                 'sample_addresses' => Report::take(3)->pluck('address')->toArray()
             ]);
@@ -64,7 +65,7 @@ class ReportController extends Controller
 
         $reports = $query->orderBy('created_at', 'desc')->get();
 
-        \Log::info('Found reports', [
+        Log::info('Found reports', [
             'count' => $reports->count(),
             'user_area' => $user->areaOfResponsibility,
             'first_few' => $reports->take(3)->map(function ($report) {
@@ -94,7 +95,7 @@ class ReportController extends Controller
             ->orderBy('created_at', 'desc')
             ->get();
 
-        \Log::info('Fetched all reports for map view', [
+        Log::info('Fetched all reports for map view', [
             'count' => $reports->count(),
             'user_id' => $request->user()->id
         ]);
@@ -181,12 +182,29 @@ class ReportController extends Controller
                     'image' => $imagePath,
                     'ai_annotated_image' => $annotatedImagePath,
                 ]));
+
+                $this->notificationService->notifyReportStatusChanged(
+                    report: $report,
+                    oldStatus: null,
+                    newStatus: (string) $report->status,
+                    actor: $request->user(),
+                    extra: ['source' => 'report_created']
+                );
             } catch (\Exception $e) {
                 Log::error('Report creation failed: ' . $e->getMessage(), [
                     'validated_data' => $reportsValidated,
                     'image_path' => $imagePath,
                     'annotated_image_path' => $annotatedImagePath,
                 ]);
+
+                if ($request->user()) {
+                    $this->notificationService->notifyReportProcessingFailed(
+                        recipient: $request->user(),
+                        reason: $e->getMessage(),
+                        actor: $request->user()
+                    );
+                }
+
                 return response()->json([
                     'status' => 'error',
                     'message' => 'Failed to create report: ' . $e->getMessage(),
@@ -275,6 +293,7 @@ class ReportController extends Controller
     {
         try {
             $report = Report::findOrFail($id);
+            $oldStatus = (string) $report->status;
 
             $validated = $request->validate([
                 'status' => ['required', new Enum(ReportStatus::class)]
@@ -282,6 +301,16 @@ class ReportController extends Controller
 
             $report->status = $validated['status'];
             $report->save();
+
+            if ($oldStatus !== (string) $report->status) {
+                $this->notificationService->notifyReportStatusChanged(
+                    report: $report,
+                    oldStatus: $oldStatus,
+                    newStatus: (string) $report->status,
+                    actor: $request->user(),
+                    extra: ['source' => 'single_status_update']
+                );
+            }
 
             return response()->json([
                 'success' => 'Report status updated successfully',
@@ -302,8 +331,26 @@ class ReportController extends Controller
         ]);
 
         try {
-            $updated = Report::whereIn('id', $validated['report_ids'])
-                ->update(['status' => $validated['status']]);
+            $updated = 0;
+
+            Report::query()->whereIn('id', $validated['report_ids'])->each(function (Report $report) use ($validated, $request, &$updated) {
+                $oldStatus = (string) $report->status;
+                if ($oldStatus === $validated['status']) {
+                    return;
+                }
+
+                $report->status = $validated['status'];
+                $report->save();
+                $updated++;
+
+                $this->notificationService->notifyReportStatusChanged(
+                    report: $report,
+                    oldStatus: $oldStatus,
+                    newStatus: (string) $validated['status'],
+                    actor: $request->user(),
+                    extra: ['source' => 'bulk_status_update']
+                );
+            });
 
             return response()->json([
                 'success' => "Successfully updated {$updated} reports",
@@ -329,7 +376,7 @@ class ReportController extends Controller
             // Use geographic filtering if bounding box data is available
             if ($this->hasGeographicBounds($user)) {
                 $query = $this->filterByGeographicBounds($query, $user);
-                \Log::info('getReportsByArea: Using geographic bounds filtering');
+                Log::info('getReportsByArea: Using geographic bounds filtering');
             } else {
                 // Fallback to text-based filtering
                 $userArea = $user->areaOfResponsibility;
@@ -337,7 +384,7 @@ class ReportController extends Controller
                     $q->where('address', 'LIKE', "%{$userArea}%")
                         ->orWhere('address', 'LIKE', "%" . explode(',', $userArea)[0] . "%");
                 });
-                \Log::info('getReportsByArea: Using text-based area filtering (fallback)');
+                Log::info('getReportsByArea: Using text-based area filtering (fallback)');
             }
         }
 
@@ -463,7 +510,7 @@ class ReportController extends Controller
         // Parse the area of responsibility and extract meaningful location parts
         $areaOfResponsibility = strtoupper(trim($areaOfResponsibility));
 
-        \Log::info('Area filtering details', [
+        Log::info('Area filtering details', [
             'original_area' => $areaOfResponsibility
         ]);
 
@@ -493,7 +540,7 @@ class ReportController extends Controller
         // Remove duplicates and empty values
         $locationParts = array_unique(array_filter($locationParts));
 
-        \Log::info('Extracted location parts for filtering', [
+        Log::info('Extracted location parts for filtering', [
             'location_parts' => $locationParts
         ]);
 

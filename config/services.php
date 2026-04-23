@@ -35,4 +35,14 @@ return [
         ],
     ],
 
+    'waterbase_notifications' => [
+        'enabled' => env('WATERBASE_NOTIFICATIONS_ENABLED', true),
+    ],
+
+    'waterbase_forecast' => [
+        'model_version' => env('WATERBASE_FORECAST_MODEL_VERSION', 'forecast-v1'),
+        'rollback_version' => env('WATERBASE_FORECAST_ROLLBACK_VERSION', 'forecast-v0'),
+        'retrain_schedule' => env('WATERBASE_FORECAST_RETRAIN_SCHEDULE', 'weekly'),
+    ],
+
 ];

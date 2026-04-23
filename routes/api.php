@@ -9,7 +9,9 @@ use App\Http\Controllers\GeographicController;
 use App\Http\Controllers\DetectPollutionController;
 use App\Http\Controllers\AdminDashboardController;
 use App\Http\Controllers\AdminReportsController;
+use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\ForecastController;
 use App\Http\Controllers\OrganizationSocialController;
 use App\Http\Controllers\SystemSettingsController;
 
@@ -58,6 +60,8 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/dashboard/recent-reports', [DashboardController::class, 'getRecentReports']);
     Route::get('/dashboard/reports-by-region', [DashboardController::class, 'getReportsByRegion']);
     Route::get('/dashboard/monthly-trends', [DashboardController::class, 'getMonthlyTrends']);
+    Route::get('/forecast', [ForecastController::class, 'index']);
+    Route::get('/forecast/kpis', [ForecastController::class, 'kpis']);
 
     Route::post('/predict', [DetectPollutionController::class, 'predict']);
 
@@ -77,6 +81,12 @@ Route::middleware('auth:sanctum')->group(function () {
 
     Route::post('/organizations/updates', [OrganizationSocialController::class, 'publishUpdate']);
     Route::get('/community/feed', [OrganizationSocialController::class, 'communityFeed']);
+
+    // Notification routes
+    Route::get('/notifications', [NotificationController::class, 'index']);
+    Route::patch('/notifications/{notification}/read-state', [NotificationController::class, 'markReadState']);
+    Route::patch('/notifications/mark-all-read', [NotificationController::class, 'markAllRead']);
+    Route::get('/notifications/unread-count', [NotificationController::class, 'unreadCount']);
 
     Route::get('/user/organizations', [OrganizationSocialController::class, 'userOrganizations']);
     Route::get('/user/joined-organizations', [OrganizationSocialController::class, 'userJoinedOrganizations']);
