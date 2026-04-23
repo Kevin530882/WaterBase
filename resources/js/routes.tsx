@@ -70,6 +70,7 @@ export const AppRoutes = () => {
                             </ProtectedRoute>
                         } />
                         <Route path={ROUTE.PROFILE.path} element={<ProtectedRoute><VIEWS.Profile /></ProtectedRoute>} />
+                        <Route path={ROUTE.ORGANIZATION_PROFILE.path} element={<ProtectedRoute><VIEWS.OrganizationProfile /></ProtectedRoute>} />
 
                         {/* 404 ROUTE */}
                         <Route path="*" element={<VIEWS.NotFound />} />

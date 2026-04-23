@@ -125,10 +125,43 @@ class UserController extends Controller
         ]);
     }
 
+    public function getOrganizations()
+    {
+        try {
+            $organizations = User::query()
+                ->whereNotNull('organization')
+                ->where('organization', '!=', '')
+                ->pluck('organization')
+                ->map(fn ($name) => trim((string) $name))
+                ->filter(fn ($name) => $name !== '')
+                ->unique()
+                ->values();
+
+            return response()->json([
+                'message' => 'Organizations retrieved successfully',
+                'data' => $organizations,
+            ]);
+        } catch (\Exception $e) {
+            Log::error('Failed to retrieve organizations', [
+                'error' => $e->getMessage(),
+            ]);
+
+            return response()->json([
+                'message' => 'Failed to retrieve organizations',
+            ], 500);
+        }
+    }
+
     public function updateProfile(Request $request)
     {
         try {
             $user = Auth::user();
+
+            if (!$user instanceof User) {
+                return response()->json([
+                    'message' => 'User not authenticated'
+                ], 401);
+            }
 
             $validated = $request->validate([
                 'firstName' => 'sometimes|string|max:255',
@@ -145,8 +178,8 @@ class UserController extends Controller
                 // Delete old profile photo if it exists
                 if ($user->profile_photo) {
                     $oldPath = str_replace('/storage/', '', $user->profile_photo);
-                    if (\Storage::disk('public')->exists($oldPath)) {
-                        \Storage::disk('public')->delete($oldPath);
+                    if (Storage::disk('public')->exists($oldPath)) {
+                        Storage::disk('public')->delete($oldPath);
                     }
                 }
 
@@ -157,7 +190,41 @@ class UserController extends Controller
                 $validated['profile_photo'] = '/storage/' . $filePath;
             }
 
+            $areaWasUpdated = array_key_exists('areaOfResponsibility', $validated);
             $user->update($validated);
+
+            // Keep geographic bounds in sync when organizations/researchers update their area.
+            if ($areaWasUpdated) {
+                $updatedArea = trim((string) ($validated['areaOfResponsibility'] ?? ''));
+                $eligibleForGeographicBounds = in_array($user->role, ['ngo', 'lgu', 'researcher']);
+
+                if ($eligibleForGeographicBounds && $updatedArea !== '') {
+                    $geoResult = $this->geographicService->registerAreaOfResponsibility(
+                        $user->id,
+                        $updatedArea
+                    );
+
+                    if (!$geoResult['success']) {
+                        Log::warning('Failed to geocode area during profile update', [
+                            'user_id' => $user->id,
+                            'role' => $user->role,
+                            'area' => $updatedArea,
+                            'error' => $geoResult['error']
+                        ]);
+                    }
+                }
+
+                if ($updatedArea === '') {
+                    $user->update([
+                        'bbox_south' => null,
+                        'bbox_north' => null,
+                        'bbox_west' => null,
+                        'bbox_east' => null,
+                    ]);
+                }
+            }
+
+            $user->refresh();
 
             return response()->json([
                 'message' => 'Profile updated successfully',
@@ -181,7 +248,7 @@ class UserController extends Controller
         try {
             $user = Auth::user();
 
-            if (!$user) {
+            if (!$user instanceof User) {
                 return response()->json([
                     'message' => 'User not authenticated'
                 ], 401);
@@ -290,8 +357,8 @@ class UserController extends Controller
             return response()->json($stats);
 
         } catch (\Exception $e) {
-            \Log::error('Error in getStats: ' . $e->getMessage());
-            \Log::error('Stack trace: ' . $e->getTraceAsString());
+            Log::error('Error in getStats: ' . $e->getMessage());
+            Log::error('Stack trace: ' . $e->getTraceAsString());
 
             return response()->json([
                 'message' => 'Failed to fetch stats',

@@ -11,6 +11,7 @@ export const Login = lazy(() => import('./Login').then(m => ({ default: m.Login 
 export const MapView = lazy(() => import('./MapView').then(m => ({ default: m.MapView })));
 export const NotFound = lazy(() => import('./NotFound').then(m => ({ default: m.NotFound })));
 export const OrganizerPortal = lazy(() => import('./OrganizerPortal').then(m => ({ default: m.OrganizerPortal })));
+export const OrganizationProfile = lazy(() => import('./OrganizationProfile').then(m => ({ default: m.OrganizationProfile })));
 export const Profile = lazy(() => import('./Profile').then(m => ({ default: m.Profile })));
 export const ReportPollutionDebug = lazy(() => import('./ReportPollutionDebug').then(m => ({ default: m.ReportPollutionDebug })));
 export const Register = lazy(() => import('./Register').then(m => ({ default: m.Register })));

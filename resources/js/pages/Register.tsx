@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
     Card,
@@ -24,6 +24,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { SearchableSelect } from "@/components/pagecomponents/searchable-select";
 
 export const Register = () => {
+    const [organizationOptions, setOrganizationOptions] = useState<string[]>([]);
     const [formData, setFormData] = useState({
         firstName: "",
         lastName: "",
@@ -45,6 +46,33 @@ export const Register = () => {
     const [error, setError] = useState("");
     const [success, setSuccess] = useState("");
     const navigate = useNavigate();
+
+    useEffect(() => {
+        const loadOrganizations = async () => {
+            try {
+                const response = await fetch('/api/organizations', {
+                    method: 'GET',
+                    headers: { 'Accept': 'application/json' },
+                });
+
+                if (!response.ok) return;
+
+                const result = await response.json();
+                const organizations = Array.isArray(result?.data) ? result.data : [];
+                const uniqueOrganizations = Array.from(new Set(
+                    organizations
+                        .map((name: string) => (name || '').trim())
+                        .filter((name: string) => !!name)
+                )).sort((a, b) => a.localeCompare(b));
+
+                setOrganizationOptions(uniqueOrganizations);
+            } catch (error) {
+                console.error('Failed to load organizations:', error);
+            }
+        };
+
+        loadOrganizations();
+    }, []);
 
     // Form validation
     const validateForm = () => {
@@ -71,6 +99,10 @@ export const Register = () => {
         if (shouldShowOrganizationFields(formData.role)) {
             if (!formData.organization.trim()) {
                 setError("Organization is required for your role");
+                return false;
+            }
+            if (!organizationOptions.includes(formData.organization)) {
+                setError("Please choose an organization from the list");
                 return false;
             }
             if (!formData.areaOfResponsibility) {
@@ -293,20 +325,24 @@ export const Register = () => {
                             {shouldShowOrganizationFields(formData.role) && (
                                 <div>
                                     <Label htmlFor="organization">Organization *</Label>
-                                    <div className="relative">
-                                        <MapPin className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
-                                        <Input
-                                            id="organization"
-                                            placeholder="Environmental Watch PH"
-                                            className="pl-10"
-                                            value={formData.organization}
-                                            onChange={(e) =>
-                                                setFormData({ ...formData, organization: e.target.value })
-                                            }
-                                            required
-                                            disabled={isLoading}
-                                        />
-                                    </div>
+                                    <Select
+                                        value={formData.organization}
+                                        onValueChange={(value) =>
+                                            setFormData({ ...formData, organization: value })
+                                        }
+                                        disabled={isLoading || organizationOptions.length === 0}
+                                    >
+                                        <SelectTrigger id="organization">
+                                            <SelectValue placeholder={organizationOptions.length === 0 ? "No organizations available" : "Select your organization"} />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            {organizationOptions.map((organizationName) => (
+                                                <SelectItem key={organizationName} value={organizationName}>
+                                                    {organizationName}
+                                                </SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
                                 </div>
                             )}
 

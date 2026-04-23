@@ -4,8 +4,16 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { TabsContent } from "@/components/ui/tabs";
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from "@/components/ui/select";
 import { Edit, Save, Upload, X } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
+import { SearchableSelect } from "@/components/pagecomponents/searchable-select";
 
 interface SettingProps {
     onProfileUpdate: (updatedData: any) => void;
@@ -15,6 +23,7 @@ export const Setting = ({ onProfileUpdate }: SettingProps) => {
     const { user, token, updateUser } = useAuth();
     const [isEditing, setIsEditing] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
+    const [organizationOptions, setOrganizationOptions] = useState<string[]>([]);
     const [profilePhoto, setProfilePhoto] = useState<File | null>(null);
     const [profilePhotoPreview, setProfilePhotoPreview] = useState<string | null>(user?.profile_photo || null);
     const fileInputRef = useRef<HTMLInputElement>(null);
@@ -27,6 +36,10 @@ export const Setting = ({ onProfileUpdate }: SettingProps) => {
         areaOfResponsibility: user?.areaOfResponsibility || "",
     });
 
+    const isAreaRequiredForRole = (role?: string) => {
+        return ['ngo', 'lgu', 'researcher'].includes((role || '').toLowerCase());
+    };
+
     useEffect(() => {
         setProfilePhotoPreview(user?.profile_photo || null);
         setProfileData({
@@ -38,6 +51,36 @@ export const Setting = ({ onProfileUpdate }: SettingProps) => {
             areaOfResponsibility: user?.areaOfResponsibility || "",
         });
     }, [user]);
+
+    useEffect(() => {
+        const loadOrganizations = async () => {
+            if (!token) return;
+
+            try {
+                const response = await fetch('/api/organizations', {
+                    method: 'GET',
+                    headers: { 'Accept': 'application/json' },
+                });
+
+                if (!response.ok) return;
+
+                const result = await response.json();
+                const orgs = Array.isArray(result?.data) ? result.data : [];
+                const uniqueOrganizations = Array.from(
+                    new Set([
+                        ...orgs.map((name: string) => (name || '').trim()).filter((name: string) => !!name),
+                        (user?.organization || '').trim(),
+                    ].filter((name: string) => !!name))
+                ).sort((a, b) => a.localeCompare(b));
+
+                setOrganizationOptions(uniqueOrganizations);
+            } catch (error) {
+                console.error('Failed to load organizations:', error);
+            }
+        };
+
+        loadOrganizations();
+    }, [token, user?.organization]);
 
     const cropImageToSquare = async (file: File): Promise<File> => {
         const imageUrl = URL.createObjectURL(file);
@@ -107,6 +150,16 @@ export const Setting = ({ onProfileUpdate }: SettingProps) => {
 
     const handleSaveChanges = async () => {
         if (!token) return;
+
+        if (isAreaRequiredForRole(user?.role) && !profileData.organization.trim()) {
+            alert('Organization is required for your role.');
+            return;
+        }
+
+        if (isAreaRequiredForRole(user?.role) && !profileData.areaOfResponsibility.trim()) {
+            alert('Area of responsibility is required for your role.');
+            return;
+        }
 
         try {
             setIsLoading(true);
@@ -331,26 +384,35 @@ export const Setting = ({ onProfileUpdate }: SettingProps) => {
 
                     <div>
                         <Label htmlFor="organization">Organization</Label>
-                        <Input
-                            id="organization"
+                        <Select
                             value={profileData.organization}
-                            disabled={!isEditing}
-                            onChange={(e) =>
-                                setProfileData({ ...profileData, organization: e.target.value })
+                            onValueChange={(value) =>
+                                setProfileData({ ...profileData, organization: value })
                             }
-                            className={isEditing ? "border-waterbase-300" : "bg-gray-50"}
-                        />
+                            disabled={!isEditing || isLoading || organizationOptions.length === 0}
+                        >
+                            <SelectTrigger id="organization" className={isEditing ? "border-waterbase-300" : "bg-gray-50"}>
+                                <SelectValue placeholder={organizationOptions.length === 0 ? "No organizations available" : "Select an organization"} />
+                            </SelectTrigger>
+                            <SelectContent>
+                                {organizationOptions.map((organizationName) => (
+                                    <SelectItem key={organizationName} value={organizationName}>
+                                        {organizationName}
+                                    </SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
                     </div>
 
                     <div>
                         <Label htmlFor="areaOfResponsibility">Area of Responsibility</Label>
-                        <Input
-                            id="areaOfResponsibility"
+                        <SearchableSelect
                             value={profileData.areaOfResponsibility}
-                            disabled={!isEditing}
-                            onChange={(e) =>
-                                setProfileData({ ...profileData, areaOfResponsibility: e.target.value })
+                            onValueChange={(value) =>
+                                setProfileData({ ...profileData, areaOfResponsibility: value })
                             }
+                            placeholder="Search for region, province, city, or barangay..."
+                            disabled={!isEditing || isLoading}
                             className={isEditing ? "border-waterbase-300" : "bg-gray-50"}
                         />
                         <p className="text-xs text-gray-500 mt-1">

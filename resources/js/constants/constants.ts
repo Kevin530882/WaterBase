@@ -39,6 +39,10 @@ export const ROUTE = {
         path: "/profile",
         name: "Profile",
     },
+    ORGANIZATION_PROFILE: {
+        path: "/organizations/:organizationId",
+        name: "Organization Profile",
+    },
     ORGANIZER_PORTAL : {
         path: "/portal/organizer",
         name: "Organizer Portal",

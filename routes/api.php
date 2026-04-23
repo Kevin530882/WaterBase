@@ -10,10 +10,12 @@ use App\Http\Controllers\DetectPollutionController;
 use App\Http\Controllers\AdminDashboardController;
 use App\Http\Controllers\AdminReportsController;
 use App\Http\Controllers\DashboardController;
+use App\Http\Controllers\OrganizationSocialController;
 use App\Http\Controllers\SystemSettingsController;
 
 Route::post('/login', [UserController::class, 'login']);
 Route::post('/register', [UserController::class, 'register']);
+Route::get('/organizations', [UserController::class, 'getOrganizations']);
 
 Route::middleware('auth:sanctum')->group(function () {
     Route::post('/logout', [UserController::class, 'logout']);
@@ -58,6 +60,28 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/dashboard/monthly-trends', [DashboardController::class, 'getMonthlyTrends']);
 
     Route::post('/predict', [DetectPollutionController::class, 'predict']);
+
+    // Organization social routes
+    Route::get('/organizations/directory', [OrganizationSocialController::class, 'directory']);
+    Route::get('/organizations/{orgId}/profile', [OrganizationSocialController::class, 'getOrganizationProfile']);
+    Route::post('/organizations/{orgId}/follow', [OrganizationSocialController::class, 'follow']);
+    Route::delete('/organizations/{orgId}/follow', [OrganizationSocialController::class, 'unfollow']);
+    Route::get('/organizations/{orgId}/follow-status', [OrganizationSocialController::class, 'followStatus']);
+
+    Route::post('/organizations/{orgId}/join-requests', [OrganizationSocialController::class, 'createJoinRequest']);
+    Route::get('/organizations/{orgId}/join-requests', [OrganizationSocialController::class, 'orgJoinRequests']);
+    Route::patch('/organizations/{orgId}/join-requests/{requestId}', [OrganizationSocialController::class, 'handleJoinRequest']);
+
+    Route::get('/organizations/{orgId}/join-settings', [OrganizationSocialController::class, 'getJoinSettings']);
+    Route::patch('/organizations/{orgId}/join-settings', [OrganizationSocialController::class, 'updateJoinSettings']);
+
+    Route::post('/organizations/updates', [OrganizationSocialController::class, 'publishUpdate']);
+    Route::get('/community/feed', [OrganizationSocialController::class, 'communityFeed']);
+
+    Route::get('/user/organizations', [OrganizationSocialController::class, 'userOrganizations']);
+    Route::get('/user/joined-organizations', [OrganizationSocialController::class, 'userJoinedOrganizations']);
+    Route::get('/user/following-organizations', [OrganizationSocialController::class, 'userFollowingOrganizations']);
+    Route::get('/user/join-requests', [OrganizationSocialController::class, 'userJoinRequests']);
     
     Route::get('/admin/reports', [AdminReportsController::class, 'getAllReports']);
     Route::get('/admin/reports/stats', [AdminReportsController::class, 'getReportStats']);

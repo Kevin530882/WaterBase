@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -27,7 +28,17 @@ interface UserStats {
     badges?: string[];
 }
 
+interface OrganizationSummary {
+    id: number;
+    firstName: string;
+    lastName: string;
+    organization?: string;
+    role: string;
+    areaOfResponsibility?: string;
+}
+
 export const Profile = () => {
+    const navigate = useNavigate();
     const { user, token, updateUser } = useAuth();
     const profilePhotoInputRef = useRef<HTMLInputElement>(null);
     const [profileData, setProfileData] = useState({
@@ -43,6 +54,9 @@ export const Profile = () => {
     const [isLoading, setIsLoading] = useState(true);
     const [isPhotoUploading, setIsPhotoUploading] = useState(false);
     const [profilePhotoUrl, setProfilePhotoUrl] = useState<string | null>(user?.profile_photo || null);
+    const [isOrganizationsLoading, setIsOrganizationsLoading] = useState(false);
+    const [joinedOrganizations, setJoinedOrganizations] = useState<OrganizationSummary[]>([]);
+    const [followedOrganizations, setFollowedOrganizations] = useState<OrganizationSummary[]>([]);
 
     useEffect(() => {
         setProfileData({
@@ -59,6 +73,7 @@ export const Profile = () => {
     useEffect(() => {
         if (user && token) {
             fetchUserStats();
+            fetchUserOrganizations();
         }
     }, [user, token]);
 
@@ -83,6 +98,80 @@ export const Profile = () => {
             setIsLoading(false);
         }
     };
+
+    const fetchUserOrganizations = async () => {
+        if (!token) return;
+
+        try {
+            setIsOrganizationsLoading(true);
+            const response = await fetch('/api/user/organizations', {
+                headers: {
+                    Authorization: `Bearer ${token}`,
+                    Accept: 'application/json',
+                }
+            });
+
+            if (!response.ok) {
+                throw new Error('Failed to fetch organizations');
+            }
+
+            const data = await response.json();
+            setJoinedOrganizations(Array.isArray(data?.joinedOrganizations) ? data.joinedOrganizations : []);
+            setFollowedOrganizations(Array.isArray(data?.followedOrganizations) ? data.followedOrganizations : []);
+        } catch (error) {
+            console.error('Error fetching user organizations:', error);
+        } finally {
+            setIsOrganizationsLoading(false);
+        }
+    };
+
+    const renderOrganizationsTab = (
+        title: string,
+        organizations: OrganizationSummary[],
+        emptyMessage: string,
+        badgeLabel: string,
+    ) => (
+        <TabsContent value={title.toLowerCase().includes('joined') ? 'joined' : 'followed'}>
+            <Card className="border-waterbase-200">
+                <CardHeader>
+                    <CardTitle className="text-waterbase-950">{title}</CardTitle>
+                    <CardDescription className="text-waterbase-600">
+                        Click an organization to view its full profile.
+                    </CardDescription>
+                </CardHeader>
+                <CardContent>
+                    {isOrganizationsLoading ? (
+                        <p className="text-waterbase-700">Loading organizations...</p>
+                    ) : organizations.length === 0 ? (
+                        <p className="text-waterbase-700">{emptyMessage}</p>
+                    ) : (
+                        <div className="space-y-3">
+                            {organizations.map((organization) => (
+                                <button
+                                    key={organization.id}
+                                    type="button"
+                                    className="w-full text-left p-4 rounded-lg border border-waterbase-200 bg-waterbase-50 hover:bg-waterbase-100 transition-colors"
+                                    onClick={() => navigate(`/organizations/${organization.id}`)}
+                                >
+                                    <div className="flex flex-wrap items-center justify-between gap-3">
+                                        <div>
+                                            <p className="font-semibold text-waterbase-950">
+                                                {organization.organization || `${organization.firstName} ${organization.lastName}`}
+                                            </p>
+                                            <p className="text-sm text-waterbase-700 mt-1">
+                                                {organization.areaOfResponsibility || 'No area of responsibility set'}
+                                            </p>
+                                        </div>
+                                        <Badge variant="outline">{badgeLabel}</Badge>
+                                    </div>
+                                </button>
+                            ))}
+                        </div>
+                    )}
+                </CardContent>
+            </Card>
+        </TabsContent>
+    );
 
     const handleProfileUpdate = (updatedData: any) => {
         updateUser(updatedData);
@@ -449,13 +538,27 @@ export const Profile = () => {
 
                 {/* Tabbed Content */}
                 <Tabs defaultValue="activity" className="space-y-3">
-                    <TabsList className="grid w-full grid-cols-3">
+                    <TabsList className="grid w-full grid-cols-5">
                         <TabsTrigger value="activity">Recent Activity</TabsTrigger>
+                        <TabsTrigger value="joined">Groups Joined</TabsTrigger>
+                        <TabsTrigger value="followed">Organizations Followed</TabsTrigger>
                         <TabsTrigger value="notifications">Notifications</TabsTrigger>
                         <TabsTrigger value="settings">Settings</TabsTrigger>
                     </TabsList>
 
                     <RecentActivity />
+                    {renderOrganizationsTab(
+                        'Groups Joined',
+                        joinedOrganizations,
+                        'You have not joined any organizations yet.',
+                        'Member'
+                    )}
+                    {renderOrganizationsTab(
+                        'Organizations Followed',
+                        followedOrganizations,
+                        'You are not following any organizations yet.',
+                        'Following'
+                    )}
                     <Notification />
                     <Setting onProfileUpdate={handleProfileUpdate} />
                 </Tabs>
