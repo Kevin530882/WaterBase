@@ -17,6 +17,75 @@ class NotificationApiTest extends TestCase
 {
     use RefreshDatabase;
 
+    public function test_user_can_get_and_update_notification_preferences(): void
+    {
+        $user = $this->makeUser('volunteer');
+        Sanctum::actingAs($user);
+
+        $this->getJson('/api/notifications/preferences')
+            ->assertOk()
+            ->assertJsonPath('push_notifications_enabled', true)
+            ->assertJsonPath('report_updates', true)
+            ->assertJsonPath('event_reminders', true)
+            ->assertJsonPath('achievements', false)
+            ->assertJsonPath('quiet_hours_enabled', false);
+
+        $this->patchJson('/api/notifications/preferences', [
+            'report_updates' => false,
+            'event_reminders' => false,
+            'achievements' => true,
+            'quiet_hours_enabled' => true,
+            'quiet_hours_start' => '22:00',
+            'quiet_hours_end' => '07:00',
+        ])->assertOk()
+            ->assertJsonPath('preferences.report_updates', false)
+            ->assertJsonPath('preferences.event_reminders', false)
+            ->assertJsonPath('preferences.achievements', true)
+            ->assertJsonPath('preferences.quiet_hours_enabled', true);
+
+        $user->refresh();
+        $this->assertFalse((bool) $user->push_pref_report_updates);
+        $this->assertFalse((bool) $user->push_pref_event_reminders);
+        $this->assertTrue((bool) $user->push_pref_achievements);
+        $this->assertTrue((bool) $user->push_quiet_hours_enabled);
+        $this->assertSame('22:00', $user->push_quiet_hours_start);
+        $this->assertSame('07:00', $user->push_quiet_hours_end);
+    }
+
+    public function test_user_can_register_and_revoke_push_token(): void
+    {
+        $user = $this->makeUser('volunteer');
+        Sanctum::actingAs($user);
+
+        $token = 'ExponentPushToken[test-push-token-1]';
+
+        $this->postJson('/api/user/push-token', [
+            'token' => $token,
+            'platform' => 'android',
+            'app_version' => '1.0.0',
+        ])
+            ->assertOk()
+            ->assertJsonPath('message', 'Push token registered');
+
+        $user->refresh();
+        $this->assertSame($token, $user->expo_push_token);
+        $this->assertSame('android', $user->push_token_platform);
+        $this->assertSame('1.0.0', $user->push_token_app_version);
+        $this->assertNotNull($user->push_token_updated_at);
+
+        $this->deleteJson('/api/user/push-token', [
+            'token' => $token,
+        ])
+            ->assertOk()
+            ->assertJsonPath('message', 'Push token revoked');
+
+        $user->refresh();
+        $this->assertNull($user->expo_push_token);
+        $this->assertNull($user->push_token_platform);
+        $this->assertNull($user->push_token_app_version);
+        $this->assertNotNull($user->push_token_updated_at);
+    }
+
     public function test_user_can_list_and_update_notification_read_state(): void
     {
         $user = $this->makeUser('volunteer');
@@ -145,6 +214,11 @@ class NotificationApiTest extends TestCase
             'role' => $role,
             'organization' => $role === 'ngo' ? 'Water NGO' : null,
             'areaOfResponsibility' => 'Metro Manila',
+            'push_notifications_enabled' => true,
+            'push_pref_report_updates' => true,
+            'push_pref_event_reminders' => true,
+            'push_pref_achievements' => false,
+            'push_quiet_hours_enabled' => false,
         ]);
     }
 }

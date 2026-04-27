@@ -28,6 +28,26 @@ class User extends Authenticatable
         'bbox_north',
         'bbox_west',
         'bbox_east',
+        'expo_push_token',
+        'push_token_platform',
+        'push_token_app_version',
+        'push_token_updated_at',
+        'push_notifications_enabled',
+        'push_pref_report_updates',
+        'push_pref_event_reminders',
+        'push_pref_achievements',
+        'push_quiet_hours_enabled',
+        'push_quiet_hours_start',
+        'push_quiet_hours_end',
+    ];
+
+    protected $casts = [
+        'push_token_updated_at' => 'datetime',
+        'push_notifications_enabled' => 'boolean',
+        'push_pref_report_updates' => 'boolean',
+        'push_pref_event_reminders' => 'boolean',
+        'push_pref_achievements' => 'boolean',
+        'push_quiet_hours_enabled' => 'boolean',
     ];
 
     public function reports()

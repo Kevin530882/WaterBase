@@ -18,6 +18,10 @@ export interface NotificationPage {
   total: number;
 }
 
+const UNREAD_COUNT_CACHE_TTL_MS = 15000;
+let unreadCountCache: { value: number; fetchedAt: number } | null = null;
+let unreadCountInFlight: Promise<number> | null = null;
+
 const authHeaders = (token: string) => ({
   Authorization: `Bearer ${token}`,
   Accept: 'application/json',
@@ -42,16 +46,35 @@ export async function fetchNotifications(token: string, read?: boolean): Promise
 }
 
 export async function fetchUnreadCount(token: string): Promise<number> {
-  const response = await fetch('/api/notifications/unread-count', {
-    headers: authHeaders(token),
-  });
-
-  if (!response.ok) {
-    throw new Error('Failed to fetch unread count');
+  const now = Date.now();
+  if (unreadCountCache && (now - unreadCountCache.fetchedAt) < UNREAD_COUNT_CACHE_TTL_MS) {
+    return unreadCountCache.value;
   }
 
-  const payload = await response.json();
-  return Number(payload.unread_count ?? 0);
+  if (unreadCountInFlight) {
+    return unreadCountInFlight;
+  }
+
+  unreadCountInFlight = (async () => {
+    const response = await fetch('/api/notifications/unread-count', {
+      headers: authHeaders(token),
+    });
+
+    if (!response.ok) {
+      throw new Error('Failed to fetch unread count');
+    }
+
+    const payload = await response.json();
+    const value = Number(payload.unread_count ?? 0);
+    unreadCountCache = { value, fetchedAt: Date.now() };
+    return value;
+  })();
+
+  try {
+    return await unreadCountInFlight;
+  } finally {
+    unreadCountInFlight = null;
+  }
 }
 
 export async function markNotificationReadState(token: string, id: number, read: boolean): Promise<void> {

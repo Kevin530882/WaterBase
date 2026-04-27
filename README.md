@@ -38,12 +38,53 @@ The web backend now includes queue-backed in-app notifications for event and rep
 ### API endpoints (auth required)
 
 - `GET /api/notifications` list notifications with optional `read`, `type`, `channel`, and `per_page` query params
+- `GET /api/notifications/preferences` get push preference and quiet-hour settings
+- `PATCH /api/notifications/preferences` update push preference and quiet-hour settings
 - `PATCH /api/notifications/{notification}/read-state` body: `{ "read": true|false }`
 - `PATCH /api/notifications/mark-all-read` mark all unread notifications as read
 - `GET /api/notifications/unread-count` get unread notification count
 
+### Mobile push token lifecycle endpoints (auth required)
+
+- `POST /api/user/push-token` body: `{ "token": "ExponentPushToken[...]", "platform": "ios|android|web", "app_version": "x.y.z" }`
+- `DELETE /api/user/push-token` body: `{ "token": "ExponentPushToken[...]" }` (token optional; if supplied, it must match the current stored token)
+
+These endpoints store and revoke device tokens used by queue-backed push fan-out.
+
+### Push fan-out configuration (current rollout)
+
+- `WATERBASE_PUSH_NOTIFICATIONS_ENABLED=false` keeps push fan-out disabled by default.
+- `EXPO_PUSH_API_URL=https://exp.host/--/api/v2/push/send` configures the Expo provider endpoint.
+- `WATERBASE_PUSH_ALLOWED_TYPES=event_created,event_ongoing,event_completed,report_status_changed,report_processing_failed` restricts which notification types can fan out to push.
+
+When push is enabled, queue delivery keeps in-app notifications as the source of truth and attempts Expo push in parallel for eligible users with registered tokens.
+
+Push fan-out honors:
+
+- user-level category preferences (`report_updates`, `event_reminders`, `achievements`)
+- optional quiet hours (`quiet_hours_enabled`, `quiet_hours_start`, `quiet_hours_end`)
+- invalid token cleanup (`DeviceNotRegistered` clears stale Expo token fields)
+
+Mobile behavior:
+
+- foreground notifications show Expo banners/list via the global notification handler
+- background notification tap deep-links to relevant screens (`Community` for event targets, `MapView` for report targets, fallback `Notifications`)
+
+Observability metrics (cache counters):
+
+- `notifications.metrics.push_attempted`
+- `notifications.metrics.push_accepted`
+- `notifications.metrics.push_delivered` (if provider delivery status is available)
+- `notifications.metrics.push_delivered_unavailable`
+- `notifications.metrics.push_failed`
+- `notifications.metrics.push_invalid_token`
+- `notifications.metrics.push_suppressed_quiet_hours`
+
 ### Queue and operations
 
+- Ensure migrations are applied before testing submissions:
+	- `php artisan migrate`
+- Confirm queue tables exist (`jobs`, `failed_jobs`) via `php artisan migrate:status`.
 - Run workers for reliable delivery and retry handling:
 	- `php artisan queue:work --tries=5`
 - Failed deliveries are written to `failed_jobs` for dead-letter inspection and replay.

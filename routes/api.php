@@ -21,6 +21,8 @@ Route::get('/organizations', [UserController::class, 'getOrganizations']);
 
 Route::middleware('auth:sanctum')->group(function () {
     Route::post('/logout', [UserController::class, 'logout']);
+    Route::post('/user/push-token', [UserController::class, 'registerPushToken']);
+    Route::delete('/user/push-token', [UserController::class, 'revokePushToken']);
 
     // Event routes
     Route::apiResource('events', EventController::class);
@@ -75,6 +77,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/organizations/{orgId}/join-requests', [OrganizationSocialController::class, 'createJoinRequest']);
     Route::get('/organizations/{orgId}/join-requests', [OrganizationSocialController::class, 'orgJoinRequests']);
     Route::patch('/organizations/{orgId}/join-requests/{requestId}', [OrganizationSocialController::class, 'handleJoinRequest']);
+    Route::delete('/organizations/{orgId}/join-requests/{requestId}', [OrganizationSocialController::class, 'cancelJoinRequest']);
 
     Route::get('/organizations/{orgId}/join-settings', [OrganizationSocialController::class, 'getJoinSettings']);
     Route::patch('/organizations/{orgId}/join-settings', [OrganizationSocialController::class, 'updateJoinSettings']);
@@ -84,6 +87,8 @@ Route::middleware('auth:sanctum')->group(function () {
 
     // Notification routes
     Route::get('/notifications', [NotificationController::class, 'index']);
+    Route::get('/notifications/preferences', [NotificationController::class, 'getPreferences']);
+    Route::patch('/notifications/preferences', [NotificationController::class, 'updatePreferences']);
     Route::patch('/notifications/{notification}/read-state', [NotificationController::class, 'markReadState']);
     Route::patch('/notifications/mark-all-read', [NotificationController::class, 'markAllRead']);
     Route::get('/notifications/unread-count', [NotificationController::class, 'unreadCount']);

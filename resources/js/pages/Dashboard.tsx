@@ -69,11 +69,17 @@ interface ForecastResponse {
   };
 }
 
+interface RegionPoint {
+  area_of_responsibility: string;
+  count: number;
+}
+
 export const Dashboard = () => {
   const { token } = useAuth();
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [recentReports, setRecentReports] = useState<RecentReport[]>([]);
   const [forecast, setForecast] = useState<ForecastResponse | null>(null);
+  const [reportsByRegion, setReportsByRegion] = useState<RegionPoint[]>([]);
   const [loading, setLoading] = useState(true);
   const [forecastLoading, setForecastLoading] = useState(false);
   const [forecastMetric, setForecastMetric] = useState('report_volume');
@@ -142,13 +148,21 @@ export const Dashboard = () => {
       }
 
       console.log('Fetching recent reports...');
-      // Fetch recent reports
-      const reportsResponse = await fetch('/api/dashboard/recent-reports', {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-      });
+      // Fetch recent reports and regional distribution
+      const [reportsResponse, regionsResponse] = await Promise.all([
+        fetch('/api/dashboard/recent-reports', {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+        }),
+        fetch('/api/dashboard/reports-by-region', {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+        }),
+      ]);
 
       console.log('Reports response status:', reportsResponse.status);
       if (reportsResponse.ok) {
@@ -157,6 +171,14 @@ export const Dashboard = () => {
         setRecentReports(reportsData);
       } else {
         console.error('Reports response error:', await reportsResponse.text());
+      }
+
+      console.log('Regions response status:', regionsResponse.status);
+      if (regionsResponse.ok) {
+        const regionsData = await regionsResponse.json();
+        setReportsByRegion(Array.isArray(regionsData) ? regionsData : []);
+      } else {
+        console.error('Regions response error:', await regionsResponse.text());
       }
 
     } catch (error) {
@@ -199,6 +221,16 @@ export const Dashboard = () => {
       setForecastLoading(false);
     }
   };
+
+  const regionChartData = (() => {
+    const rows = reportsByRegion.slice(0, 10);
+    const max = Math.max(1, ...rows.map((row) => row.count || 0));
+    return rows.map((row) => ({
+      ...row,
+      percent: Math.round(((row.count || 0) / max) * 100),
+    }));
+  })();
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-waterbase-50 to-enviro-50">
       <Navigation />
@@ -352,14 +384,28 @@ export const Dashboard = () => {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="h-64 bg-gradient-to-br from-waterbase-100 to-enviro-100 rounded-lg flex items-center justify-center">
-                <div className="text-center">
-                  <BarChart3 className="w-12 h-12 text-waterbase-500 mx-auto mb-4" />
-                  <p className="text-waterbase-600">
-                    Chart visualization coming soon
-                  </p>
+              {regionChartData.length === 0 ? (
+                <div className="h-64 bg-gradient-to-br from-waterbase-100 to-enviro-100 rounded-lg flex items-center justify-center">
+                  <div className="text-center">
+                    <BarChart3 className="w-12 h-12 text-waterbase-500 mx-auto mb-4" />
+                    <p className="text-waterbase-600">No regional report data yet</p>
+                  </div>
                 </div>
-              </div>
+              ) : (
+                <div className="h-64 overflow-y-auto pr-1 space-y-2">
+                  {regionChartData.map((row) => (
+                    <div key={row.area_of_responsibility || `region-${row.count}`} className="p-2 rounded-md bg-waterbase-50 border border-waterbase-100">
+                      <div className="flex items-center justify-between text-xs text-waterbase-700 mb-1 gap-2">
+                        <span className="truncate">{row.area_of_responsibility || 'Unspecified area'}</span>
+                        <span className="font-semibold">{row.count}</span>
+                      </div>
+                      <div className="h-2 bg-white rounded">
+                        <div className="h-2 bg-waterbase-500 rounded" style={{ width: `${Math.max(6, row.percent)}%` }} />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </CardContent>
           </Card>
 

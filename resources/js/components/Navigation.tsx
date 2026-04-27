@@ -104,13 +104,13 @@ const Navigation = () => {
     };
 
     loadUnreadCount();
-    const intervalId = window.setInterval(loadUnreadCount, 30000);
+    const intervalId = window.setInterval(loadUnreadCount, 60000);
 
     return () => {
       mounted = false;
       window.clearInterval(intervalId);
     };
-  }, [token, isAuthenticated, location.pathname]);
+  }, [token, isAuthenticated]);
 
   const handleLogout = async () => {
     try {

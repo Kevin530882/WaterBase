@@ -140,11 +140,16 @@ class ReportController extends Controller
                 //$fileExtension = pathinfo($fileName, PATHINFO_EXTENSION);
                 $fileNameWithoutExtension = pathinfo($fileName, PATHINFO_FILENAME);
                 $annotatedFileName = $fileNameWithoutExtension . '_annotated.' . 'jpg';
-                $annotatedImagePath = Storage::url('uploads/' . $annotatedFileName);
+                $annotatedStoragePath = 'uploads/' . $annotatedFileName;
+                $annotatedImagePath = Storage::url($annotatedStoragePath);
 
-                // Verify if annotated image exists
-                if (!Storage::disk('public')->exists('uploads/' . $annotatedFileName)) {
-                    throw new \Exception('Annotated image does not exist.');
+                // Annotated image can be generated asynchronously; keep submission successful if it is not available yet.
+                if (!Storage::disk('public')->exists($annotatedStoragePath)) {
+                    Log::warning('Annotated image not found during report submission. Falling back to original image.', [
+                        'file' => $fileName,
+                        'user_id' => $request->user_id,
+                    ]);
+                    $annotatedImagePath = $imagePath;
                 }
 
             } catch (\Exception $e) {
@@ -212,10 +217,11 @@ class ReportController extends Controller
             }
 
             return response()->json([
-                'success' => 'Report Created Successfully',
+                'success' => 'Report queued for processing',
                 'status' => 'success',
+                'message' => 'Your submission is being processed. We will notify you once verification updates are available.',
                 'report' => $report,
-            ], 200);
+            ], 202);
 
         } catch (ValidationException $e) {
             Log::warning('Validation failed for report creation: ' . json_encode($e->errors()), [

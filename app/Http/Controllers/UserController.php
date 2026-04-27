@@ -2,11 +2,11 @@
 
 namespace App\Http\Controllers;
 
-use Illuminate\Http\Request;
 use App\Models\User;
 use App\Services\GeographicService;
-use Illuminate\Support\Facades\Hash;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\ValidationException;
@@ -45,13 +45,11 @@ class UserController extends Controller
                 'areaOfResponsibility' => $request->areaOfResponsibility,
             ]);
 
-            // If user is an organization (NGO, LGU, researcher) and has an area of responsibility,
-            // automatically geocode and populate bounding boxes
             if (in_array($request->role, ['ngo', 'lgu', 'researcher']) && $request->areaOfResponsibility) {
                 Log::info('Registering area of responsibility for new organization', [
                     'user_id' => $user->id,
                     'organization' => $request->organization,
-                    'area' => $request->areaOfResponsibility
+                    'area' => $request->areaOfResponsibility,
                 ]);
 
                 $geoResult = $this->geographicService->registerAreaOfResponsibility(
@@ -63,32 +61,29 @@ class UserController extends Controller
                     Log::warning('Failed to geocode area during registration', [
                         'user_id' => $user->id,
                         'area' => $request->areaOfResponsibility,
-                        'error' => $geoResult['error']
+                        'error' => $geoResult['error'],
                     ]);
-                    // Note: We don't fail the registration if geocoding fails
-                    // The user can update their area later via the geographic API
                 } else {
                     Log::info('Successfully geocoded area during registration', [
                         'user_id' => $user->id,
-                        'bounding_box' => $geoResult['bounding_box']
+                        'bounding_box' => $geoResult['bounding_box'],
                     ]);
                 }
             }
 
             return response()->json([
                 'message' => 'User registered successfully',
-                'user' => $user
+                'user' => $user,
             ], 201);
-
         } catch (ValidationException $e) {
             return response()->json([
                 'message' => 'Validation failed',
-                'errors' => $e->errors()
+                'errors' => $e->errors(),
             ], 422);
         } catch (\Exception $e) {
             return response()->json([
                 'message' => 'Registration failed',
-                'error' => $e->getMessage()
+                'error' => $e->getMessage(),
             ], 500);
         }
     }
@@ -104,7 +99,7 @@ class UserController extends Controller
 
         if (!$user || !Hash::check($request->password, $user->password)) {
             return response()->json([
-                'message' => 'Invalid credentials'
+                'message' => 'Invalid credentials',
             ], 401);
         }
 
@@ -120,8 +115,71 @@ class UserController extends Controller
     public function logout(Request $request)
     {
         $request->user()->currentAccessToken()->delete();
+
         return response()->json([
-            'message' => 'Successfully logged out'
+            'message' => 'Successfully logged out',
+        ]);
+    }
+
+    public function registerPushToken(Request $request)
+    {
+        $user = $request->user();
+
+        if (!$user instanceof User) {
+            return response()->json([
+                'message' => 'User not authenticated',
+            ], 401);
+        }
+
+        $validated = $request->validate([
+            'token' => 'required|string|max:255',
+            'platform' => 'nullable|string|in:ios,android,web,unknown',
+            'app_version' => 'nullable|string|max:32',
+        ]);
+
+        $user->expo_push_token = $validated['token'];
+        $user->push_token_platform = $validated['platform'] ?? 'unknown';
+        $user->push_token_app_version = $validated['app_version'] ?? null;
+        $user->push_token_updated_at = now();
+        $user->save();
+
+        return response()->json([
+            'message' => 'Push token registered',
+            'push_notifications_enabled' => (bool) $user->push_notifications_enabled,
+            'push_token_updated_at' => $user->push_token_updated_at,
+        ]);
+    }
+
+    public function revokePushToken(Request $request)
+    {
+        $user = $request->user();
+
+        if (!$user instanceof User) {
+            return response()->json([
+                'message' => 'User not authenticated',
+            ], 401);
+        }
+
+        $validated = $request->validate([
+            'token' => 'nullable|string|max:255',
+        ]);
+
+        $requestedToken = $validated['token'] ?? null;
+
+        if ($requestedToken !== null && $user->expo_push_token !== $requestedToken) {
+            return response()->json([
+                'message' => 'Token does not match current device token',
+            ], 422);
+        }
+
+        $user->expo_push_token = null;
+        $user->push_token_platform = null;
+        $user->push_token_app_version = null;
+        $user->push_token_updated_at = now();
+        $user->save();
+
+        return response()->json([
+            'message' => 'Push token revoked',
         ]);
     }
 
@@ -159,7 +217,7 @@ class UserController extends Controller
 
             if (!$user instanceof User) {
                 return response()->json([
-                    'message' => 'User not authenticated'
+                    'message' => 'User not authenticated',
                 ], 401);
             }
 
@@ -173,9 +231,9 @@ class UserController extends Controller
                 'profile_photo' => 'sometimes|image|mimes:jpeg,png,jpg,gif|max:5120',
             ]);
 
-            // Handle profile photo upload if present
+            $profilePhotoPath = null;
+
             if ($request->hasFile('profile_photo')) {
-                // Delete old profile photo if it exists
                 if ($user->profile_photo) {
                     $oldPath = str_replace('/storage/', '', $user->profile_photo);
                     if (Storage::disk('public')->exists($oldPath)) {
@@ -183,62 +241,34 @@ class UserController extends Controller
                     }
                 }
 
-                // Store new profile photo
                 $file = $request->file('profile_photo');
                 $fileName = 'profile_' . $user->id . '_' . time() . '.' . $file->getClientOriginalExtension();
-                $filePath = $file->storeAs('profile_photos', $fileName, 'public');
-                $validated['profile_photo'] = '/storage/' . $filePath;
+                $profilePhotoPath = $file->storeAs('profile_photos', $fileName, 'public');
             }
 
-            $areaWasUpdated = array_key_exists('areaOfResponsibility', $validated);
-            $user->update($validated);
+            unset($validated['profile_photo']);
+            $user->fill($validated);
 
-            // Keep geographic bounds in sync when organizations/researchers update their area.
-            if ($areaWasUpdated) {
-                $updatedArea = trim((string) ($validated['areaOfResponsibility'] ?? ''));
-                $eligibleForGeographicBounds = in_array($user->role, ['ngo', 'lgu', 'researcher']);
-
-                if ($eligibleForGeographicBounds && $updatedArea !== '') {
-                    $geoResult = $this->geographicService->registerAreaOfResponsibility(
-                        $user->id,
-                        $updatedArea
-                    );
-
-                    if (!$geoResult['success']) {
-                        Log::warning('Failed to geocode area during profile update', [
-                            'user_id' => $user->id,
-                            'role' => $user->role,
-                            'area' => $updatedArea,
-                            'error' => $geoResult['error']
-                        ]);
-                    }
-                }
-
-                if ($updatedArea === '') {
-                    $user->update([
-                        'bbox_south' => null,
-                        'bbox_north' => null,
-                        'bbox_west' => null,
-                        'bbox_east' => null,
-                    ]);
-                }
+            if ($profilePhotoPath) {
+                $user->profile_photo = '/storage/' . $profilePhotoPath;
             }
 
+            $user->save();
             $user->refresh();
 
             return response()->json([
                 'message' => 'Profile updated successfully',
-                'user' => $user
+                'user' => $user,
             ]);
         } catch (ValidationException $e) {
             return response()->json([
                 'message' => 'Validation failed',
-                'errors' => $e->errors()
+                'errors' => $e->errors(),
             ], 422);
         } catch (\Exception $e) {
             return response()->json([
                 'message' => 'Failed to update profile',
-                'error' => $e->getMessage()
+                'error' => $e->getMessage(),
             ], 500);
         }
     }
@@ -250,20 +280,16 @@ class UserController extends Controller
 
             if (!$user instanceof User) {
                 return response()->json([
-                    'message' => 'User not authenticated'
+                    'message' => 'User not authenticated',
                 ], 401);
             }
 
             $role = strtolower($user->role);
-
             $stats = [];
 
             switch ($role) {
                 case 'volunteer':
-                    // Count reports submitted by user
                     $reportsCount = \App\Models\Report::where('user_id', $user->id)->count();
-
-                    // Get events joined by user
                     $eventsJoined = 0;
                     $badgesEarned = 0;
                     $communityPoints = 0;
@@ -271,27 +297,20 @@ class UserController extends Controller
                     $userBadges = [];
 
                     if (class_exists('\App\Models\Event')) {
-                        // Count events the user has joined
                         $eventsJoined = $user->attendedEvents()->count();
 
-                        // Get completed events and their badges
                         $completedEvents = $user->attendedEvents()
                             ->where('status', 'completed')
                             ->whereNotNull('badge')
                             ->get();
 
-                        // Get all attended events to calculate hours
                         $allAttendedEvents = $user->attendedEvents()->get();
                         $totalHours = $allAttendedEvents->sum('duration') ?? 0;
 
-                        // Count unique badges earned
                         $userBadges = $completedEvents->pluck('badge')->unique()->values()->toArray();
                         $badgesEarned = count($userBadges);
 
-                        // Calculate community points from completed events
                         $communityPoints = $completedEvents->sum('points') ?? 0;
-
-                        // Add points from reports
                         $communityPoints += ($reportsCount * 10);
                     }
 
@@ -301,68 +320,64 @@ class UserController extends Controller
                         'badgesEarned' => $badgesEarned,
                         'communityPoints' => $communityPoints,
                         'totalHours' => $totalHours,
-                        'badges' => $userBadges
+                        'badges' => $userBadges,
                     ];
                     break;
+
                 case 'ngo':
                 case 'lgu':
-                    // Count events created by user (if Event model exists)
                     $eventsCreated = 0;
                     $eventsCompleted = 0;
                     $volunteersManaged = 0;
 
-                    // Check if Event model exists
                     if (class_exists('\App\Models\Event')) {
                         $eventsCreated = \App\Models\Event::where('user_id', $user->id)->count();
                         $eventsCompleted = \App\Models\Event::where('user_id', $user->id)
-                            ->where('status', 'completed')->count();
+                            ->where('status', 'completed')
+                            ->count();
                         $volunteersManaged = \App\Models\Event::where('user_id', $user->id)
                             ->sum('currentVolunteers') ?? 0;
                     }
 
-                    // Calculate success rate
                     $successRate = $eventsCreated > 0 ? round(($eventsCompleted / $eventsCreated) * 100) : 0;
 
                     $stats = [
                         'eventsCreated' => $eventsCreated,
                         'eventsCompleted' => $eventsCompleted,
                         'volunteersManaged' => $volunteersManaged,
-                        'accuracyRate' => $successRate
+                        'accuracyRate' => $successRate,
                     ];
                     break;
 
                 case 'researcher':
-                    // Count reports submitted by researcher
                     $reportsSubmitted = \App\Models\Report::where('user_id', $user->id)->count();
 
                     $stats = [
                         'dataAnalyzed' => $reportsSubmitted * 2,
                         'researchPublished' => max(1, intval($reportsSubmitted / 5)),
                         'reportsSubmitted' => $reportsSubmitted,
-                        'accuracyRate' => 95
+                        'accuracyRate' => 95,
                     ];
                     break;
 
                 default:
-                    // Default stats for basic users
                     $reportsSubmitted = \App\Models\Report::where('user_id', $user->id)->count();
 
                     $stats = [
                         'reportsSubmitted' => $reportsSubmitted,
-                        'communityPoints' => $reportsSubmitted * 10
+                        'communityPoints' => $reportsSubmitted * 10,
                     ];
                     break;
             }
 
             return response()->json($stats);
-
         } catch (\Exception $e) {
             Log::error('Error in getStats: ' . $e->getMessage());
             Log::error('Stack trace: ' . $e->getTraceAsString());
 
             return response()->json([
                 'message' => 'Failed to fetch stats',
-                'error' => $e->getMessage()
+                'error' => $e->getMessage(),
             ], 500);
         }
     }

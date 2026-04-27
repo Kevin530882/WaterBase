@@ -45,4 +45,13 @@ return [
         'retrain_schedule' => env('WATERBASE_FORECAST_RETRAIN_SCHEDULE', 'weekly'),
     ],
 
+    'waterbase_push' => [
+        'enabled' => env('WATERBASE_PUSH_NOTIFICATIONS_ENABLED', false),
+        'provider_url' => env('EXPO_PUSH_API_URL', 'https://exp.host/--/api/v2/push/send'),
+        'allowed_types' => array_values(array_filter(array_map(
+            static fn ($value) => trim((string) $value),
+            explode(',', (string) env('WATERBASE_PUSH_ALLOWED_TYPES', 'event_created,event_ongoing,event_completed,report_status_changed,report_processing_failed'))
+        ))),
+    ],
+
 ];

@@ -65,6 +65,12 @@ class OrganizationSocialController extends Controller
             ->where('organization_user_id', $organization->id)
             ->exists();
 
+        $joinRequest = OrganizationJoinRequest::query()
+            ->where('requester_user_id', $user->id)
+            ->where('organization_user_id', $organization->id)
+            ->orderByDesc('created_at')
+            ->first();
+
         return response()->json([
             'organization_id' => $organization->id,
             'is_following' => $isFollowing,
@@ -270,6 +276,39 @@ class OrganizationSocialController extends Controller
         });
     }
 
+    public function cancelJoinRequest(Request $request, int $orgId, int $requestId)
+    {
+        $user = $request->user();
+        $organization = $this->findOrganizationOrFail($orgId);
+
+        if (!$organization) {
+            return response()->json(['message' => 'Organization not found'], 404);
+        }
+
+        $joinRequest = OrganizationJoinRequest::query()
+            ->where('organization_user_id', $organization->id)
+            ->where('requester_user_id', $user->id)
+            ->where('status', 'pending')
+            ->find($requestId);
+
+        if (!$joinRequest) {
+            return response()->json([
+                'message' => 'Pending join request not found',
+            ], 404);
+        }
+
+        $joinRequest->update([
+            'status' => 'cancelled',
+            'reviewed_by_user_id' => null,
+            'reviewed_at' => null,
+        ]);
+
+        return response()->json([
+            'message' => 'Join request cancelled successfully',
+            'request' => $joinRequest->fresh(),
+        ]);
+    }
+
     public function userJoinRequests(Request $request)
     {
         $user = $request->user();
@@ -388,6 +427,12 @@ class OrganizationSocialController extends Controller
             ->where('organization_user_id', $organization->id)
             ->count();
 
+        $joinRequest = OrganizationJoinRequest::query()
+            ->where('requester_user_id', $user->id)
+            ->where('organization_user_id', $organization->id)
+            ->orderByDesc('created_at')
+            ->first();
+
         return response()->json([
             'organization' => [
                 'id' => $organization->id,
@@ -403,6 +448,10 @@ class OrganizationSocialController extends Controller
             ],
             'is_following' => $isFollowing,
             'is_member' => $isMember,
+            'join_request' => $joinRequest ? [
+                'id' => $joinRequest->id,
+                'status' => $joinRequest->status,
+            ] : null,
             'auto_accept_join_requests' => $settings->auto_accept_join_requests,
             'updates' => $recentUpdates,
         ]);

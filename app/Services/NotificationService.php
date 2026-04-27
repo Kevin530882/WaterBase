@@ -169,16 +169,28 @@ class NotificationService
             return;
         }
 
-        FanOutUserNotificationJob::dispatch(
-            type: $type->value,
-            recipientIds: $recipientIds,
-            channel: 'in_app',
-            severity: $severity,
-            title: $title,
-            message: $message,
-            metadata: $metadata,
-            idempotencySeed: $idempotencySeed
-        );
+        try {
+            FanOutUserNotificationJob::dispatch(
+                type: $type->value,
+                recipientIds: $recipientIds,
+                channel: 'in_app',
+                severity: $severity,
+                title: $title,
+                message: $message,
+                metadata: $metadata,
+                idempotencySeed: $idempotencySeed
+            );
+        } catch (\Throwable $e) {
+            // Notification enqueue failures should not block primary business flows.
+            Log::error('notification.enqueue_failed', [
+                'type' => $type->value,
+                'recipient_count' => count($recipientIds),
+                'queue' => config('queue.default'),
+                'error' => $e->getMessage(),
+            ]);
+
+            return;
+        }
 
         Log::info('notification.enqueued', [
             'type' => $type->value,

@@ -6,7 +6,6 @@ use App\Models\Report;
 use App\Models\User;
 use App\Models\Event;
 use Carbon\Carbon;
-use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
 class DashboardController extends Controller
@@ -83,9 +82,11 @@ class DashboardController extends Controller
      */
     public function getReportsByRegion()
     {
-        $reportsByRegion = Report::select('area_of_responsibility', DB::raw('count(*) as count'))
-            ->whereNotNull('area_of_responsibility')
-            ->groupBy('area_of_responsibility')
+        $reportsByRegion = Report::query()
+            ->selectRaw('TRIM(address) as area_of_responsibility, COUNT(*) as count')
+            ->whereNotNull('address')
+            ->whereRaw("TRIM(address) <> ''")
+            ->groupBy(DB::raw('TRIM(address)'))
             ->orderBy('count', 'desc')
             ->limit(10)
             ->get();
