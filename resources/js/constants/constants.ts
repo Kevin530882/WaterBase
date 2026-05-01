@@ -63,5 +63,9 @@ export const ROUTE = {
         path: "/admin/users",
         name: "Admin Users",
     },
+    ADMIN_BADGES : {
+        path: "/admin/badges",
+        name: "Admin Badges",
+    },
 
 }

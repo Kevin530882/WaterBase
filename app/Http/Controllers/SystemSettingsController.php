@@ -15,6 +15,7 @@ class SystemSettingsController extends Controller
             $settings = SystemSetting::create([
                 'auto_approve_enabled' => false,
                 'auto_approve_threshold' => 80,
+                'csv_auto_approve_enabled' => false,
             ]);
         }
         return response()->json($settings);
@@ -29,6 +30,7 @@ class SystemSettingsController extends Controller
         $validated = $request->validate([
             'auto_approve_enabled' => 'required|boolean',
             'auto_approve_threshold' => 'required|integer|min:0|max:100',
+            'csv_auto_approve_enabled' => 'boolean',
         ]);
 
         $settings = SystemSetting::query()->latest()->first();

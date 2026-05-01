@@ -472,29 +472,80 @@ export const Dashboard = () => {
                   </div>
                 ) : forecast && forecast.forecast.length > 0 ? (
                   <div className="space-y-3">
-                    <div className="p-3 rounded-md bg-waterbase-50 border border-waterbase-200 text-xs text-waterbase-700">
-                      <div>Model: <span className="font-semibold">{forecast.evaluation.best_model}</span> | Version: {forecast.model.version}</div>
-                      <div>Drift: <span className="font-semibold">{forecast.drift.status}</span> (mean shift {forecast.drift.mean_shift}, variance shift {forecast.drift.variance_shift})</div>
+                    {/* Forecast Summary */}
+                    <div className="p-3 rounded-md bg-waterbase-50 border border-waterbase-200 space-y-2">
+                      <div className="flex items-start justify-between">
+                        <div>
+                          <div className="font-semibold text-waterbase-950 text-sm mb-1">
+                            {forecast.metric === 'report_volume' ? 'Report Volume Forecast' :
+                             forecast.metric === 'severity_mix' ? 'Severity Distribution Forecast' :
+                             forecast.metric === 'hotspot_recurrence' ? 'Hotspot Recurrence Forecast' :
+                             'Cleanup Lead Time Forecast'}
+                          </div>
+                          <div className="text-xs text-waterbase-700">
+                            {forecast.horizon_days}-day outlook from today
+                          </div>
+                        </div>
+                        <div className={`px-2 py-1 rounded text-xs font-semibold ${
+                          forecast.drift.status === 'stable' ? 'bg-green-100 text-green-800' : 
+                          'bg-orange-100 text-orange-800'
+                        }`}>
+                          {forecast.drift.status === 'stable' ? '✓ Stable' : '⚠ Drift Detected'}
+                        </div>
+                      </div>
+                      <div className="text-xs text-waterbase-600">
+                        <div>Model: <span className="font-semibold">{forecast.evaluation.best_model}</span> | Confidence: {Math.round((forecast.forecast[0]?.confidence || 0) * 100)}%</div>
+                      </div>
                     </div>
 
+                    {/* Forecast Data with Interpretation */}
                     <div className="h-48 overflow-auto space-y-1">
-                      {forecast.forecast.slice(0, 20).map((point) => {
+                      {forecast.forecast.slice(0, 20).map((point, idx) => {
                         const upper = Math.max(point.upper, 0.001);
                         const pct = Math.min(100, Math.round((point.predicted / upper) * 100));
+                        const confidence = Math.round((point.confidence || 0) * 100);
+                        const isHighConfidence = confidence >= 70;
+                        
                         return (
                           <div key={point.date} className="text-xs">
-                            <div className="flex justify-between text-waterbase-700 mb-1">
-                              <span>{point.date}</span>
-                              <span>
-                                {point.predicted.toFixed(2)} ({point.lower.toFixed(2)} - {point.upper.toFixed(2)})
+                            <div className="flex justify-between items-center text-waterbase-700 mb-1">
+                              <span className="flex-1">{point.date}</span>
+                              <span className="font-mono">
+                                {point.predicted.toFixed(1)}
+                              </span>
+                              <span className={`text-xs px-1 rounded ml-1 ${
+                                isHighConfidence ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'
+                              }`}>
+                                {confidence}% conf
                               </span>
                             </div>
-                            <div className="h-2 bg-waterbase-100 rounded">
-                              <div className="h-2 bg-enviro-500 rounded" style={{ width: `${pct}%` }} />
+                            <div className="h-2 bg-waterbase-100 rounded overflow-hidden">
+                              <div 
+                                className="h-2 bg-enviro-500 rounded" 
+                                style={{ width: `${pct}%` }} 
+                                title={`Range: ${point.lower.toFixed(2)} - ${point.upper.toFixed(2)}`}
+                              />
                             </div>
                           </div>
                         );
                       })}
+                    </div>
+
+                    {/* Interpretation and Guidance */}
+                    <div className="p-2 rounded-md bg-enviro-50 border border-enviro-200 text-xs text-enviro-800">
+                      <div className="font-semibold mb-1">What this means:</div>
+                      {forecast.metric === 'report_volume' && (
+                        <div>Reports are expected to trend {forecast.forecast[Math.floor(forecast.forecast.length / 2)]?.predicted > (forecast.forecast[0]?.predicted || 0) ? 'upward' : 'downward'} over the next {forecast.horizon_days} days. Consider adjusting resources accordingly.</div>
+                      )}
+                      {forecast.metric === 'severity_mix' && (
+                        <div>Severity patterns are expected to {forecast.drift.status === 'stable' ? 'remain stable' : 'shift'}. Monitor high-severity reports closely for resource planning.</div>
+                      )}
+                      {forecast.metric === 'hotspot_recurrence' && (
+                        <div>Pollution hotspots are expected to {forecast.forecast[Math.floor(forecast.forecast.length / 2)]?.predicted > (forecast.forecast[0]?.predicted || 0) ? 'increase in recurrence' : 'become less recurring'}. Prioritize preventative actions at top locations.</div>
+                      )}
+                      {forecast.metric === 'cleanup_completion_lead_time' && (
+                        <div>Average cleanup lead time is expected to {forecast.forecast[Math.floor(forecast.forecast.length / 2)]?.predicted > (forecast.forecast[0]?.predicted || 0) ? 'increase' : 'improve'}. Adjust event scheduling and volunteer coordination plans.</div>
+                      )}
                     </div>
                   </div>
                 ) : (

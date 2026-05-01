@@ -7,9 +7,11 @@ use App\Models\Event;
 use App\Models\Report;
 use App\Models\User;
 use App\Models\UserNotification;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Queue;
+use Illuminate\Support\Facades\Storage;
 use Laravel\Sanctum\Sanctum;
 use Tests\TestCase;
 
@@ -201,6 +203,80 @@ class NotificationApiTest extends TestCase
             return $job->type === 'event_ongoing'
                 && in_array($creator->id, $job->recipientIds, true);
         });
+    }
+
+    public function test_volunteer_can_leave_joined_event(): void
+    {
+        $creator = $this->makeUser('ngo');
+        $volunteer = $this->makeUser('volunteer');
+
+        $event = Event::create([
+            'title' => 'Creek cleanup',
+            'address' => 'Creekside',
+            'latitude' => 14.62000000,
+            'longitude' => 121.02000000,
+            'date' => now()->toDateString(),
+            'time' => '09:00',
+            'duration' => 2.0,
+            'description' => 'Cleanup drive',
+            'maxVolunteers' => 20,
+            'points' => 20,
+            'badge' => 'Cleanup Starter',
+            'status' => 'recruiting',
+            'user_id' => $creator->id,
+        ]);
+
+        $event->attendees()->attach($volunteer->id, ['joined_at' => now()]);
+
+        Sanctum::actingAs($volunteer);
+
+        $this->postJson('/api/events/' . $event->id . '/leave', [])
+            ->assertOk()
+            ->assertJsonPath('message', 'Successfully left the event');
+
+        $this->assertFalse(
+            $event->attendees()->where('users.id', $volunteer->id)->exists()
+        );
+    }
+
+    public function test_organization_registration_requires_proof_and_persists_file(): void
+    {
+        Storage::fake('public');
+
+        $this->postJson('/api/register', [
+            'firstName' => 'Org',
+            'lastName' => 'Admin',
+            'email' => 'org@example.com',
+            'password' => 'password123',
+            'password_confirmation' => 'password123',
+            'phoneNumber' => '09123456789',
+            'role' => 'ngo',
+            'organization' => 'Blue Water Group',
+            'areaOfResponsibility' => 'Metro Manila',
+        ])->assertStatus(422)
+            ->assertJsonPath('errors.organization_proof_document.0', 'Proof of legitimacy document is required for organization accounts.');
+
+        $file = UploadedFile::fake()->create('proof.pdf', 100, 'application/pdf');
+
+        $this->post('/api/register', [
+            'firstName' => 'Org',
+            'lastName' => 'Admin',
+            'email' => 'org2@example.com',
+            'password' => 'password123',
+            'password_confirmation' => 'password123',
+            'phoneNumber' => '09123456789',
+            'role' => 'ngo',
+            'organization' => 'Blue Water Group',
+            'areaOfResponsibility' => 'Metro Manila',
+            'organization_proof_document' => $file,
+        ])->assertStatus(201)
+            ->assertJsonPath('user.organization', 'Blue Water Group');
+
+        $created = User::where('email', 'org2@example.com')->firstOrFail();
+        $this->assertNotNull($created->organization_proof_document);
+
+        $storedPath = str_replace('/storage/', '', (string) $created->organization_proof_document);
+        $this->assertTrue(Storage::disk('public')->exists($storedPath));
     }
 
     private function makeUser(string $role): User

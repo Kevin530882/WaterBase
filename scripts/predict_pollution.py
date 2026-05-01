@@ -151,16 +151,34 @@ def main(image_path):
             "pollution_model": ["unnatural_color", "green_algal_blooms"]
         }
         
-        # Load the water model
-        water_model = YOLO("../vision_models/water_detector_2.pt")  # Adjust this path
-        
-        # Run inference for water model
+        # Load models using absolute paths based on script location
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        project_root = os.path.dirname(script_dir)  # Parent of scripts/
+
+        water_model_path = os.path.join(project_root, "vision_models/water_detector_2.pt")
+        trash_model_path = os.path.join(project_root, "vision_models/trash_detect_2.pt")
+        pollution_model_path = os.path.join(project_root, "vision_models/unnatural_colors_3.pt")
+
+        print(f"DEBUG: Script dir: {script_dir}", flush=True)
+        print(f"DEBUG: Project root: {project_root}", flush=True)
+        print(f"DEBUG: Water model path: {water_model_path}", flush=True)
+
+        water_model = YOLO(water_model_path)
+        trash_model = YOLO(trash_model_path)
+        pollution_model = YOLO(pollution_model_path)
+
+        # Run inference for all models
         water_results = water_model(resized_image_path, verbose=False, conf=0.5, iou=0.7)
-        
+        trash_results = trash_model(resized_image_path, verbose=False, conf=0.5, iou=0.7)
+        pollution_results = pollution_model(resized_image_path, verbose=False, conf=0.5, iou=0.7)
+
         # Initialize areas and predictions
         total_water_area = 0.0
+        polluted_area = 0.0
         water_predictions = []
-        
+        trash_predictions = []
+        pollution_predictions = []
+
         # Process water model results
         if water_results[0].boxes is not None and water_results[0].masks is not None:
             for i, box in enumerate(water_results[0].boxes):
@@ -173,46 +191,8 @@ def main(image_path):
                     "confidence": box.conf.item(),
                     "mask_area": mask_area
                 })
-        
-        # If no water is detected, visualize only water results and return early
+                print(f"Processing Water for water_model: area={mask_area}")
 
-        # if total_water_area == 0.0:
-        #     # Visualize water results (if any)
-        #     results_list = [(water_results, "water_model", water_model.names)]
-        #     annotated_image = visualize_masks(resized_image, results_list, ["water_model"], class_colors, class_labels, (new_h, new_w))
-        #     # Save annotated image
-        #     base, ext = os.path.splitext(image_path)
-        #     annotated_path = f"{base}_annotated{ext}"
-        #     cv2.imwrite(annotated_path, annotated_image)
-            
-        #     output = {
-        #         "water_predictions": water_predictions,
-        #         "trash_predictions": [],
-        #         "pollution_predictions": [],
-        #         "polluted_area": 0.0,
-        #         "total_water_area": 0.0,
-        #         "pollution_percentage": 0.0,
-        #         "annotated_image_path": annotated_path,
-        #         "overall_confidence": 0.0,
-        #         "has_pollution": False,
-        #         "severity_level": "low"
-        #     }
-        #     print(json.dumps(output))
-        #     os.remove(resized_image_path)  # Clean up temporary file
-        #     return
-        
-        # Load and run other models
-        trash_model = YOLO("../vision_models/trash_detect_2.pt")
-        pollution_model = YOLO("../vision_models/unnatural_colors_3.pt")
-        
-        trash_results = trash_model(resized_image_path, verbose=False, conf=0.5, iou=0.7)
-        pollution_results = pollution_model(resized_image_path, verbose=False, conf=0.5, iou=0.7)
-        
-        # Initialize remaining areas and predictions
-        polluted_area = 0.0
-        trash_predictions = []
-        pollution_predictions = []
-        
         # Process trash model results
         if trash_results[0].boxes is not None and trash_results[0].masks is not None:
             for i, box in enumerate(trash_results[0].boxes):
@@ -335,7 +315,7 @@ if __name__ == "__main__":
 # def main(image_path):
 #     try:
 #         # Load the YOLO model
-#         model = YOLO("../vision_models/water_detector.pt")  # Adjust this path
+#         model = YOLO("vision_models/water_detector.pt")  # Path relative to project root
         
 #         # Run inference with verbose=False to suppress timing output
 #         results = model(image_path, verbose=False)

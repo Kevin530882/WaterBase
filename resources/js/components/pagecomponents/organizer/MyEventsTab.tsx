@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
     Card,
@@ -8,6 +8,13 @@ import {
     CardTitle,
 } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogHeader,
+    DialogTitle,
+} from "@/components/ui/dialog";
 import {
     Calendar,
     MapPin,
@@ -21,8 +28,10 @@ import {
     MessageSquare,
     Loader2,
     RefreshCw,
+    XCircle,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useAuth } from "@/contexts/AuthContext";
 
 export const MyEventsTab = ({ 
     createdEvents, 
@@ -37,7 +46,43 @@ export const MyEventsTab = ({
     onRefresh: () => void;
     onTabChange: (tab: string) => void;
 }) => {
-    const sortedEvents = useMemo(() => {
+    const { token } = useAuth();
+    const [cancelDialogOpen, setCancelDialogOpen] = useState(false);
+    const [eventToCancel, setEventToCancel] = useState<any>(null);
+    const [isCancelling, setIsCancelling] = useState(false);
+    
+    const handleCancelEvent = async () => {
+        if (!eventToCancel || !token) return;
+        
+        setIsCancelling(true);
+        try {
+            const response = await fetch(`/api/events/${eventToCancel.id}/cancel`, {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Content-Type': 'application/json',
+                },
+            });
+            
+            if (response.ok) {
+                setCancelDialogOpen(false);
+                setEventToCancel(null);
+                onRefresh();
+            } else {
+                alert('Failed to cancel event');
+            }
+        } catch (error) {
+            console.error('Error cancelling event:', error);
+            alert('Error cancelling event');
+        } finally {
+            setIsCancelling(false);
+        }
+    };
+
+    const openCancelDialog = (event: any) => {
+        setEventToCancel(event);
+        setCancelDialogOpen(true);
+    };
         const statusOrder = {
             'recruiting': 1,
             'active': 2,
@@ -264,14 +309,30 @@ export const MyEventsTab = ({
                                         <div className="flex items-center space-x-2">
                                             {/* Edit Button - Always available for recruiting and active events */}
                                             {(event.status === 'recruiting' || event.status === 'active') && (
-                                                <Button 
-                                                    variant="outline" 
-                                                    size="sm"
-                                                    onClick={() => onEditEvent(event)}
-                                                >
-                                                    <Edit className="w-4 h-4 mr-1" />
-                                                    Edit Event
-                                                </Button>
+                                                <>
+                                                    <Button 
+                                                        variant="outline" 
+                                                        size="sm"
+                                                        onClick={() => onEditEvent(event)}
+                                                    >
+                                                        <Edit className="w-4 h-4 mr-1" />
+                                                        Edit Event
+                                                    </Button>
+                                                    <Button 
+                                                        variant="outline" 
+                                                        size="sm"
+                                                        className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                                                        onClick={() => openCancelDialog(event)}
+                                                    >
+                                                        <XCircle className="w-4 h-4 mr-1" />
+                                                        Cancel Event
+                                                    </Button>
+                                                </>
+                                            )}
+                                            {event.status === 'cancelled' && (
+                                                <Badge variant="outline" className="bg-red-100 text-red-800">
+                                                    Cancelled
+                                                </Badge>
                                             )}
                                         </div>
                                     </div>
@@ -320,6 +381,44 @@ export const MyEventsTab = ({
                         </CardContent>
                     </Card>
                 )}
-            </div>
+            
+            {/* Cancel Event Dialog */}
+            <Dialog open={cancelDialogOpen} onOpenChange={setCancelDialogOpen}>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle>Cancel Event</DialogTitle>
+                        <DialogDescription>
+                            Are you sure you want to cancel "{eventToCancel?.title}"? This will notify all registered volunteers about the cancellation.
+                        </DialogDescription>
+                    </DialogHeader>
+                    <div className="flex justify-end space-x-2 mt-6">
+                        <Button 
+                            variant="outline" 
+                            onClick={() => setCancelDialogOpen(false)}
+                            disabled={isCancelling}
+                        >
+                            Keep Event
+                        </Button>
+                        <Button 
+                            className="bg-red-600 hover:bg-red-700"
+                            onClick={handleCancelEvent}
+                            disabled={isCancelling}
+                        >
+                            {isCancelling ? (
+                                <>
+                                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                                    Cancelling...
+                                </>
+                            ) : (
+                                <>
+                                    <XCircle className="w-4 h-4 mr-2" />
+                                    Cancel Event
+                                </>
+                            )}
+                        </Button>
+                    </div>
+                </DialogContent>
+            </Dialog>
+        </div>
     )
 };

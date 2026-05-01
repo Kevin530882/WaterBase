@@ -25,6 +25,7 @@ import { SearchableSelect } from "@/components/pagecomponents/searchable-select"
 
 export const Register = () => {
     const [organizationOptions, setOrganizationOptions] = useState<string[]>([]);
+    const [organizationProofFile, setOrganizationProofFile] = useState<File | null>(null);
     const [formData, setFormData] = useState({
         firstName: "",
         lastName: "",
@@ -101,12 +102,12 @@ export const Register = () => {
                 setError("Organization is required for your role");
                 return false;
             }
-            if (!organizationOptions.includes(formData.organization)) {
-                setError("Please choose an organization from the list");
-                return false;
-            }
             if (!formData.areaOfResponsibility) {
                 setError("Area of responsibility is required for your role");
+                return false;
+            }
+            if (!organizationProofFile) {
+                setError("Proof of legitimacy document is required for organization accounts");
                 return false;
             }
         }
@@ -137,25 +138,30 @@ export const Register = () => {
         setIsLoading(true);
 
         try {
+            const requestBody = new FormData();
+            requestBody.append('firstName', formData.firstName);
+            requestBody.append('lastName', formData.lastName);
+            requestBody.append('email', formData.email);
+            requestBody.append('password', formData.password);
+            requestBody.append('password_confirmation', formData.confirmPassword);
+            requestBody.append('phoneNumber', formData.phoneNumber);
+            requestBody.append('role', formData.role);
+
+            if (shouldShowOrganizationFields(formData.role)) {
+                requestBody.append('organization', formData.organization);
+                requestBody.append('areaOfResponsibility', formData.areaOfResponsibility);
+
+                if (organizationProofFile) {
+                    requestBody.append('organization_proof_document', organizationProofFile);
+                }
+            }
+
             const response = await fetch('/api/register', {
                 method: 'POST',
                 headers: {
-                    'Content-Type': 'application/json',
                     'Accept': 'application/json',
                 },
-                body: JSON.stringify({
-                    firstName: formData.firstName,
-                    lastName: formData.lastName,
-                    email: formData.email,
-                    password: formData.password,
-                    password_confirmation: formData.confirmPassword,
-                    phoneNumber: formData.phoneNumber,
-                    role: formData.role,
-                    ...(shouldShowOrganizationFields(formData.role) && {
-                        organization: formData.organization,
-                        areaOfResponsibility: formData.areaOfResponsibility,
-                    }),
-                }),
+                body: requestBody,
             });
 
             const data = await response.json();
@@ -176,6 +182,7 @@ export const Register = () => {
                     role: "",
                     agreeToTerms: false,
                 });
+                setOrganizationProofFile(null);
 
                 // Redirect to login after 1 second
                 setTimeout(() => {
@@ -325,24 +332,42 @@ export const Register = () => {
                             {shouldShowOrganizationFields(formData.role) && (
                                 <div>
                                     <Label htmlFor="organization">Organization *</Label>
-                                    <Select
+                                    <Input
+                                        id="organization"
+                                        placeholder="Type your organization name"
                                         value={formData.organization}
-                                        onValueChange={(value) =>
-                                            setFormData({ ...formData, organization: value })
+                                        onChange={(e) =>
+                                            setFormData({ ...formData, organization: e.target.value })
                                         }
-                                        disabled={isLoading || organizationOptions.length === 0}
-                                    >
-                                        <SelectTrigger id="organization">
-                                            <SelectValue placeholder={organizationOptions.length === 0 ? "No organizations available" : "Select your organization"} />
-                                        </SelectTrigger>
-                                        <SelectContent>
+                                        list="organization-suggestions"
+                                        disabled={isLoading}
+                                    />
+                                    {organizationOptions.length > 0 && (
+                                        <datalist id="organization-suggestions">
                                             {organizationOptions.map((organizationName) => (
-                                                <SelectItem key={organizationName} value={organizationName}>
-                                                    {organizationName}
-                                                </SelectItem>
+                                                <option key={organizationName} value={organizationName} />
                                             ))}
-                                        </SelectContent>
-                                    </Select>
+                                        </datalist>
+                                    )}
+                                    <p className="text-xs text-gray-500 mt-1">
+                                        You can type a new organization name or pick an existing suggestion.
+                                    </p>
+                                </div>
+                            )}
+
+                            {shouldShowOrganizationFields(formData.role) && (
+                                <div>
+                                    <Label htmlFor="organizationProof">Proof of Legitimacy *</Label>
+                                    <Input
+                                        id="organizationProof"
+                                        type="file"
+                                        accept=".pdf,.png,.jpg,.jpeg"
+                                        onChange={(e) => setOrganizationProofFile(e.target.files?.[0] ?? null)}
+                                        disabled={isLoading}
+                                    />
+                                    <p className="text-xs text-gray-500 mt-1">
+                                        Upload SEC registration, government accreditation, or equivalent proof (PDF/JPG/PNG, max 10MB).
+                                    </p>
                                 </div>
                             )}
 

@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\User;
+use App\Services\BadgeEvaluationService;
 use App\Services\GeographicService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -14,16 +15,18 @@ use Illuminate\Validation\ValidationException;
 class UserController extends Controller
 {
     protected GeographicService $geographicService;
+    protected BadgeEvaluationService $badgeEvaluationService;
 
-    public function __construct(GeographicService $geographicService)
+    public function __construct(GeographicService $geographicService, BadgeEvaluationService $badgeEvaluationService)
     {
         $this->geographicService = $geographicService;
+        $this->badgeEvaluationService = $badgeEvaluationService;
     }
 
     public function register(Request $request)
     {
         try {
-            $request->validate([
+            $validated = $request->validate([
                 'firstName' => 'required|string|max:255',
                 'lastName' => 'required|string|max:255',
                 'email' => 'required|email|unique:users,email',
@@ -31,30 +34,58 @@ class UserController extends Controller
                 'phoneNumber' => 'required|string|max:15',
                 'role' => 'required|string|in:user,admin,ngo,lgu,researcher,volunteer',
                 'organization' => 'nullable|string|max:255',
+                'organization_proof_document' => 'nullable|file|mimes:pdf,jpg,jpeg,png|max:10240',
                 'areaOfResponsibility' => 'nullable|string|max:255',
             ]);
 
+            $isOrganizationRole = in_array($validated['role'], ['ngo', 'lgu', 'researcher'], true);
+
+            if ($isOrganizationRole && empty(trim((string) ($validated['organization'] ?? '')))) {
+                return response()->json([
+                    'message' => 'Validation failed',
+                    'errors' => [
+                        'organization' => ['Organization name is required for organization accounts.'],
+                    ],
+                ], 422);
+            }
+
+            if ($isOrganizationRole && !$request->hasFile('organization_proof_document')) {
+                return response()->json([
+                    'message' => 'Validation failed',
+                    'errors' => [
+                        'organization_proof_document' => ['Proof of legitimacy document is required for organization accounts.'],
+                    ],
+                ], 422);
+            }
+
+            $organizationProofPath = null;
+            if ($request->hasFile('organization_proof_document')) {
+                $organizationProofPath = $request->file('organization_proof_document')
+                    ->store('organization_proofs', 'public');
+            }
+
             $user = User::create([
-                'firstName' => $request->firstName,
-                'lastName' => $request->lastName,
-                'email' => $request->email,
-                'password' => Hash::make($request->password),
-                'phoneNumber' => $request->phoneNumber,
-                'role' => $request->role,
-                'organization' => $request->organization,
-                'areaOfResponsibility' => $request->areaOfResponsibility,
+                'firstName' => $validated['firstName'],
+                'lastName' => $validated['lastName'],
+                'email' => $validated['email'],
+                'password' => Hash::make($validated['password']),
+                'phoneNumber' => $validated['phoneNumber'],
+                'role' => $validated['role'],
+                'organization' => $validated['organization'] ?? null,
+                'organization_proof_document' => $organizationProofPath ? '/storage/' . $organizationProofPath : null,
+                'areaOfResponsibility' => $validated['areaOfResponsibility'] ?? null,
             ]);
 
-            if (in_array($request->role, ['ngo', 'lgu', 'researcher']) && $request->areaOfResponsibility) {
+            if ($isOrganizationRole && !empty($validated['areaOfResponsibility'])) {
                 Log::info('Registering area of responsibility for new organization', [
                     'user_id' => $user->id,
-                    'organization' => $request->organization,
-                    'area' => $request->areaOfResponsibility,
+                    'organization' => $validated['organization'] ?? null,
+                    'area' => $validated['areaOfResponsibility'],
                 ]);
 
                 $geoResult = $this->geographicService->registerAreaOfResponsibility(
                     $user->id,
-                    $request->areaOfResponsibility
+                    $validated['areaOfResponsibility']
                 );
 
                 if (!$geoResult['success']) {
@@ -286,6 +317,13 @@ class UserController extends Controller
 
             $role = strtolower($user->role);
             $stats = [];
+            $issuedBadgeNames = $user->badges()
+                ->wherePivotNull('revoked_at')
+                ->pluck('badges.name')
+                ->map(fn ($name) => trim((string) $name))
+                ->filter(fn ($name) => $name !== '')
+                ->values()
+                ->toArray();
 
             switch ($role) {
                 case 'volunteer':
@@ -308,6 +346,11 @@ class UserController extends Controller
                         $totalHours = $allAttendedEvents->sum('duration') ?? 0;
 
                         $userBadges = $completedEvents->pluck('badge')->unique()->values()->toArray();
+                        $userBadges = collect($userBadges)
+                            ->merge($issuedBadgeNames)
+                            ->unique()
+                            ->values()
+                            ->toArray();
                         $badgesEarned = count($userBadges);
 
                         $communityPoints = $completedEvents->sum('points') ?? 0;
@@ -346,6 +389,8 @@ class UserController extends Controller
                         'eventsCompleted' => $eventsCompleted,
                         'volunteersManaged' => $volunteersManaged,
                         'accuracyRate' => $successRate,
+                        'badgesEarned' => count($issuedBadgeNames),
+                        'badges' => $issuedBadgeNames,
                     ];
                     break;
 
@@ -357,6 +402,16 @@ class UserController extends Controller
                         'researchPublished' => max(1, intval($reportsSubmitted / 5)),
                         'reportsSubmitted' => $reportsSubmitted,
                         'accuracyRate' => 95,
+                        'badgesEarned' => count($issuedBadgeNames),
+                        'badges' => $issuedBadgeNames,
+                    ];
+                    break;
+
+                case 'admin':
+                    $stats = [
+                        'reportsSubmitted' => \App\Models\Report::where('user_id', $user->id)->count(),
+                        'badgesEarned' => count($issuedBadgeNames),
+                        'badges' => $issuedBadgeNames,
                     ];
                     break;
 
@@ -368,6 +423,18 @@ class UserController extends Controller
                         'communityPoints' => $reportsSubmitted * 10,
                     ];
                     break;
+            }
+
+            $newBadges = $this->badgeEvaluationService->evaluateAndAward($user);
+            if (!empty($newBadges)) {
+                if (isset($stats['badges'])) {
+                    $stats['badges'] = array_merge($stats['badges'], $newBadges);
+                } else {
+                    $stats['badges'] = $newBadges;
+                }
+                if (isset($stats['badgesEarned'])) {
+                    $stats['badgesEarned'] += count($newBadges);
+                }
             }
 
             return response()->json($stats);

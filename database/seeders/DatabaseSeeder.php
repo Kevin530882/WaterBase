@@ -7,6 +7,7 @@ use App\Models\Report;
 use App\Models\ReportGroup;
 use App\Models\SystemSetting;
 use App\Models\User;
+use App\Models\Badge;
 // use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\DB;
@@ -31,6 +32,10 @@ class DatabaseSeeder extends Seeder
             SystemSetting::query()->delete();
             User::query()->delete();
             Schema::enableForeignKeyConstraints();
+
+            $this->call([
+                BadgeSeeder::class,
+            ]);
 
             $userRows = [];
             for ($i = 1; $i <= 10; $i++) {

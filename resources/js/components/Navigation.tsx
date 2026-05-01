@@ -2,10 +2,11 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger, } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
-import { MapPin, Home, Upload, User, Users, BarChart3, Menu, X, LogOut, ChevronDown, Info, Bell } from "lucide-react";
+import { MapPin, Home, Upload, User, Users, BarChart3, Menu, X, LogOut, ChevronDown, Info, Bell, Award } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { fetchUnreadCount } from "@/services/notificationService";
+import { toast } from "sonner";
 
 const Navigation = () => {
   const location = useLocation();
@@ -34,6 +35,7 @@ const Navigation = () => {
           { href: "/report-pollution-debug", label: "Report Pollution Debug", icon: Info },
           { href: "/admin/dashboard", label: "Admin Dashboard", icon: BarChart3 },
           { href: "/admin/reports", label: "Admin Reports", icon: Upload },
+          { href: "/admin/badges", label: "Admin Badges", icon: Award },
         ];
       case 'ngo':
       case 'lgu':
@@ -115,11 +117,22 @@ const Navigation = () => {
   const handleLogout = async () => {
     try {
       await logout();
-      navigate('/login');
+      
+      // Show success feedback
+      toast.success("Logout successful! See you soon.", {
+        duration: 2000,
+        position: "top-center",
+      });
+      
+      setTimeout(() => navigate('/login'), 500);
     } catch (error) {
       console.error('Logout error:', error);
       // Still redirect to login even if logout API fails
-      navigate('/login');
+      toast.error("Logout encountered an issue, but you've been signed out.", {
+        duration: 2000,
+        position: "top-center",
+      });
+      setTimeout(() => navigate('/login'), 500);
     }
   };
 

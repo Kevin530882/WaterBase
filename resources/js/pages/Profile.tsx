@@ -58,8 +58,13 @@ export const Profile = () => {
     const [isOrganizationsLoading, setIsOrganizationsLoading] = useState(false);
     const [joinedOrganizations, setJoinedOrganizations] = useState<OrganizationSummary[]>([]);
     const [followedOrganizations, setFollowedOrganizations] = useState<OrganizationSummary[]>([]);
+    const [members, setMembers] = useState<OrganizationSummary[]>([]);
+    const [followers, setFollowers] = useState<OrganizationSummary[]>([]);
     const activeTabFromQuery = searchParams.get('tab') || 'activity';
     const [activeTab, setActiveTab] = useState(activeTabFromQuery);
+    const [networkSubTab, setNetworkSubTab] = useState<'members' | 'followers'>('members');
+
+    const isOrganizer = ['ngo', 'lgu', 'admin'].includes((user?.role || '').toLowerCase());
 
     useEffect(() => {
         setActiveTab(activeTabFromQuery);
@@ -107,11 +112,15 @@ export const Profile = () => {
     };
 
     const fetchUserOrganizations = async () => {
-        if (!token) return;
+        if (!token || !user) return;
 
         try {
             setIsOrganizationsLoading(true);
-            const response = await fetch('/api/user/organizations', {
+
+            const isOrg = ['ngo', 'lgu', 'admin'].includes((user.role || '').toLowerCase());
+            const endpoint = isOrg ? '/api/user/organization-audience' : '/api/user/organizations';
+
+            const response = await fetch(endpoint, {
                 headers: {
                     Authorization: `Bearer ${token}`,
                     Accept: 'application/json',
@@ -123,8 +132,15 @@ export const Profile = () => {
             }
 
             const data = await response.json();
-            setJoinedOrganizations(Array.isArray(data?.joinedOrganizations) ? data.joinedOrganizations : []);
-            setFollowedOrganizations(Array.isArray(data?.followedOrganizations) ? data.followedOrganizations : []);
+
+            if (isOrg) {
+                setMembers(Array.isArray(data?.members) ? data.members : []);
+                setFollowers(Array.isArray(data?.followers) ? data.followers : []);
+                setFollowedOrganizations(Array.isArray(data?.following) ? data.following : []);
+            } else {
+                setJoinedOrganizations(Array.isArray(data?.joinedOrganizations) ? data.joinedOrganizations : []);
+                setFollowedOrganizations(Array.isArray(data?.followedOrganizations) ? data.followedOrganizations : []);
+            }
         } catch (error) {
             console.error('Error fetching user organizations:', error);
         } finally {
@@ -133,12 +149,13 @@ export const Profile = () => {
     };
 
     const renderOrganizationsTab = (
+        tabValue: string,
         title: string,
         organizations: OrganizationSummary[],
         emptyMessage: string,
         badgeLabel: string,
     ) => (
-        <TabsContent value={title.toLowerCase().includes('joined') ? 'joined' : 'followed'}>
+        <TabsContent value={tabValue}>
             <Card className="border-waterbase-200">
                 <CardHeader>
                     <CardTitle className="text-waterbase-950">{title}</CardTitle>
@@ -558,24 +575,134 @@ export const Profile = () => {
                 >
                     <TabsList className="grid w-full grid-cols-5">
                         <TabsTrigger value="activity">Recent Activity</TabsTrigger>
-                        <TabsTrigger value="joined">Groups Joined</TabsTrigger>
-                        <TabsTrigger value="followed">Organizations Followed</TabsTrigger>
+                        {isOrganizer ? (
+                            <>
+                                <TabsTrigger value="following">Following</TabsTrigger>
+                                <TabsTrigger value="network">Network</TabsTrigger>
+                            </>
+                        ) : (
+                            <>
+                                <TabsTrigger value="joined">Groups Joined</TabsTrigger>
+                                <TabsTrigger value="followed">Organizations Followed</TabsTrigger>
+                            </>
+                        )}
                         <TabsTrigger value="notifications">Notifications</TabsTrigger>
                         <TabsTrigger value="settings">Settings</TabsTrigger>
                     </TabsList>
 
                     <RecentActivity />
-                    {renderOrganizationsTab(
-                        'Groups Joined',
-                        joinedOrganizations,
-                        'You have not joined any organizations yet.',
-                        'Member'
-                    )}
-                    {renderOrganizationsTab(
-                        'Organizations Followed',
-                        followedOrganizations,
-                        'You are not following any organizations yet.',
-                        'Following'
+                    {isOrganizer ? (
+                        <>
+                            {renderOrganizationsTab(
+                                'following',
+                                'Following',
+                                followedOrganizations,
+                                'You are not following any organizations yet.',
+                                'Following'
+                            )}
+                            <TabsContent value="network">
+                                <Card className="border-waterbase-200">
+                                    <CardHeader>
+                                        <CardTitle className="text-waterbase-950">Network</CardTitle>
+                                        <CardDescription className="text-waterbase-600">
+                                            People connected to your organization.
+                                        </CardDescription>
+                                    </CardHeader>
+                                    <CardContent>
+                                        <div className="flex gap-2 mb-4">
+                                            <Button
+                                                variant={networkSubTab === 'members' ? 'default' : 'outline'}
+                                                size="sm"
+                                                onClick={() => setNetworkSubTab('members')}
+                                            >
+                                                Members ({members.length})
+                                            </Button>
+                                            <Button
+                                                variant={networkSubTab === 'followers' ? 'default' : 'outline'}
+                                                size="sm"
+                                                onClick={() => setNetworkSubTab('followers')}
+                                            >
+                                                Followers ({followers.length})
+                                            </Button>
+                                        </div>
+                                        {isOrganizationsLoading ? (
+                                            <p className="text-waterbase-700">Loading...</p>
+                                        ) : networkSubTab === 'members' ? (
+                                            members.length === 0 ? (
+                                                <p className="text-waterbase-700">No members have joined your organization yet.</p>
+                                            ) : (
+                                                <div className="space-y-3">
+                                                    {members.map((organization) => (
+                                                        <button
+                                                            key={organization.id}
+                                                            type="button"
+                                                            className="w-full text-left p-4 rounded-lg border border-waterbase-200 bg-waterbase-50 hover:bg-waterbase-100 transition-colors"
+                                                            onClick={() => navigate(`/organizations/${organization.id}`)}
+                                                        >
+                                                            <div className="flex flex-wrap items-center justify-between gap-3">
+                                                                <div>
+                                                                    <p className="font-semibold text-waterbase-950">
+                                                                        {organization.organization || `${organization.firstName} ${organization.lastName}`}
+                                                                    </p>
+                                                                    <p className="text-sm text-waterbase-700 mt-1">
+                                                                        {organization.areaOfResponsibility || 'No area of responsibility set'}
+                                                                    </p>
+                                                                </div>
+                                                                <Badge variant="outline">Member</Badge>
+                                                            </div>
+                                                        </button>
+                                                    ))}
+                                                </div>
+                                            )
+                                        ) : (
+                                            followers.length === 0 ? (
+                                                <p className="text-waterbase-700">No followers yet.</p>
+                                            ) : (
+                                                <div className="space-y-3">
+                                                    {followers.map((organization) => (
+                                                        <button
+                                                            key={organization.id}
+                                                            type="button"
+                                                            className="w-full text-left p-4 rounded-lg border border-waterbase-200 bg-waterbase-50 hover:bg-waterbase-100 transition-colors"
+                                                            onClick={() => navigate(`/organizations/${organization.id}`)}
+                                                        >
+                                                            <div className="flex flex-wrap items-center justify-between gap-3">
+                                                                <div>
+                                                                    <p className="font-semibold text-waterbase-950">
+                                                                        {organization.organization || `${organization.firstName} ${organization.lastName}`}
+                                                                    </p>
+                                                                    <p className="text-sm text-waterbase-700 mt-1">
+                                                                        {organization.areaOfResponsibility || 'No area of responsibility set'}
+                                                                    </p>
+                                                                </div>
+                                                                <Badge variant="outline">Follower</Badge>
+                                                            </div>
+                                                        </button>
+                                                    ))}
+                                                </div>
+                                            )
+                                        )}
+                                    </CardContent>
+                                </Card>
+                            </TabsContent>
+                        </>
+                    ) : (
+                        <>
+                            {renderOrganizationsTab(
+                                'joined',
+                                'Groups Joined',
+                                joinedOrganizations,
+                                'You have not joined any organizations yet.',
+                                'Member'
+                            )}
+                            {renderOrganizationsTab(
+                                'followed',
+                                'Organizations Followed',
+                                followedOrganizations,
+                                'You are not following any organizations yet.',
+                                'Following'
+                            )}
+                        </>
                     )}
                     <Notification />
                     <Setting onProfileUpdate={handleProfileUpdate} />

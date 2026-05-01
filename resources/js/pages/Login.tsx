@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
     Card,
@@ -52,15 +53,23 @@ export const Login = () => {
             if (response.ok) {
                 // Use the login function from AuthContext instead of manually setting localStorage
                 login(data.access_token, data.user);
+                
+                // Show success feedback
+                toast.success("Login successful! Welcome back.", {
+                    duration: 2000,
+                    position: "top-center",
+                });
 
                 // Redirect based on user role
-                switch (data.user.role) {
-                    case 'admin':
-                        navigate('/admin/dashboard');
-                        break;
-                    default:
-                        navigate('/');
-                }
+                setTimeout(() => {
+                    switch (data.user.role) {
+                        case 'admin':
+                            navigate('/admin/dashboard');
+                            break;
+                        default:
+                            navigate('/');
+                    }
+                }, 500);
             } else {
                 setError(data.message || 'Login failed. Please try again.');
             }

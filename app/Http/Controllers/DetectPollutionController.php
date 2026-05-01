@@ -24,7 +24,9 @@ class DetectPollutionController extends Controller
 
         $python = base_path('python_environment/Scripts/python.exe'); // Windows venv
         $script = base_path('scripts/predict_pollution.py');
-        $cmd = "\"$python\" \"$script\" \"$imageFullPath\"";
+        $workingDir = base_path(); // Change to project root so Python can find vision_models
+        $cmd = "cd /d \"$workingDir\" && \"$python\" \"$script\" \"$imageFullPath\"";
+        Log::info('Python command: ' . $cmd);
         $output = shell_exec($cmd);
         Log::info('Python output: ' . $output);
 
@@ -36,14 +38,29 @@ class DetectPollutionController extends Controller
         $lines = explode("\n", trim($output));
         $json_line = end($lines);
         Log::info('Extracted JSON line: ' . $json_line); // Log this for debugging
+        Log::info('Full Python output: ' . $output); // Log full output for debugging
 
         // Decode the JSON response from the Python script
         $predictions = json_decode($json_line, true);
 
         // Check if JSON decoding failed
         if ($predictions === null) {
+            Log::error('JSON decode failed for: ' . $json_line);
             return response()->json(['error' => 'Invalid JSON output from Python script.', 'output' => $json_line], 400);
         }
+
+        // Ensure predictions has required keys with defaults
+        $predictions = array_merge([
+            'severity_level' => 'medium',
+            'pollution_percentage' => 0,
+            'water_predictions' => [],
+            'trash_predictions' => [],
+            'pollution_predictions' => [],
+            'overall_confidence' => 0,
+            'has_pollution' => false
+        ], $predictions);
+
+        Log::info('Final predictions after defaults: ' . json_encode($predictions));
 
         // Compute verification purely by closeness of user vs AI severity level
         // Confidence and other gates are handled by backend auto-approval rules, not here
@@ -69,7 +86,10 @@ class DetectPollutionController extends Controller
             Log::info('Detailed Report flow - verification result', ['verified' => $verified]);
         }
 
-        return response()->json(array_merge([$predictions, 'ai_verified' => $verified]), 200);
+        return response()->json([
+            'predictions' => $predictions,
+            'ai_verified' => $verified
+        ], 200);
     }
 
     

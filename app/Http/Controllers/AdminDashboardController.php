@@ -29,7 +29,19 @@ class AdminDashboardController extends Controller
     {
         try 
         {
-            $query = Report::where('status', 'pending');
+            // Include pending reports and optionally auto-approved reports for visibility
+            // Use 'includeAutoApproved' parameter to show auto-approved reports alongside pending ones
+            $includeAutoApproved = $request->has('includeAutoApproved') && $request->boolean('includeAutoApproved');
+            
+            $query = Report::query();
+            if ($includeAutoApproved) {
+                $query->where(function($q) {
+                    $q->where('status', 'pending')
+                      ->orWhere('auto_approved', true);
+                });
+            } else {
+                $query->where('status', 'pending');
+            }
 
             // Apply filters
             
@@ -80,7 +92,7 @@ class AdminDashboardController extends Controller
     public function updateStatus(Request $request, Report $report)
     {
         $validated = $request->validate([
-            'status' => 'required|in:verified,declined',
+            'status' => 'required|in:verified,declined,info_requested',
             'verifiedBy'=> 'required',
             'admin_notes'=> 'required',
         ]);
@@ -94,13 +106,22 @@ class AdminDashboardController extends Controller
         $report->save();
 
         if ($oldStatus !== (string) $report->status) {
-            $this->notificationService->notifyReportStatusChanged(
-                report: $report,
-                oldStatus: $oldStatus,
-                newStatus: (string) $report->status,
-                actor: $request->user(),
-                extra: ['source' => 'admin_dashboard_status_update']
-            );
+            // For info_requested status, send a special notification
+            if ($validated['status'] === 'info_requested') {
+                $this->notificationService->notifyReportInfoRequested(
+                    report: $report,
+                    requestDetails: $validated['admin_notes'],
+                    actor: $request->user()
+                );
+            } else {
+                $this->notificationService->notifyReportStatusChanged(
+                    report: $report,
+                    oldStatus: $oldStatus,
+                    newStatus: (string) $report->status,
+                    actor: $request->user(),
+                    extra: ['source' => 'admin_dashboard_status_update']
+                );
+            }
         }
 
         return response()->json(['message' => 'Report status updated successfully']);

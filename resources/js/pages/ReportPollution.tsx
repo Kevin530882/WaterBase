@@ -27,10 +27,19 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { AlertCircle, CheckCircle, Loader2 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { MapPin, Upload } from "lucide-react";
+import { MapPin, Upload, Download, FileText } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { OpenStreetMapSearchableSelect } from "@/components/pagecomponents/openstreetmap-searchable-select";
 import { formatDisplayName, NominatimResult } from '@/utils/location';
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 export const ReportPollution = () => {
   const { user, isAuthenticated } = useAuth();
   const [showReportForm, setShowReportForm] = useState(false);
@@ -78,6 +87,18 @@ export const ReportPollution = () => {
     severityByUser: "",
     image: null as File | null,
   });
+
+  const [reportMode, setReportMode] = useState<'ai' | 'manual'>('ai');
+  const [csvFile, setCsvFile] = useState<File | null>(null);
+  const [csvUploading, setCsvUploading] = useState(false);
+  const [csvResult, setCsvResult] = useState<{
+    imported: number;
+    errors: Array<{ row: number; field: string; message: string }>;
+    total_rows: number;
+    auto_approved: boolean;
+  } | null>(null);
+
+  const showManualOption = ['ngo', 'lgu', 'admin'].includes(user?.role || '');
 
   const hasWaterPrediction = (
     waterPredictions: Array<{ class_name: string; confidence: number; mask_area: number }>
@@ -481,6 +502,65 @@ const handleGetCurrentLocation = () => {
 };
 
 
+const downloadTemplate = () => {
+    const headers = 'title,content,address,latitude,longitude,pollutionType,severityByUser,water_body_name,temperature_celsius,ph_level,turbidity_ntu,total_dissolved_solids_mgl,sampling_date';
+    const sampleRow = 'Pasig River Sample,Observed murky water near bridge,Pasig Blvd Barangay Pineda,14.5995,121.0008,Industrial Waste,medium,Pasig River,29.5,6.8,25.3,180.5,2024-01-15';
+    const csvContent = `${headers}\n${sampleRow}`;
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', 'waterbase_report_template.csv');
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+  };
+
+  const handleCsvUpload = async () => {
+    if (!csvFile) return;
+    setCsvUploading(true);
+    setCsvResult(null);
+    setErrorMessage('');
+
+    try {
+      const formData = new FormData();
+      formData.append('csv_file', csvFile);
+
+      const response = await fetch('/api/reports/bulk-upload', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('auth_token')}`,
+        },
+        body: formData,
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        setCsvResult({
+          imported: data.imported || 0,
+          errors: data.errors || [],
+          total_rows: data.total_rows || 0,
+          auto_approved: false,
+        });
+        setErrorMessage(data.message || 'Upload failed');
+      } else {
+        setCsvResult({
+          imported: data.imported,
+          errors: [],
+          total_rows: data.total_rows,
+          auto_approved: data.auto_approved || false,
+        });
+      }
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : 'Failed to upload CSV');
+    } finally {
+      setCsvUploading(false);
+    }
+  };
+
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-waterbase-50 to-enviro-50">
       <Navigation />
@@ -497,6 +577,121 @@ const handleGetCurrentLocation = () => {
           </p>
         </div>
 
+        {showManualOption && (
+          <div className="mb-8">
+            <Tabs value={reportMode} onValueChange={(v) => setReportMode(v as 'ai' | 'manual')} className="w-full">
+              <TabsList className="grid w-full max-w-md mx-auto grid-cols-2 mb-6">
+                <TabsTrigger value="ai">AI Report</TabsTrigger>
+                <TabsTrigger value="manual">Manual Report</TabsTrigger>
+              </TabsList>
+            </Tabs>
+
+            {reportMode === 'manual' && (
+              <Card className="border-waterbase-200">
+                <CardHeader>
+                  <div className="w-12 h-12 bg-enviro-100 rounded-lg flex items-center justify-center mb-4">
+                    <FileText className="w-6 h-6 text-enviro-600" />
+                  </div>
+                  <CardTitle className="text-waterbase-950">CSV Bulk Upload</CardTitle>
+                  <CardDescription className="text-waterbase-600">
+                    Upload water quality monitoring data using the CSV template. Reports will be {csvResult?.auto_approved ? 'auto-verified' : 'submitted as pending'} based on system settings.
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <Button variant="outline" onClick={downloadTemplate} className="w-full">
+                    <Download className="w-4 h-4 mr-2" />
+                    Download CSV Template
+                  </Button>
+
+                  <div className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center">
+                    <Input
+                      type="file"
+                      accept=".csv"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) {
+                          setCsvFile(file);
+                          setCsvResult(null);
+                          setErrorMessage('');
+                        }
+                      }}
+                      className="w-full"
+                    />
+                    {csvFile && (
+                      <p className="text-sm text-gray-600 mt-2">Selected: {csvFile.name}</p>
+                    )}
+                  </div>
+
+                  <Button
+                    onClick={handleCsvUpload}
+                    disabled={!csvFile || csvUploading}
+                    className="w-full bg-waterbase-500 hover:bg-waterbase-600"
+                  >
+                    {csvUploading ? (
+                      <>
+                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                        Uploading...
+                      </>
+                    ) : (
+                      <>
+                        <Upload className="w-4 h-4 mr-2" />
+                        Upload CSV
+                      </>
+                    )}
+                  </Button>
+
+                  {csvResult && (
+                    <div className="space-y-3">
+                      <Alert className={csvResult.errors.length > 0 ? 'border-yellow-200 bg-yellow-50' : 'border-green-200 bg-green-50'}>
+                        {csvResult.errors.length === 0 ? (
+                          <>
+                            <CheckCircle className="h-4 w-4 text-green-600" />
+                            <AlertDescription className="text-green-700">
+                              Successfully imported {csvResult.imported} of {csvResult.total_rows} rows.
+                              {csvResult.auto_approved && ' Reports were auto-verified.'}
+                            </AlertDescription>
+                          </>
+                        ) : (
+                          <>
+                            <AlertCircle className="h-4 w-4 text-yellow-600" />
+                            <AlertDescription className="text-yellow-700">
+                              Imported {csvResult.imported} rows with {csvResult.errors.length} errors (showing first {csvResult.errors.length}).
+                            </AlertDescription>
+                          </>
+                        )}
+                      </Alert>
+
+                      {csvResult.errors.length > 0 && (
+                        <div className="max-h-64 overflow-y-auto">
+                          <Table>
+                            <TableHeader>
+                              <TableRow>
+                                <TableHead className="text-xs">Row</TableHead>
+                                <TableHead className="text-xs">Field</TableHead>
+                                <TableHead className="text-xs">Error</TableHead>
+                              </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                              {csvResult.errors.map((err, i) => (
+                                <TableRow key={i}>
+                                  <TableCell className="text-xs py-1">{err.row}</TableCell>
+                                  <TableCell className="text-xs py-1">{err.field}</TableCell>
+                                  <TableCell className="text-xs py-1 text-red-600">{err.message}</TableCell>
+                                </TableRow>
+                              ))}
+                            </TableBody>
+                          </Table>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            )}
+          </div>
+        )}
+
+        <div className={reportMode === 'manual' ? 'hidden' : ''}>
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
           <Card className="border-waterbase-200">
             <CardHeader>
@@ -1125,6 +1320,8 @@ const handleGetCurrentLocation = () => {
             )}
           </DialogContent>
         </Dialog>
+
+        </div>
 
         <div className="mt-12 bg-white rounded-lg shadow-sm border border-waterbase-200 p-8">
           <h2 className="text-2xl font-bold text-waterbase-950 mb-6 text-center">

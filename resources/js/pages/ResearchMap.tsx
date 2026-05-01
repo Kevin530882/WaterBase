@@ -274,6 +274,14 @@ const [showLayers, setShowLayers] = useState({
     landuse: false,
     events: false,
 });
+const [researchDocuments, setResearchDocuments] = useState<Array<{
+    id: number;
+    title: string;
+    description: string | null;
+    file_path: string;
+    created_at: string;
+    user?: { firstName: string; lastName: string };
+}>>([]);
 
 const getWQIColor = (wqi: number) => {
     if (wqi >= 80) return "text-green-600 bg-green-50 border-green-200";
@@ -355,6 +363,24 @@ const formatParameter = (param: string, value: number) => {
     };
     return `${value}${units[param] || ""}`;
 };
+
+useEffect(() => {
+    const fetchDocs = async () => {
+        try {
+            const token = localStorage.getItem('auth_token');
+            const res = await fetch('/api/research-documents', {
+                headers: { 'Authorization': `Bearer ${token}` },
+            });
+            if (res.ok) {
+                const data = await res.json();
+                setResearchDocuments(data);
+            }
+        } catch (e) {
+            console.error('Failed to fetch research documents:', e);
+        }
+    };
+    fetchDocs();
+}, []);
 
 return (
     <div className="min-h-screen bg-gray-50">
@@ -703,6 +729,34 @@ return (
                 </Button>
             </div>
             </div>
+
+            {researchDocuments.length > 0 && (
+            <div className="p-4 border-t border-gray-200">
+                <h3 className="text-sm font-semibold text-waterbase-950 mb-3">
+                Uploaded Research Documents
+                </h3>
+                <div className="space-y-2">
+                {researchDocuments.map((doc) => (
+                    <div key={doc.id} className="p-2 bg-gray-50 rounded text-xs">
+                    <a
+                        href={doc.file_path}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-waterbase-600 hover:text-waterbase-800 font-medium block"
+                    >
+                        {doc.title}
+                    </a>
+                    {doc.description && (
+                        <p className="text-gray-500 mt-1">{doc.description}</p>
+                    )}
+                    {doc.user && (
+                        <p className="text-gray-400 mt-1">Uploaded by {doc.user.firstName} {doc.user.lastName}</p>
+                    )}
+                    </div>
+                ))}
+                </div>
+            </div>
+            )}
         </div>
         </div>
 

@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Report;
 use App\Enums\ReportStatus;
 use App\Enums\SeverityLevel;
+use App\Services\BadgeEvaluationService;
 use App\Services\GeographicService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
@@ -14,16 +15,22 @@ use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Validation\ValidationException;
 use App\Models\SystemSetting;
 use App\Services\NotificationService;
+use Illuminate\Support\Facades\Validator;
 
 class ReportController extends Controller
 {
     protected GeographicService $geographicService;
     protected NotificationService $notificationService;
+    protected BadgeEvaluationService $badgeEvaluationService;
 
-    public function __construct(GeographicService $geographicService, NotificationService $notificationService)
-    {
+    public function __construct(
+        GeographicService $geographicService,
+        NotificationService $notificationService,
+        BadgeEvaluationService $badgeEvaluationService,
+    ) {
         $this->geographicService = $geographicService;
         $this->notificationService = $notificationService;
+        $this->badgeEvaluationService = $badgeEvaluationService;
     }
 
     public function index(Request $request)
@@ -176,11 +183,15 @@ class ReportController extends Controller
                     $meetsConfidence = $aiConfidence >= (int)$settings->auto_approve_threshold;
                     if ($meetsConfidence && $reportsValidated['ai_verified'] === true) {
                         $reportsValidated['status'] = 'verified';
+                        $reportsValidated['auto_approved'] = true;
+                        $reportsValidated['auto_approved_at'] = now();
                     } else {
                         $reportsValidated['status'] = 'pending';
+                        $reportsValidated['auto_approved'] = false;
                     }
                 } else {
                     $reportsValidated['status'] = 'pending';
+                    $reportsValidated['auto_approved'] = false;
                 }
 
                 $report = Report::create(array_merge($reportsValidated, [
@@ -195,6 +206,8 @@ class ReportController extends Controller
                     actor: $request->user(),
                     extra: ['source' => 'report_created']
                 );
+
+                $newBadges = $this->badgeEvaluationService->evaluateAndAward($request->user());
             } catch (\Exception $e) {
                 Log::error('Report creation failed: ' . $e->getMessage(), [
                     'validated_data' => $reportsValidated,
@@ -221,6 +234,7 @@ class ReportController extends Controller
                 'status' => 'success',
                 'message' => 'Your submission is being processed. We will notify you once verification updates are available.',
                 'report' => $report,
+                'new_badges' => $newBadges,
             ], 202);
 
         } catch (ValidationException $e) {
@@ -368,6 +382,219 @@ class ReportController extends Controller
                 'error' => $e->getMessage()
             ], 500);
         }
+    }
+
+    public function bulkUpload(Request $request)
+    {
+        $request->validate([
+            'csv_file' => 'required|file|mimes:csv,txt|max:5120',
+        ]);
+
+        $file = $request->file('csv_file');
+        $handle = fopen($file->getRealPath(), 'r');
+
+        $headers = fgetcsv($handle);
+        if (!$headers) {
+            fclose($handle);
+            return response()->json(['message' => 'CSV file is empty'], 422);
+        }
+
+        $headers = array_map('strtolower', array_map('trim', $headers));
+        $expectedHeaders = [
+            'title', 'content', 'address', 'latitude', 'longitude',
+            'pollutiontype', 'severitybyuser', 'water_body_name',
+            'temperature_celsius', 'ph_level', 'turbidity_ntu',
+            'total_dissolved_solids_mgl', 'sampling_date',
+        ];
+
+        $headerDiff = array_diff($expectedHeaders, $headers);
+        if (!empty($headerDiff)) {
+            fclose($handle);
+            return response()->json([
+                'message' => 'Invalid CSV headers',
+                'missing_headers' => array_values($headerDiff),
+                'expected' => $expectedHeaders,
+                'received' => $headers,
+            ], 422);
+        }
+
+        $headerMap = array_flip($headers);
+        $validTypes = ['Industrial Waste', 'Chemical Pollution', 'Oil Spill', 'Plastic Pollution', 'Sewage Discharge', 'Unnatural Color', 'Clean', 'Other'];
+        $validSeverity = ['low', 'medium', 'high', 'critical'];
+        $errors = [];
+        $validRows = [];
+        $rowNumber = 1;
+        $maxErrors = 50;
+
+        $pollutionTypeMap = [
+            'industrial waste' => 'Industrial Waste',
+            'chemical pollution' => 'Chemical Pollution',
+            'oil spill' => 'Oil Spill',
+            'plastic pollution' => 'Plastic Pollution',
+            'sewage discharge' => 'Sewage Discharge',
+            'unnatural color' => 'Unnatural Color',
+            'clean' => 'Clean',
+            'other' => 'Other',
+        ];
+
+        while (($row = fgetcsv($handle)) !== false && count($errors) < $maxErrors) {
+            $rowNumber++;
+
+            if (count($row) < count($headers)) {
+                $errors[] = ['row' => $rowNumber, 'field' => 'row', 'message' => 'Row has fewer columns than header'];
+                continue;
+            }
+
+            $data = [];
+            foreach ($headers as $index => $header) {
+                $data[$header] = isset($row[$index]) ? trim($row[$index]) : '';
+            }
+
+            $rowErrors = [];
+
+            // Required fields
+            $requiredFields = ['title', 'content', 'address', 'latitude', 'longitude', 'pollutiontype', 'severitybyuser'];
+            foreach ($requiredFields as $field) {
+                if (empty($data[$field])) {
+                    $rowErrors[] = ['row' => $rowNumber, 'field' => $field, 'message' => "Required field '$field' is empty"];
+                }
+            }
+
+            // Latitude validation
+            if (!empty($data['latitude'])) {
+                if (!is_numeric($data['latitude'])) {
+                    $rowErrors[] = ['row' => $rowNumber, 'field' => 'latitude', 'message' => 'Latitude must be a number'];
+                } else {
+                    $lat = (float) $data['latitude'];
+                    if ($lat < -90 || $lat > 90) {
+                        $rowErrors[] = ['row' => $rowNumber, 'field' => 'latitude', 'message' => 'Latitude must be between -90 and 90'];
+                    }
+                }
+            }
+
+            // Longitude validation
+            if (!empty($data['longitude'])) {
+                if (!is_numeric($data['longitude'])) {
+                    $rowErrors[] = ['row' => $rowNumber, 'field' => 'longitude', 'message' => 'Longitude must be a number'];
+                } else {
+                    $lng = (float) $data['longitude'];
+                    if ($lng < -180 || $lng > 180) {
+                        $rowErrors[] = ['row' => $rowNumber, 'field' => 'longitude', 'message' => 'Longitude must be between -180 and 180'];
+                    }
+                }
+            }
+
+            // pollutionType validation
+            if (!empty($data['pollutiontype'])) {
+                $typeKey = strtolower($data['pollutiontype']);
+                if (!isset($pollutionTypeMap[$typeKey])) {
+                    $rowErrors[] = ['row' => $rowNumber, 'field' => 'pollutiontype', 'message' => "Invalid pollution type '{$data['pollutiontype']}'. Must be one of: " . implode(', ', $validTypes)];
+                }
+            }
+
+            // severityByUser validation
+            if (!empty($data['severitybyuser'])) {
+                if (!in_array(strtolower($data['severitybyuser']), $validSeverity)) {
+                    $rowErrors[] = ['row' => $rowNumber, 'field' => 'severitybyuser', 'message' => "Invalid severity '{$data['severitybyuser']}'. Must be one of: " . implode(', ', $validSeverity)];
+                }
+            }
+
+            // Water quality params numeric validation
+            $numericFields = ['temperature_celsius', 'ph_level', 'turbidity_ntu', 'total_dissolved_solids_mgl'];
+            foreach ($numericFields as $field) {
+                if (!empty($data[$field]) && !is_numeric($data[$field])) {
+                    $rowErrors[] = ['row' => $rowNumber, 'field' => $field, 'message' => "Field '$field' must be a number"];
+                }
+            }
+
+            // sampling_date validation
+            if (!empty($data['sampling_date'])) {
+                $formats = ['Y-m-d', 'm/d/Y', 'd-m-Y', 'd/m/Y'];
+                $parsed = false;
+                foreach ($formats as $format) {
+                    $d = \DateTime::createFromFormat($format, $data['sampling_date']);
+                    if ($d && $d->format($format) === $data['sampling_date']) {
+                        $data['sampling_date'] = $d->format('Y-m-d');
+                        $parsed = true;
+                        break;
+                    }
+                }
+                if (!$parsed) {
+                    $rowErrors[] = ['row' => $rowNumber, 'field' => 'sampling_date', 'message' => "Invalid date format '{$data['sampling_date']}'. Accepted formats: YYYY-MM-DD, MM/DD/YYYY, DD/MM/YYYY"];
+                }
+            }
+
+            if (!empty($rowErrors)) {
+                $errors = array_merge($errors, $rowErrors);
+                continue;
+            }
+
+            $normalizedType = isset($pollutionTypeMap[strtolower($data['pollutiontype'])])
+                ? $pollutionTypeMap[strtolower($data['pollutiontype'])]
+                : $data['pollutiontype'];
+
+            $validRows[] = [
+                'title' => $data['title'],
+                'content' => $data['content'],
+                'address' => $data['address'],
+                'latitude' => $data['latitude'],
+                'longitude' => $data['longitude'],
+                'pollutionType' => $normalizedType,
+                'severityByUser' => strtolower($data['severitybyuser']),
+                'severityByAI' => 'low',
+                'ai_confidence' => 0,
+                'severityPercentage' => 0,
+                'ai_verified' => false,
+                'water_body_name' => !empty($data['water_body_name']) ? $data['water_body_name'] : null,
+                'temperature_celsius' => !empty($data['temperature_celsius']) ? $data['temperature_celsius'] : null,
+                'ph_level' => !empty($data['ph_level']) ? $data['ph_level'] : null,
+                'turbidity_ntu' => !empty($data['turbidity_ntu']) ? $data['turbidity_ntu'] : null,
+                'total_dissolved_solids_mgl' => !empty($data['total_dissolved_solids_mgl']) ? $data['total_dissolved_solids_mgl'] : null,
+                'sampling_date' => !empty($data['sampling_date']) ? $data['sampling_date'] : null,
+                'source' => 'csv_upload',
+                'user_id' => $request->user()->id,
+            ];
+        }
+
+        fclose($handle);
+
+        if (!empty($errors)) {
+            return response()->json([
+                'message' => 'Validation errors found in CSV',
+                'errors' => $errors,
+                'total_rows' => $rowNumber - 1,
+                'imported' => 0,
+            ], 422);
+        }
+
+        // Check csv_auto_approve_enabled setting
+        $settings = SystemSetting::query()->latest()->first();
+        $autoApprove = $settings && $settings->csv_auto_approve_enabled;
+
+        $now = now();
+        $insertData = array_map(function ($row) use ($autoApprove, $now) {
+            if ($autoApprove) {
+                $row['status'] = 'verified';
+                $row['auto_approved'] = true;
+                $row['auto_approved_at'] = $now;
+            } else {
+                $row['status'] = 'pending';
+                $row['auto_approved'] = false;
+            }
+            $row['created_at'] = $now;
+            $row['updated_at'] = $now;
+            return $row;
+        }, $validRows);
+
+        Report::insert($insertData);
+
+        return response()->json([
+            'message' => 'CSV imported successfully',
+            'imported' => count($validRows),
+            'errors' => [],
+            'total_rows' => $rowNumber - 1,
+            'auto_approved' => $autoApprove,
+        ]);
     }
 
     public function getReportsByArea(Request $request, $area = null)

@@ -69,6 +69,13 @@ export const AppRoutes = () => {
                                 </RoleGuard>
                             </ProtectedRoute>
                         } />
+                        <Route path={ROUTE.ADMIN_BADGES.path} element={
+                            <ProtectedRoute>
+                                <RoleGuard roles={['admin']}>
+                                    <VIEWS.AdminBadges />
+                                </RoleGuard>
+                            </ProtectedRoute>
+                        } />
                         <Route path={ROUTE.PROFILE.path} element={<ProtectedRoute><VIEWS.Profile /></ProtectedRoute>} />
                         <Route path={ROUTE.ORGANIZATION_PROFILE.path} element={<ProtectedRoute><VIEWS.OrganizationProfile /></ProtectedRoute>} />
 

@@ -1,6 +1,7 @@
 import { lazy } from 'react';
 
 // Lazy load all page components for code splitting
+export const AdminBadges = lazy(() => import('./AdminBadges').then(m => ({ default: m.AdminBadges })));
 export const AdminDashboard = lazy(() => import('./AdminDashboard').then(m => ({ default: m.AdminDashboard })));
 export const AdminReports = lazy(() => import('./AdminReports').then(m => ({ default: m.AdminReports })));
 export const AdminUsers = lazy(() => import('./AdminUsers').then(m => ({ default: m.AdminUsers })));

@@ -12,6 +12,7 @@ class SystemSetting extends Model
     protected $fillable = [
         'auto_approve_enabled',
         'auto_approve_threshold',
+        'csv_auto_approve_enabled',
     ];
 }
 

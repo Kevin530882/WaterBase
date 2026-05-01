@@ -22,6 +22,7 @@ class User extends Authenticatable
         'phoneNumber',
         'role',
         'organization',
+        'organization_proof_document',
         'areaOfResponsibility',
         'profile_photo',
         'bbox_south',
@@ -110,6 +111,16 @@ class User extends Authenticatable
         )->withPivot(['joined_via', 'joined_at'])->withTimestamps();
     }
 
+    public function members()
+    {
+        return $this->belongsToMany(
+            User::class,
+            'organization_memberships',
+            'organization_user_id',
+            'user_id'
+        )->withPivot(['joined_via', 'joined_at'])->withTimestamps();
+    }
+
     public function joinRequestsSent()
     {
         return $this->hasMany(OrganizationJoinRequest::class, 'requester_user_id');
@@ -128,6 +139,13 @@ class User extends Authenticatable
     public function organizationSetting()
     {
         return $this->hasOne(OrganizationSetting::class, 'organization_user_id');
+    }
+
+    public function badges()
+    {
+        return $this->belongsToMany(Badge::class, 'user_badges')
+            ->withPivot('earned_at', 'issued_at', 'revoked_at', 'notes')
+            ->withTimestamps();
     }
 
     public function isOrganization(): bool

@@ -150,6 +150,36 @@ class NotificationService
         );
     }
 
+    public function notifyReportInfoRequested(Report $report, string $requestDetails, ?User $actor = null): void
+    {
+        if (!$this->enabled()) {
+            return;
+        }
+
+        $this->dispatchFanOut(
+            type: NotificationType::REPORT_STATUS_CHANGED,
+            recipientIds: [$report->user_id],
+            severity: 'info',
+            title: 'More information needed on your report',
+            message: sprintf(
+                'We need more information about your report "%s" before it can be processed.',
+                $report->title
+            ),
+            metadata: [
+                'actor' => $this->buildActor($actor),
+                'target_id' => (string) $report->id,
+                'target_type' => 'report',
+                'template_vars' => [
+                    'report_title' => $report->title,
+                    'request_details' => $requestDetails,
+                    'reason' => $requestDetails,
+                ],
+                'channel' => 'in_app',
+            ],
+            idempotencySeed: 'report-info-requested-' . $report->id . '-' . sha1($requestDetails)
+        );
+    }
+
     private function dispatchFanOut(
         NotificationType $type,
         array $recipientIds,
@@ -210,6 +240,37 @@ class NotificationService
             'name' => trim(($actor->firstName ?? '') . ' ' . ($actor->lastName ?? '')),
             'role' => $actor->role,
         ];
+    }
+
+    public function notifyVolunteerLeft(Event $event, User $volunteer): void
+    {
+        if (!$this->enabled()) {
+            return;
+        }
+
+        $this->dispatchFanOut(
+            type: NotificationType::EVENT_VOLUNTEER_CANCELLED,
+            recipientIds: [$event->user_id],
+            severity: 'info',
+            title: 'Volunteer left cleanup event',
+            message: sprintf(
+                '%s %s left "%s".',
+                $volunteer->firstName,
+                $volunteer->lastName,
+                $event->title
+            ),
+            metadata: [
+                'actor' => $this->buildActor($volunteer),
+                'target_id' => (string) $event->id,
+                'target_type' => 'event',
+                'template_vars' => [
+                    'event_title' => $event->title,
+                    'volunteer_name' => trim(($volunteer->firstName ?? '') . ' ' . ($volunteer->lastName ?? '')),
+                ],
+                'channel' => 'in_app',
+            ],
+            idempotencySeed: 'volunteer-left-' . $event->id . '-' . $volunteer->id
+        );
     }
 
     private function enabled(): bool

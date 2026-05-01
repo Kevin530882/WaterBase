@@ -14,6 +14,11 @@ use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\ForecastController;
 use App\Http\Controllers\OrganizationSocialController;
 use App\Http\Controllers\SystemSettingsController;
+use App\Http\Controllers\BadgeController;
+use App\Http\Controllers\ResearchDocumentController;
+
+use App\Http\Controllers\MaintenanceController;
+
 
 Route::post('/login', [UserController::class, 'login']);
 Route::post('/register', [UserController::class, 'register']);
@@ -27,6 +32,8 @@ Route::middleware('auth:sanctum')->group(function () {
     // Event routes
     Route::apiResource('events', EventController::class);
     Route::post('/events/{id}/join', [EventController::class, 'join']);
+    Route::post('/events/{id}/leave', [EventController::class, 'leave']);
+    Route::post('/events/{id}/cancel', [EventController::class, 'cancel']);
     Route::get('/events/{id}/volunteers', [EventController::class, 'getVolunteers']);
     Route::get('/user/events', [EventController::class, 'getUserEvents']);
 
@@ -38,6 +45,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/reports/area/{area}', [ReportController::class, 'getReportsByArea']);
     Route::post('/reports/verify-image', [ReportController::class, 'verifyImage']);
     Route::post('/reports/organizations', [ReportController::class, 'getOrganizationsForReport']);
+    Route::post('/reports/bulk-upload', [ReportController::class, 'bulkUpload']);
 
     // Geographic routes
     Route::post('/geographic/register-area', [GeographicController::class, 'registerAreaOfResponsibility']);
@@ -92,8 +100,20 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::patch('/notifications/{notification}/read-state', [NotificationController::class, 'markReadState']);
     Route::patch('/notifications/mark-all-read', [NotificationController::class, 'markAllRead']);
     Route::get('/notifications/unread-count', [NotificationController::class, 'unreadCount']);
+    // Badge/Certificate routes
+    Route::get('/badges', [BadgeController::class, 'index']);
+    Route::get('/users/{userId}/badges', [BadgeController::class, 'userBadges']);
+    Route::post('/badges/issue', [BadgeController::class, 'issueBadge']);
+    Route::post('/badges/auto-issue', [BadgeController::class, 'autoIssueBadge']);
+    Route::delete('/users/{userId}/badges/{badgeId}', [BadgeController::class, 'revokeBadge']);
+    Route::post('/admin/badges', [BadgeController::class, 'store']);
+    Route::patch('/admin/badges/{badgeId}', [BadgeController::class, 'update']);
+    Route::delete('/admin/badges/{badgeId}', [BadgeController::class, 'destroy']);
+    Route::post('/admin/badges/icon', [BadgeController::class, 'uploadIcon']);
+
 
     Route::get('/user/organizations', [OrganizationSocialController::class, 'userOrganizations']);
+    Route::get('/user/organization-audience', [OrganizationSocialController::class, 'organizationMembersAndFollowers']);
     Route::get('/user/joined-organizations', [OrganizationSocialController::class, 'userJoinedOrganizations']);
     Route::get('/user/following-organizations', [OrganizationSocialController::class, 'userFollowingOrganizations']);
     Route::get('/user/join-requests', [OrganizationSocialController::class, 'userJoinRequests']);
@@ -117,4 +137,17 @@ Route::middleware('auth:sanctum')->group(function () {
     // System settings
     Route::get('/admin/system-settings', [SystemSettingsController::class, 'get']);
     Route::put('/admin/system-settings', [SystemSettingsController::class, 'update']);
+
+    // Maintenance routes
+    Route::get('/admin/maintenance/health', [MaintenanceController::class, 'healthCheck']);
+
+    // Research documents
+    Route::apiResource('research-documents', ResearchDocumentController::class);
+    Route::post('/admin/maintenance/cache-clear', [MaintenanceController::class, 'clearCache']);
+    Route::post('/admin/maintenance/view-clear', [MaintenanceController::class, 'clearViewCache']);
+    Route::post('/admin/maintenance/route-clear', [MaintenanceController::class, 'clearRouteCache']);
+    Route::post('/admin/maintenance/queue-restart', [MaintenanceController::class, 'restartQueue']);
+    Route::get('/admin/maintenance/logs', [MaintenanceController::class, 'getLogs']);
+    Route::get('/admin/maintenance/logs/export', [MaintenanceController::class, 'exportLogs']);
+    Route::get('/admin/maintenance/stats', [MaintenanceController::class, 'getStatistics']);
 });

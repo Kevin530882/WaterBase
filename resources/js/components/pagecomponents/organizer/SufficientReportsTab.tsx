@@ -38,6 +38,7 @@ import {
     AlertCircle,
     AlertTriangle,
     Filter,
+    Zap,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
@@ -54,6 +55,31 @@ interface AreaReport {
     priority: string;
     reports: Report[];
 }
+
+// Event creation presets for faster event setup
+const EVENT_PRESETS = {
+    quick: {
+        name: "Quick Cleanup (2 hours)",
+        duration: "2",
+        maxVolunteers: "15",
+        rewardPoints: "30",
+        rewardBadge: "Water Defender",
+    },
+    halfDay: {
+        name: "Half-day Event (4 hours)",
+        duration: "4",
+        maxVolunteers: "25",
+        rewardPoints: "60",
+        rewardBadge: "Environmental Steward",
+    },
+    fullDay: {
+        name: "Full-day Intensive (8 hours)",
+        duration: "8",
+        maxVolunteers: "40",
+        rewardPoints: "100",
+        rewardBadge: "Cleanup Champion",
+    },
+};
 
 export const SufficientReportsTab = ({
     eligibleAreas,
@@ -97,6 +123,25 @@ export const SufficientReportsTab = ({
             default:
                 return "bg-gray-500 text-white";
         }
+    };
+
+    const applyPreset = (presetKey: keyof typeof EVENT_PRESETS) => {
+        const preset = EVENT_PRESETS[presetKey];
+        setNewEvent(prev => ({
+            ...prev,
+            duration: preset.duration,
+            maxVolunteers: preset.maxVolunteers,
+            rewardPoints: preset.rewardPoints,
+            rewardBadge: preset.rewardBadge,
+        }));
+    };
+
+    const generateDefaultTitle = () => {
+        if (!selectedArea) return "";
+        const severity = selectedArea.severityLevel.toLowerCase();
+        const isCritical = severity === "critical" || severity === "high";
+        const prefix = isCritical ? "Urgent Cleanup:" : "Cleanup Event:";
+        return `${prefix} ${selectedArea.location}`;
     };
 
     const handleCreateEvent = async () => {
@@ -393,16 +438,49 @@ export const SufficientReportsTab = ({
                                                     </Alert>
                                                 )}
 
+                                                {/* Event Presets for quick setup */}
+                                                <div className="space-y-2">
+                                                    <Label className="text-sm font-medium flex items-center">
+                                                        <Zap className="w-4 h-4 mr-2 text-waterbase-500" />
+                                                        Quick Templates
+                                                    </Label>
+                                                    <div className="grid grid-cols-3 gap-2">
+                                                        {Object.entries(EVENT_PRESETS).map(([key, preset]) => (
+                                                            <Button
+                                                                key={key}
+                                                                variant="outline"
+                                                                size="sm"
+                                                                onClick={() => applyPreset(key as keyof typeof EVENT_PRESETS)}
+                                                                className="text-xs hover:bg-waterbase-50"
+                                                            >
+                                                                {preset.name.split(' ')[0]}
+                                                                <br />
+                                                                <span className="text-xs font-normal text-gray-600">
+                                                                    {preset.maxVolunteers} volunteers
+                                                                </span>
+                                                            </Button>
+                                                        ))}
+                                                    </div>
+                                                    <p className="text-xs text-gray-500">
+                                                        Click a template to auto-fill duration, volunteer count, and rewards. All fields remain editable.
+                                                    </p>
+                                                </div>
+
                                                 <div className="space-y-2">
                                                     {/* Event Title */}
                                                     <div>
                                                         <Label htmlFor="title">Event Title *</Label>
                                                         <Input
                                                             id="title"
-                                                            placeholder="e.g., Beach Cleanup at Manila Bay"
+                                                            placeholder={generateDefaultTitle() || "e.g., Beach Cleanup at Manila Bay"}
                                                             value={newEvent.title}
                                                             onChange={(e) => setNewEvent({ ...newEvent, title: e.target.value })}
                                                         />
+                                                        {!newEvent.title && (
+                                                            <p className="text-xs text-gray-500 mt-1">
+                                                                Suggested: {generateDefaultTitle()}
+                                                            </p>
+                                                        )}
                                                     </div>
 
                                                     {/* Date and Time */}

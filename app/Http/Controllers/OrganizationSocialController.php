@@ -358,6 +358,36 @@ class OrganizationSocialController extends Controller
         ]);
     }
 
+    public function organizationMembersAndFollowers(Request $request)
+    {
+        $user = $request->user();
+
+        if (!$user->isOrganization() && strtolower((string) $user->role) !== 'admin') {
+            return response()->json(['message' => 'Only organization accounts can access this resource'], 403);
+        }
+
+        $members = $user->members()
+            ->select('users.id', 'users.firstName', 'users.lastName', 'users.organization', 'users.email', 'users.areaOfResponsibility', 'users.profile_photo', 'users.role')
+            ->orderBy('users.firstName')
+            ->get();
+
+        $followers = $user->organizationFollowers()
+            ->select('users.id', 'users.firstName', 'users.lastName', 'users.organization', 'users.email', 'users.areaOfResponsibility', 'users.profile_photo', 'users.role')
+            ->orderBy('users.firstName')
+            ->get();
+
+        $following = $user->followedOrganizations()
+            ->select('users.id', 'users.firstName', 'users.lastName', 'users.organization', 'users.email', 'users.areaOfResponsibility', 'users.profile_photo', 'users.role')
+            ->orderBy('users.organization')
+            ->get();
+
+        return response()->json([
+            'members' => $members,
+            'followers' => $followers,
+            'following' => $following,
+        ]);
+    }
+
     public function directory(Request $request)
     {
         $user = $request->user();

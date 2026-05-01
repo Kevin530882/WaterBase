@@ -125,6 +125,10 @@ export const AdminDashboard = () => {
     // System settings state
     const [autoApproveEnabled, setAutoApproveEnabled] = useState(false);
     const [autoApproveThreshold, setAutoApproveThreshold] = useState(80);
+    const [csvAutoApproveEnabled, setCsvAutoApproveEnabled] = useState(false);
+    const [maintenanceHealth, setMaintenanceHealth] = useState<any>(null);
+    const [maintenanceStats, setMaintenanceStats] = useState<any>(null);
+    const [isMaintenanceBusy, setIsMaintenanceBusy] = useState(false);
 
     // Filter states for Reports Validation Queue
     const [filterPollutionType, setFilterPollutionType] = useState('');
@@ -273,6 +277,7 @@ export const AdminDashboard = () => {
         let status;
         if (action === 'approve') status = 'verified';
         else if (action === 'reject') status = 'declined';
+        else if (action === 'request_info') status = 'info_requested';
         else {
             console.error('Invalid action');
             return;
@@ -288,6 +293,7 @@ export const AdminDashboard = () => {
                 body: JSON.stringify({ status: status, verifiedBy: user?.id, admin_notes: adminNotes }),
             });
             if (!response.ok) throw new Error('Failed to update report status');
+            setSuccessMessage('Report action completed successfully');
             fetchReports(currentPage);
             setShowReportDialog(false);
             setIsConfirmDialogOpen(false);
@@ -423,6 +429,7 @@ export const AdminDashboard = () => {
                     const data = await response.json();
                     setAutoApproveEnabled(Boolean(data.auto_approve_enabled));
                     setAutoApproveThreshold(Number(data.auto_approve_threshold));
+                    setCsvAutoApproveEnabled(Boolean(data.csv_auto_approve_enabled));
                 }
             } catch (e) {
                 console.error('Error fetching system settings:', e);
@@ -444,6 +451,62 @@ export const AdminDashboard = () => {
         } catch (error) {
             console.error('Error fetching recent alerts:', error);
             setErrorMessage('Failed to load recent alerts. Please try again.');
+        }
+    };
+
+    const runMaintenanceAction = async (url: string, method: 'GET' | 'POST' = 'POST') => {
+        try {
+            setIsMaintenanceBusy(true);
+            const response = await fetch(url, {
+                method,
+                headers: {
+                    'Authorization': `Bearer ${localStorage.getItem('auth_token')}`,
+                    'Accept': 'application/json',
+                },
+            });
+
+            const data = await response.json().catch(() => ({}));
+
+            if (!response.ok) {
+                throw new Error(data?.message || data?.error || 'Maintenance action failed');
+            }
+
+            return data;
+        } finally {
+            setIsMaintenanceBusy(false);
+        }
+    };
+
+    const handleExportLogs = async () => {
+        try {
+            setIsMaintenanceBusy(true);
+            const response = await fetch('/api/admin/maintenance/logs/export', {
+                method: 'GET',
+                headers: {
+                    'Authorization': `Bearer ${localStorage.getItem('auth_token')}`,
+                },
+            });
+
+            if (!response.ok) {
+                throw new Error('Failed to export logs');
+            }
+
+            const blob = await response.blob();
+            const url = window.URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = `waterbase-logs-${Date.now()}.log`;
+            document.body.appendChild(link);
+            link.click();
+            link.remove();
+            window.URL.revokeObjectURL(url);
+
+            setSuccessMessage('Logs exported successfully');
+            setTimeout(() => setSuccessMessage(''), 3000);
+        } catch (error) {
+            setErrorMessage(error instanceof Error ? error.message : 'Failed to export logs');
+        } finally {
+            setIsMaintenanceBusy(false);
         }
     };
 
@@ -822,18 +885,32 @@ export const AdminDashboard = () => {
                                                                             </div>
                                                                         </div>
                                                                         <div className="flex space-x-2 pt-4">
-                                                                            <Button onClick={() => openConfirmDialog(selectedReport.id, "approve")} className="bg-green-600 hover:bg-green-700 h-8 text-xs" size="sm">
-                                                                                <CheckCircle className="w-3 h-3 mr-1" />
-                                                                                Approve Report
-                                                                            </Button>
-                                                                            <Button className="bg-red-600 hover:bg-red-700 h-8 text-xs" size="sm" onClick={() => openConfirmDialog(selectedReport.id, "reject")}>
-                                                                                <XCircle className="w-3 h-3 mr-1" />
-                                                                                Reject Report
-                                                                            </Button>
-                                                                            <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => handleReportAction(selectedReport?.id, "request_info")}>
-                                                                                <Clock className="w-3 h-3 mr-1" />
-                                                                                Request More Info
-                                                                            </Button>
+                                                                            {selectedReport?.auto_approved ? (
+                                                                                <div className="flex items-center space-x-2 flex-1">
+                                                                                    <Badge className="bg-green-100 text-green-800 flex-1 justify-center">
+                                                                                        ✓ Auto-Approved
+                                                                                    </Badge>
+                                                                                    <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => openConfirmDialog(selectedReport?.id, "request_info")}>
+                                                                                        <Clock className="w-3 h-3 mr-1" />
+                                                                                        Override
+                                                                                    </Button>
+                                                                                </div>
+                                                                            ) : (
+                                                                                <>
+                                                                                    <Button onClick={() => openConfirmDialog(selectedReport.id, "approve")} className="bg-green-600 hover:bg-green-700 h-8 text-xs" size="sm">
+                                                                                        <CheckCircle className="w-3 h-3 mr-1" />
+                                                                                        Approve Report
+                                                                                    </Button>
+                                                                                    <Button className="bg-red-600 hover:bg-red-700 h-8 text-xs" size="sm" onClick={() => openConfirmDialog(selectedReport.id, "reject")}>
+                                                                                        <XCircle className="w-3 h-3 mr-1" />
+                                                                                        Reject Report
+                                                                                    </Button>
+                                                                                    <Button variant="outline" size="sm" className="h-8 text-xs" onClick={() => openConfirmDialog(selectedReport?.id, "request_info")}>
+                                                                                        <Clock className="w-3 h-3 mr-1" />
+                                                                                        Request More Info
+                                                                                    </Button>
+                                                                                </>
+                                                                            )}
                                                                         </div>
                                                                     </div>
                                                                 </DialogContent>
@@ -841,19 +918,31 @@ export const AdminDashboard = () => {
                                                             <Dialog open={isConfirmDialogOpen} onOpenChange={setIsConfirmDialogOpen}>
                                                                 <DialogContent>
                                                                     <DialogHeader>
-                                                                        <DialogTitle>Confirm Action</DialogTitle>
+                                                                        <DialogTitle>
+                                                                            {pendingAction === 'approve' ? 'Approve Report' :
+                                                                             pendingAction === 'reject' ? 'Reject Report' :
+                                                                             'Request More Information'}
+                                                                        </DialogTitle>
                                                                         <DialogDescription>
-                                                                            {pendingAction === 'approve' ? "Please provide a reason for approving this report." : "Please provide a reason for rejecting this report."}
+                                                                            {pendingAction === 'approve' ? "Please provide a reason for approving this report." :
+                                                                             pendingAction === 'reject' ? "Please provide a reason for rejecting this report." :
+                                                                             "Provide specific details about what information you need from the reporter."}
                                                                         </DialogDescription>
                                                                     </DialogHeader>
                                                                     <div className="mt-4">
-                                                                        <Label htmlFor="adminNotes">Reason (required)</Label>
+                                                                        <Label htmlFor="adminNotes">
+                                                                            {pendingAction === 'request_info' ? 'Information Requested' : 'Reason'} (required)
+                                                                        </Label>
                                                                         <textarea
                                                                             id="adminNotes"
                                                                             className="w-full p-2 border rounded"
                                                                             value={adminNotes}
                                                                             onChange={(e) => setAdminNotes(e.target.value)}
-                                                                            placeholder={`Enter the reason for ${pendingAction}ing this report...`}
+                                                                            placeholder={
+                                                                                pendingAction === 'approve' ? 'Reason for approving...' :
+                                                                                pendingAction === 'reject' ? 'Reason for rejecting...' :
+                                                                                'e.g., Please provide timestamp of incident, contact info, etc.'
+                                                                            }
                                                                         />
                                                                     </div>
                                                                     <div className="flex justify-end space-x-2 mt-4">
@@ -1279,6 +1368,19 @@ export const AdminDashboard = () => {
                                             <p className="text-xs text-gray-500 mt-1">Enter a value between 0 and 100</p>
                                         </div>
                                     </div>
+                                    <div>
+                                        <Label>Auto-approve CSV Uploads</Label>
+                                        <p className="text-xs text-gray-500 mt-1 mb-2">When enabled, reports imported via CSV bulk upload will be automatically verified.</p>
+                                        <div className="mt-1">
+                                            <Select value={csvAutoApproveEnabled ? 'enabled' : 'disabled'} onValueChange={(v) => setCsvAutoApproveEnabled(v === 'enabled')}>
+                                                <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
+                                                <SelectContent>
+                                                    <SelectItem value="enabled">Enabled</SelectItem>
+                                                    <SelectItem value="disabled">Disabled</SelectItem>
+                                                </SelectContent>
+                                            </Select>
+                                        </div>
+                                    </div>
                                     <div className="pt-2">
                                         <Button onClick={async () => {
                                             try {
@@ -1291,6 +1393,7 @@ export const AdminDashboard = () => {
                                                     body: JSON.stringify({
                                                         auto_approve_enabled: autoApproveEnabled,
                                                         auto_approve_threshold: autoApproveThreshold,
+                                                        csv_auto_approve_enabled: csvAutoApproveEnabled,
                                                     })
                                                 });
                                                 if (!res.ok) throw new Error('Failed');
@@ -1308,10 +1411,96 @@ export const AdminDashboard = () => {
                                     <CardTitle>System Maintenance</CardTitle>
                                 </CardHeader>
                                 <CardContent className="space-y-4">
-                                    <Button variant="outline" className="w-full"><Download className="w-4 h-4 mr-2" />Export System Data</Button>
-                                    <Button variant="outline" className="w-full"><RefreshCw className="w-4 h-4 mr-2" />Clear Cache</Button>
-                                    <Button variant="outline" className="w-full"><BarChart3 className="w-4 h-4 mr-2" />Generate Reports</Button>
-                                    <Button variant="destructive" className="w-full"><Shield className="w-4 h-4 mr-2" />System Backup</Button>
+                                    <Button
+                                        variant="outline"
+                                        className="w-full"
+                                        disabled={isMaintenanceBusy}
+                                        onClick={handleExportLogs}
+                                    >
+                                        <Download className="w-4 h-4 mr-2" />Export Logs
+                                    </Button>
+                                    <Button
+                                        variant="outline"
+                                        className="w-full"
+                                        disabled={isMaintenanceBusy}
+                                        onClick={async () => {
+                                            try {
+                                                const data = await runMaintenanceAction('/api/admin/maintenance/cache-clear');
+                                                setSuccessMessage(data?.message || 'Cache cleared');
+                                                setTimeout(() => setSuccessMessage(''), 3000);
+                                            } catch (e) {
+                                                setErrorMessage(e instanceof Error ? e.message : 'Failed to clear cache');
+                                            }
+                                        }}
+                                    >
+                                        <RefreshCw className="w-4 h-4 mr-2" />Clear Cache
+                                    </Button>
+                                    <Button
+                                        variant="outline"
+                                        className="w-full"
+                                        disabled={isMaintenanceBusy}
+                                        onClick={async () => {
+                                            try {
+                                                const data = await runMaintenanceAction('/api/admin/maintenance/queue-restart');
+                                                setSuccessMessage(data?.message || 'Queue restarted');
+                                                setTimeout(() => setSuccessMessage(''), 3000);
+                                            } catch (e) {
+                                                setErrorMessage(e instanceof Error ? e.message : 'Failed to restart queue');
+                                            }
+                                        }}
+                                    >
+                                        <Settings className="w-4 h-4 mr-2" />Restart Queue Worker
+                                    </Button>
+                                    <Button
+                                        variant="outline"
+                                        className="w-full"
+                                        disabled={isMaintenanceBusy}
+                                        onClick={async () => {
+                                            try {
+                                                const data = await runMaintenanceAction('/api/admin/maintenance/health', 'GET');
+                                                setMaintenanceHealth(data?.data || null);
+                                                setSuccessMessage('Health check completed');
+                                                setTimeout(() => setSuccessMessage(''), 3000);
+                                            } catch (e) {
+                                                setErrorMessage(e instanceof Error ? e.message : 'Failed to run health check');
+                                            }
+                                        }}
+                                    >
+                                        <Shield className="w-4 h-4 mr-2" />Run Health Check
+                                    </Button>
+                                    <Button
+                                        variant="outline"
+                                        className="w-full"
+                                        disabled={isMaintenanceBusy}
+                                        onClick={async () => {
+                                            try {
+                                                const data = await runMaintenanceAction('/api/admin/maintenance/stats', 'GET');
+                                                setMaintenanceStats(data?.data || null);
+                                                setSuccessMessage('System stats refreshed');
+                                                setTimeout(() => setSuccessMessage(''), 3000);
+                                            } catch (e) {
+                                                setErrorMessage(e instanceof Error ? e.message : 'Failed to fetch system stats');
+                                            }
+                                        }}
+                                    >
+                                        <BarChart3 className="w-4 h-4 mr-2" />View System Stats
+                                    </Button>
+                                    {maintenanceHealth && (
+                                        <div className="rounded-md border border-waterbase-200 p-3 text-xs text-waterbase-800">
+                                            <p className="font-semibold mb-1">Health Snapshot</p>
+                                            <p>Database: {maintenanceHealth.database?.status || 'unknown'}</p>
+                                            <p>Cache: {maintenanceHealth.cache?.status || 'unknown'}</p>
+                                            <p>Queue: {maintenanceHealth.queue?.status || 'unknown'} ({maintenanceHealth.queue?.failed_jobs ?? 0} failed)</p>
+                                        </div>
+                                    )}
+                                    {maintenanceStats && (
+                                        <div className="rounded-md border border-waterbase-200 p-3 text-xs text-waterbase-800">
+                                            <p className="font-semibold mb-1">System Stats</p>
+                                            <p>Uptime: {maintenanceStats.uptime || 'N/A'}</p>
+                                            <p>Disk used: {maintenanceStats.disk_usage?.used_percent ?? 'N/A'}%</p>
+                                            <p>Memory peak: {maintenanceStats.memory_usage?.peak_mb ?? 'N/A'} MB</p>
+                                        </div>
+                                    )}
                                 </CardContent>
                             </Card>
                         </div>

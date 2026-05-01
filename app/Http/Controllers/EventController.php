@@ -8,14 +8,17 @@ use App\Models\Event;
 use App\Models\User;
 use Illuminate\Validation\Rules\Enum;
 use App\Enums\EventStatus;
+use App\Services\BadgeEvaluationService;
 use App\Services\NotificationService;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
 
 class EventController extends Controller
 {
-    public function __construct(private readonly NotificationService $notificationService)
-    {
+    public function __construct(
+        private readonly NotificationService $notificationService,
+        private readonly BadgeEvaluationService $badgeEvaluationService,
+    ) {
     }
 
     public function index(Request $request)
@@ -142,6 +145,45 @@ class EventController extends Controller
         }
     }
 
+    public function cancel(Request $request, string $id)
+    {
+        try {
+            $event = Event::findOrFail($id);
+
+            // Check if user owns this event
+            if ($event->user_id !== Auth::id()) {
+                return response()->json(['message' => 'Unauthorized'], 403);
+            }
+
+            // Only allow cancellation of recruiting and active events
+            if (!in_array($event->status, ['recruiting', 'active'])) {
+                return response()->json(['message' => 'Only recruiting or active events can be cancelled'], 400);
+            }
+
+            $oldStatus = $event->status;
+            $event->status = 'cancelled';
+            $event->save();
+
+            // Notify all volunteers about the cancellation
+            $this->notificationService->notifyEventStatusChanged(
+                event: $event,
+                oldStatus: $oldStatus,
+                newStatus: 'cancelled',
+                actor: Auth::user()
+            );
+
+            Log::info('Event cancelled', [
+                'event_id' => $event->id,
+                'old_status' => $oldStatus,
+                'cancelled_by' => Auth::id(),
+            ]);
+
+            return response()->json(['success' => 'Event cancelled successfully'], 200);
+        } catch (ModelNotFoundException $e) {
+            return response()->json(['message' => 'Event not found'], 404);
+        }
+    }
+
     public function join(Request $request, string $id)
     {
         try {
@@ -150,6 +192,10 @@ class EventController extends Controller
 
             if (!$user instanceof User) {
                 return response()->json(['message' => 'Unauthorized'], 401);
+            }
+
+            if ($user->role !== 'volunteer') {
+                return response()->json(['message' => 'Only volunteers can join cleanup drives'], 403);
             }
 
             // Check if event is still recruiting
@@ -177,11 +223,47 @@ class EventController extends Controller
             $event->currentVolunteers = $currentVolunteers + 1;
             $event->save();
 
+            $newBadges = $this->badgeEvaluationService->evaluateAndAward($user);
+
             return response()->json([
                 'message' => 'Successfully joined the event',
-                'event' => $event->load('attendees')
+                'event' => $event->load('attendees'),
+                'new_badges' => $newBadges,
             ]);
 
+        } catch (ModelNotFoundException $e) {
+            return response()->json(['message' => 'Event not found'], 404);
+        }
+    }
+
+    public function leave(Request $request, string $id)
+    {
+        try {
+            $event = Event::findOrFail($id);
+            $user = Auth::user();
+
+            if (!$user instanceof User) {
+                return response()->json(['message' => 'Unauthorized'], 401);
+            }
+
+            if (!$event->attendees()->where('user_id', $user->id)->exists()) {
+                return response()->json(['message' => 'You have not joined this event'], 400);
+            }
+
+            $event->attendees()->detach($user->id);
+
+            $event->currentVolunteers = max(0, $event->attendees()->count());
+            $event->save();
+
+            $this->notificationService->notifyVolunteerLeft(
+                event: $event,
+                volunteer: $user
+            );
+
+            return response()->json([
+                'message' => 'Successfully left the event',
+                'event' => $event->load('attendees')
+            ]);
         } catch (ModelNotFoundException $e) {
             return response()->json(['message' => 'Event not found'], 404);
         }

@@ -26,12 +26,28 @@ class Report extends Model
         'status',
         'verifiedBy',
         'verified_at',
-        'admin_notes'
+        'admin_notes',
+        'auto_approved',
+        'auto_approved_at',
+        'water_body_name',
+        'temperature_celsius',
+        'ph_level',
+        'turbidity_ntu',
+        'total_dissolved_solids_mgl',
+        'sampling_date',
+        'source',
     ];
 
     protected $casts = [
         'latitude' => 'decimal:8',
         'longitude' => 'decimal:8',
+        'auto_approved' => 'boolean',
+        'auto_approved_at' => 'datetime',
+        'temperature_celsius' => 'decimal:2',
+        'ph_level' => 'decimal:2',
+        'turbidity_ntu' => 'decimal:2',
+        'total_dissolved_solids_mgl' => 'decimal:2',
+        'sampling_date' => 'date',
     ];
 
     public function user(): BelongsTo
