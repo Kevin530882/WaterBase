@@ -335,6 +335,11 @@ class AdminDashboardController extends Controller
         // Calculate declined reports (mapped to 'rejectedReports' for frontend compatibility)
         $declinedReports = Report::where('status', 'declined')->count();
 
+        // Calculate pending organization approvals
+        $pendingOrganizations = User::whereIn('role', User::ORGANIZATION_ROLES)
+            ->where('approval_status', User::STATUS_PENDING)
+            ->count();
+
         // Calculate active volunteers (unique users attending active events)
         $activeVolunteers = User::whereHas('attendedEvents', function ($query) {
             $query->where('status', 'active');
@@ -360,6 +365,7 @@ class AdminDashboardController extends Controller
             'activeVolunteers' => $activeVolunteers,
             'verifiedReports' => $verifiedReports,
             'rejectedReports' => $declinedReports, // Using 'rejectedReports' to match frontend
+            'pendingOrganizations' => $pendingOrganizations,
             'monthlyGrowth' => $monthlyGrowth,
         ]);
     }
@@ -384,5 +390,72 @@ class AdminDashboardController extends Controller
             ->get();
 
         return response()->json($reports);
+    }
+
+    public function getPendingOrganizations(Request $request)
+    {
+        if (Auth::user()->role !== 'admin') {
+            return response()->json(['message' => 'Unauthorized'], 403);
+        }
+
+        $users = User::query()
+            ->whereIn('role', User::ORGANIZATION_ROLES)
+            ->where('approval_status', User::STATUS_PENDING)
+            ->with('approvedBy:id,firstName,lastName')
+            ->latest()
+            ->paginate(10);
+
+        return response()->json($users);
+    }
+
+    public function approveOrganization(Request $request, User $user)
+    {
+        if (Auth::user()->role !== 'admin') {
+            return response()->json(['message' => 'Unauthorized'], 403);
+        }
+
+        if (!$user->isOrganization()) {
+            return response()->json(['message' => 'User is not an organization account'], 422);
+        }
+
+        $user->approval_status = User::STATUS_APPROVED;
+        $user->approved_by = Auth::id();
+        $user->approved_at = Carbon::now();
+        $user->save();
+
+        $this->notificationService->notifyOrganizationApproved($user, $request->user());
+
+        return response()->json([
+            'message' => 'Organization approved successfully',
+            'user' => $user->fresh('approvedBy:id,firstName,lastName'),
+        ]);
+    }
+
+    public function rejectOrganization(Request $request, User $user)
+    {
+        if (Auth::user()->role !== 'admin') {
+            return response()->json(['message' => 'Unauthorized'], 403);
+        }
+
+        if (!$user->isOrganization()) {
+            return response()->json(['message' => 'User is not an organization account'], 422);
+        }
+
+        $validated = $request->validate([
+            'notes' => 'nullable|string|max:1000',
+        ]);
+
+        $user->approval_status = User::STATUS_REJECTED;
+        $user->approved_by = Auth::id();
+        $user->approved_at = Carbon::now();
+        $user->approval_notes = $validated['notes'] ?? null;
+        $user->save();
+
+        $this->notificationService->notifyOrganizationRejected($user, $validated['notes'] ?? null, $request->user());
+
+        return response()->json([
+            'message' => 'Organization rejected successfully',
+            'user' => $user->fresh('approvedBy:id,firstName,lastName'),
+        ]);
     }
 }

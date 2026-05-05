@@ -54,4 +54,19 @@ return [
         ))),
     ],
 
+    'waterbase_mqtt' => [
+        'host' => env('WATERBASE_MQTT_HOST', 'localhost'),
+        'port' => (int) env('WATERBASE_MQTT_PORT', 8883),
+        'username' => env('WATERBASE_MQTT_USERNAME'),
+        'password' => env('WATERBASE_MQTT_PASSWORD'),
+        'client_id' => env('WATERBASE_MQTT_CLIENT_ID', 'waterbase-laravel-bridge'),
+        'use_tls' => env('WATERBASE_MQTT_USE_TLS', true),
+        'ca_file' => env('WATERBASE_MQTT_CA_FILE'),
+        'keep_alive_interval' => (int) env('WATERBASE_MQTT_KEEP_ALIVE', 30),
+        'connect_timeout' => (int) env('WATERBASE_MQTT_CONNECT_TIMEOUT', 10),
+        'socket_timeout' => (int) env('WATERBASE_MQTT_SOCKET_TIMEOUT', 10),
+        'resend_timeout' => (int) env('WATERBASE_MQTT_RESEND_TIMEOUT', 10),
+        'topic_prefix' => env('WATERBASE_MQTT_TOPIC_PREFIX', 'waterbase/devices'),
+    ],
+
 ];

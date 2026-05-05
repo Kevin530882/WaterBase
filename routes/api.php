@@ -16,6 +16,7 @@ use App\Http\Controllers\OrganizationSocialController;
 use App\Http\Controllers\SystemSettingsController;
 use App\Http\Controllers\BadgeController;
 use App\Http\Controllers\ResearchDocumentController;
+use App\Http\Controllers\DeviceController;
 
 use App\Http\Controllers\MaintenanceController;
 
@@ -34,6 +35,10 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/events/{id}/join', [EventController::class, 'join']);
     Route::post('/events/{id}/leave', [EventController::class, 'leave']);
     Route::post('/events/{id}/cancel', [EventController::class, 'cancel']);
+    Route::post('/events/{id}/start', [EventController::class, 'start']);
+    Route::post('/events/{id}/qr-scan', [EventController::class, 'qrScan']);
+    Route::post('/events/{id}/message-volunteers', [EventController::class, 'messageVolunteers']);
+    Route::post('/events/{id}/complete', [EventController::class, 'complete']);
     Route::get('/events/{id}/volunteers', [EventController::class, 'getVolunteers']);
     Route::get('/user/events', [EventController::class, 'getUserEvents']);
 
@@ -74,6 +79,30 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/forecast/kpis', [ForecastController::class, 'kpis']);
 
     Route::post('/predict', [DetectPollutionController::class, 'predict']);
+
+    // Device / telemetry routes
+    Route::get('/devices', [DeviceController::class, 'index']);
+    Route::get('/devices/map', [DeviceController::class, 'mapDevices']);
+    Route::get('/devices/discovered', [DeviceController::class, 'discovered']);
+    Route::get('/devices/maintenance/overdue', [DeviceController::class, 'overdueMaintenance']);
+    Route::get('/devices/maintenance/upcoming', [DeviceController::class, 'upcomingMaintenance']);
+
+    Route::get('/devices/{device}', [DeviceController::class, 'show']);
+    Route::delete('/devices/{device}', [DeviceController::class, 'destroy']);
+    Route::post('/devices/{device}/pair', [DeviceController::class, 'pair']);
+    Route::post('/devices/{device}/location', [DeviceController::class, 'updateLocation']);
+    Route::post('/devices/{device}/calibrate', [DeviceController::class, 'calibrate']);
+    Route::get('/devices/{device}/maintenance', [DeviceController::class, 'maintenance']);
+    Route::put('/devices/{device}/maintenance/schedule', [DeviceController::class, 'updateMaintenanceSchedule']);
+    Route::get('/devices/{device}/activity-logs', [DeviceController::class, 'activityLogs']);
+    Route::get('/devices/{device}/metrics/daily', [DeviceController::class, 'dailyMetrics']);
+    Route::get('/devices/{device}/metrics/monthly', [DeviceController::class, 'monthlyMetrics']);
+    Route::post('/devices/{device}/live-read', [DeviceController::class, 'liveRead']);
+    Route::post('/devices/{device}/telemetry', [DeviceController::class, 'storeTelemetry']);
+    Route::post('/devices/{device}/commands', [DeviceController::class, 'command']);
+    Route::get('/devices/{device}/telemetry/latest', [DeviceController::class, 'latest']);
+    Route::get('/devices/{device}/telemetry', [DeviceController::class, 'history']);
+    Route::get('/devices/{device}/performance', [DeviceController::class, 'performance']);
 
     // Organization social routes
     Route::get('/organizations/directory', [OrganizationSocialController::class, 'directory']);
@@ -133,6 +162,10 @@ Route::middleware('auth:sanctum')->group(function () {
 
     Route::get('/admin/stats', [AdminDashboardController::class, 'getAdminStats']);
     Route::get('/admin/reports/high-severity', [AdminDashboardController::class, 'getRecentHighSeverityReports']);
+
+    Route::get('/admin/organizations/pending', [AdminDashboardController::class, 'getPendingOrganizations']);
+    Route::post('/admin/organizations/{user}/approve', [AdminDashboardController::class, 'approveOrganization']);
+    Route::post('/admin/organizations/{user}/reject', [AdminDashboardController::class, 'rejectOrganization']);
 
     // System settings
     Route::get('/admin/system-settings', [SystemSettingsController::class, 'get']);

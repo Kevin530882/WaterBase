@@ -67,5 +67,25 @@ export const ROUTE = {
         path: "/admin/badges",
         name: "Admin Badges",
     },
+    ADMIN_ORGANIZATIONS : {
+        path: "/admin/organizations",
+        name: "Admin Organizations",
+    },
+    ADMIN_DEVICES : {
+        path: "/admin/devices",
+        name: "Admin Devices",
+    },
+    ADMIN_DEVICE_DETAIL: {
+        path: "/admin/devices/:deviceId",
+        name: "Admin Device Detail",
+    },
+    ADMIN_DEVICE_MAINTENANCE: {
+        path: "/admin/devices/maintenance",
+        name: "Admin Device Maintenance",
+    },
+    ACTIVITY_LOG : {
+        path: "/activity-log",
+        name: "Activity Log",
+    },
 
 }

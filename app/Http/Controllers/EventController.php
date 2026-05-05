@@ -217,6 +217,8 @@ class EventController extends Controller
             // Add user to event
             $event->attendees()->attach($user->id, [
                 'joined_at' => now(),
+                'is_present' => false,
+                'qr_scanned_at' => null,
             ]);
 
             // Update current volunteer count
@@ -281,6 +283,7 @@ class EventController extends Controller
             // Get events the user has joined
             $joinedEvents = $user->attendedEvents()
                 ->with('creator')
+                ->withPivot(['is_present', 'qr_scanned_at', 'joined_at'])
                 ->orderBy('date', 'desc')
                 ->get();
 
@@ -310,11 +313,15 @@ class EventController extends Controller
                         'email' => $user->email,
                         'phone' => $user->phoneNumber ?? '',
                         'organization' => $user->organization ?? '',
-                        'joined_at' => now()->toISOString(),
+                        'joined_at' => $user->pivot->joined_at ?? now()->toISOString(),
+                        'is_present' => (bool) ($user->pivot->is_present ?? false),
+                        'qr_scanned_at' => $user->pivot->qr_scanned_at,
                         'pivot' => [
                             'user_id' => $user->id,
                             'event_id' => $event->id,
-                            'created_at' => now()->toISOString()
+                            'created_at' => $user->pivot->created_at ?? now()->toISOString(),
+                            'is_present' => (bool) ($user->pivot->is_present ?? false),
+                            'qr_scanned_at' => $user->pivot->qr_scanned_at,
                         ]
                     ];
                 });
@@ -326,6 +333,220 @@ class EventController extends Controller
         } catch (\Exception $e) {
             Log::error('Error fetching volunteers: ' . $e->getMessage());
             return response()->json(['message' => 'Failed to fetch volunteers: ' . $e->getMessage()], 500);
+        }
+    }
+
+    public function start(Request $request, string $id)
+    {
+        try {
+            $event = Event::findOrFail($id);
+
+            if ($event->user_id !== Auth::id()) {
+                return response()->json(['message' => 'Unauthorized'], 403);
+            }
+
+            if ($event->status !== 'recruiting') {
+                return response()->json(['message' => 'Only recruiting events can be started'], 400);
+            }
+
+            // Check at least 1 volunteer has checked in via QR
+            $presentCount = $event->attendees()
+                ->wherePivot('is_present', true)
+                ->count();
+
+            if ($presentCount < 1) {
+                return response()->json([
+                    'message' => 'At least one volunteer must check in via QR before starting',
+                    'present_count' => $presentCount,
+                ], 400);
+            }
+
+            $oldStatus = $event->status;
+            $event->status = 'active';
+            $event->started_at = now();
+            $event->save();
+
+            $this->notificationService->notifyEventStatusChanged(
+                event: $event->fresh(),
+                oldStatus: $oldStatus,
+                newStatus: 'active',
+                actor: Auth::user()
+            );
+
+            Log::info('Event started', [
+                'event_id' => $event->id,
+                'started_by' => Auth::id(),
+                'present_count' => $presentCount,
+            ]);
+
+            return response()->json([
+                'success' => 'Event started successfully',
+                'event' => $event->fresh()
+            ], 200);
+        } catch (ModelNotFoundException $e) {
+            return response()->json(['message' => 'Event not found'], 404);
+        }
+    }
+
+    public function qrScan(Request $request, string $id)
+    {
+        try {
+            $event = Event::findOrFail($id);
+            $user = Auth::user();
+
+            if (!$user instanceof User) {
+                return response()->json(['message' => 'Unauthorized - Please log in to check in'], 401);
+            }
+
+            if (!in_array($event->status, ['recruiting', 'active'])) {
+                return response()->json([
+                    'message' => 'Check-in not available',
+                    'details' => "This event is {$event->status} and is no longer accepting check-ins"
+                ], 400);
+            }
+
+            // Auto-join if not already joined
+            if (!$event->attendees()->where('user_id', $user->id)->exists()) {
+                if ($event->status !== 'recruiting') {
+                    return response()->json([
+                        'message' => 'Cannot join this event',
+                        'details' => 'You must have joined during the recruiting phase (before the event started) to check in now'
+                    ], 400);
+                }
+
+                $currentVolunteers = $event->attendees()->count();
+                if ($currentVolunteers >= $event->maxVolunteers) {
+                    return response()->json([
+                        'message' => 'Event is full',
+                        'details' => "This event has reached its maximum capacity of {$event->maxVolunteers} volunteers"
+                    ], 400);
+                }
+
+                $event->attendees()->attach($user->id, [
+                    'joined_at' => now(),
+                    'is_present' => true,
+                    'qr_scanned_at' => now(),
+                ]);
+
+                $event->currentVolunteers = $currentVolunteers + 1;
+                $event->save();
+            } else {
+                // Update pivot to mark present
+                $event->attendees()->updateExistingPivot($user->id, [
+                    'is_present' => true,
+                    'qr_scanned_at' => now(),
+                ]);
+            }
+
+            Log::info('QR scan attendance recorded', [
+                'event_id' => $event->id,
+                'user_id' => $user->id,
+                'volunteer_name' => "{$user->firstName} {$user->lastName}",
+            ]);
+
+            return response()->json([
+                'message' => 'Check-in successful!',
+                'details' => "You've been checked in for {$event->title}",
+                'event' => $event->fresh()->load('attendees')
+            ], 200);
+        } catch (ModelNotFoundException $e) {
+            return response()->json(['message' => 'Event not found', 'details' => 'This QR code appears to be invalid'], 404);
+        }
+    }
+
+    public function messageVolunteers(Request $request, string $id)
+    {
+        try {
+            $event = Event::findOrFail($id);
+
+            if ($event->user_id !== Auth::id()) {
+                return response()->json(['message' => 'Unauthorized'], 403);
+            }
+
+            $validated = $request->validate([
+                'message' => 'sometimes|nullable|string|max:1000',
+            ]);
+
+            $customMessage = $validated['message'] ?? null;
+
+            $this->notificationService->notifyEventReminder(
+                event: $event,
+                customMessage: $customMessage,
+                actor: Auth::user()
+            );
+
+            Log::info('Message sent to volunteers', [
+                'event_id' => $event->id,
+                'has_custom_message' => !is_null($customMessage),
+                'sent_by' => Auth::id(),
+            ]);
+
+            return response()->json([
+                'success' => 'Message sent to volunteers',
+                'event_id' => $event->id,
+            ], 200);
+        } catch (ModelNotFoundException $e) {
+            return response()->json(['message' => 'Event not found'], 404);
+        }
+    }
+
+    public function complete(Request $request, string $id)
+    {
+        try {
+            $event = Event::findOrFail($id);
+
+            if ($event->user_id !== Auth::id()) {
+                return response()->json(['message' => 'Unauthorized'], 403);
+            }
+
+            if ($event->status !== 'active') {
+                return response()->json(['message' => 'Only active events can be completed'], 400);
+            }
+
+            $oldStatus = $event->status;
+            $event->status = 'completed';
+            $event->ended_at = now();
+            $event->save();
+
+            // Auto-resolve all linked reports
+            $resolvedCount = 0;
+            $event->linkedReports()->where('status', '!=', 'resolved')->each(function ($report) use (&$resolvedCount) {
+                $report->status = 'resolved';
+                $report->save();
+                $resolvedCount++;
+            });
+
+            // Award badges to attendees who were present
+            $presentAttendees = $event->attendees()
+                ->wherePivot('is_present', true)
+                ->get();
+
+            foreach ($presentAttendees as $attendee) {
+                $this->badgeEvaluationService->evaluateAndAward($attendee);
+            }
+
+            $this->notificationService->notifyEventStatusChanged(
+                event: $event->fresh(),
+                oldStatus: $oldStatus,
+                newStatus: 'completed',
+                actor: Auth::user()
+            );
+
+            Log::info('Event completed', [
+                'event_id' => $event->id,
+                'completed_by' => Auth::id(),
+                'resolved_reports' => $resolvedCount,
+                'present_attendees' => $presentAttendees->count(),
+            ]);
+
+            return response()->json([
+                'success' => 'Event completed successfully',
+                'event' => $event->fresh(),
+                'resolved_reports' => $resolvedCount,
+                'present_attendees' => $presentAttendees->count(),
+            ], 200);
+        } catch (ModelNotFoundException $e) {
+            return response()->json(['message' => 'Event not found'], 404);
         }
     }
 }

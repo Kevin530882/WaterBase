@@ -27,7 +27,6 @@ export const AppRoutes = () => {
                         <Route path="/" element={<VIEWS.Home />} />
                         <Route path={ROUTE.REGISTER.path} element={<VIEWS.Register />} />
                         <Route path={ROUTE.LOGIN.path} element={<VIEWS.Login />} />
-                        <Route path={ROUTE.REPORT_POLLUTION_DEBUG.path} element={<VIEWS.ReportPollutionDebug />} />
                         {/* PRIVATE ROUTES - All with Navigation */}
                         <Route path={ROUTE.MAP.path} element={<ProtectedRoute><VIEWS.MapView /></ProtectedRoute>} />
                         <Route path={ROUTE.RESEARCH_MAP.path} element={<ProtectedRoute><VIEWS.ResearchMap /></ProtectedRoute>} />
@@ -76,7 +75,43 @@ export const AppRoutes = () => {
                                 </RoleGuard>
                             </ProtectedRoute>
                         } />
+                        <Route path={ROUTE.ADMIN_ORGANIZATIONS.path} element={
+                            <ProtectedRoute>
+                                <RoleGuard roles={['admin']}>
+                                    <VIEWS.AdminOrganizations />
+                                </RoleGuard>
+                            </ProtectedRoute>
+                        } />
+                        <Route path={ROUTE.ADMIN_DEVICES.path} element={
+                            <ProtectedRoute>
+                                <RoleGuard roles={['admin']}>
+                                    <VIEWS.AdminDevices />
+                                </RoleGuard>
+                            </ProtectedRoute>
+                        } />
+                        <Route path={ROUTE.ADMIN_DEVICE_DETAIL.path} element={
+                            <ProtectedRoute>
+                                <RoleGuard roles={['admin']}>
+                                    <VIEWS.AdminDeviceDetail />
+                                </RoleGuard>
+                            </ProtectedRoute>
+                        } />
+                        <Route path={ROUTE.ADMIN_DEVICE_MAINTENANCE.path} element={
+                            <ProtectedRoute>
+                                <RoleGuard roles={['admin']}>
+                                    <VIEWS.AdminDeviceMaintenance />
+                                </RoleGuard>
+                            </ProtectedRoute>
+                        } />
+                        <Route path={ROUTE.REPORT_POLLUTION_DEBUG.path} element={
+                            <ProtectedRoute>
+                                <RoleGuard roles={['admin']}>
+                                    <VIEWS.ReportPollutionDebug />
+                                </RoleGuard>
+                            </ProtectedRoute>
+                        } />
                         <Route path={ROUTE.PROFILE.path} element={<ProtectedRoute><VIEWS.Profile /></ProtectedRoute>} />
+                        <Route path={ROUTE.ACTIVITY_LOG.path} element={<ProtectedRoute><VIEWS.ActivityLogRouter /></ProtectedRoute>} />
                         <Route path={ROUTE.ORGANIZATION_PROFILE.path} element={<ProtectedRoute><VIEWS.OrganizationProfile /></ProtectedRoute>} />
 
                         {/* 404 ROUTE */}

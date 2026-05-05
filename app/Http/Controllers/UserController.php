@@ -71,6 +71,7 @@ class UserController extends Controller
                 'password' => Hash::make($validated['password']),
                 'phoneNumber' => $validated['phoneNumber'],
                 'role' => $validated['role'],
+                'approval_status' => $isOrganizationRole ? User::STATUS_PENDING : User::STATUS_APPROVED,
                 'organization' => $validated['organization'] ?? null,
                 'organization_proof_document' => $organizationProofPath ? '/storage/' . $organizationProofPath : null,
                 'areaOfResponsibility' => $validated['areaOfResponsibility'] ?? null,
@@ -132,6 +133,14 @@ class UserController extends Controller
             return response()->json([
                 'message' => 'Invalid credentials',
             ], 401);
+        }
+
+        if ($user->isOrganization() && $user->approval_status !== User::STATUS_APPROVED) {
+            $statusLabel = $user->approval_status === User::STATUS_REJECTED ? 'rejected' : 'pending';
+            return response()->json([
+                'message' => 'Your organization account is under review. Please wait for admin approval before logging in.',
+                'approval_status' => $statusLabel,
+            ], 403);
         }
 
         $token = $user->createToken('auth_token')->plainTextToken;

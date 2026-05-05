@@ -14,6 +14,10 @@ class User extends Authenticatable
 
     public const ORGANIZATION_ROLES = ['ngo', 'lgu', 'researcher'];
 
+    public const STATUS_PENDING = 'pending';
+    public const STATUS_APPROVED = 'approved';
+    public const STATUS_REJECTED = 'rejected';
+
     protected $fillable = [
         'firstName',
         'lastName',
@@ -21,6 +25,10 @@ class User extends Authenticatable
         'password',
         'phoneNumber',
         'role',
+        'approval_status',
+        'approved_by',
+        'approved_at',
+        'approval_notes',
         'organization',
         'organization_proof_document',
         'areaOfResponsibility',
@@ -44,6 +52,7 @@ class User extends Authenticatable
 
     protected $casts = [
         'push_token_updated_at' => 'datetime',
+        'approved_at' => 'datetime',
         'push_notifications_enabled' => 'boolean',
         'push_pref_report_updates' => 'boolean',
         'push_pref_event_reminders' => 'boolean',
@@ -54,6 +63,11 @@ class User extends Authenticatable
     public function reports()
     {
         return $this->hasMany(Report::class, 'user_id');
+    }
+
+    public function pairedDevices()
+    {
+        return $this->hasMany(Device::class, 'paired_by_user_id');
     }
 
     public function notifications()
@@ -139,6 +153,11 @@ class User extends Authenticatable
     public function organizationSetting()
     {
         return $this->hasOne(OrganizationSetting::class, 'organization_user_id');
+    }
+
+    public function approvedBy(): \Illuminate\Database\Eloquent\Relations\BelongsTo
+    {
+        return $this->belongsTo(User::class, 'approved_by');
     }
 
     public function badges()

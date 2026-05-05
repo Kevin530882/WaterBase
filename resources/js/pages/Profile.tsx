@@ -7,7 +7,8 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import Navigation from "@/components/Navigation";
-import { User, Camera, MapPin, Award, FileText, Calendar, Users, BarChart3, Star } from "lucide-react";
+import { User, Camera, MapPin, Award, FileText, Calendar, Users, BarChart3, Star, Activity } from "lucide-react";
+import { ROUTE } from "@/constants";
 import { RecentActivity } from "@/components/pagecomponents/RecentActivity";
 import { Setting } from "@/components/pagecomponents/Setting";
 import { Notification } from "@/components/pagecomponents/Notification";
@@ -462,7 +463,7 @@ export const Profile = () => {
                                 </Button>
                             </div>
 
-                            <div className="flex-1 min-w-0 text-center sm:text-left w-full">
+                            <div className="flex-1 min-w-0 text-center sm:text-left w-full flex flex-col">
                                 <h1 className="text-lg sm:text-xl lg:text-2xl font-bold text-waterbase-950 break-words mb-3 sm:mb-2">
                                     {profileData.firstName} {profileData.lastName}
                                 </h1>
@@ -707,6 +708,17 @@ export const Profile = () => {
                     <Notification />
                     <Setting onProfileUpdate={handleProfileUpdate} />
                 </Tabs>
+
+                <div className="mt-6">
+                    <Button
+                        onClick={() => navigate(ROUTE.ACTIVITY_LOG.path)}
+                        className="w-full"
+                        size="sm"
+                    >
+                        <Activity className="w-4 h-4 mr-2" />
+                        View Activity Log
+                    </Button>
+                </div>
             </div>
         </div>
     );

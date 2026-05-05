@@ -23,6 +23,7 @@ class Report extends Model
         'ai_annotated_image',
         'user_id',
         'report_group_id',
+        'event_id',
         'status',
         'verifiedBy',
         'verified_at',

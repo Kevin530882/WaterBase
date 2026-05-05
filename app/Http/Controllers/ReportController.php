@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Report;
+use App\Models\Event;
 use App\Enums\ReportStatus;
 use App\Enums\SeverityLevel;
 use App\Services\BadgeEvaluationService;
@@ -198,6 +199,23 @@ class ReportController extends Controller
                     'image' => $imagePath,
                     'ai_annotated_image' => $annotatedImagePath,
                 ]));
+
+                // Link report to active event if within ~100m proximity
+                $activeEvent = Event::where('status', 'active')
+                    ->whereBetween('latitude', [$report->latitude - 0.001, $report->latitude + 0.001])
+                    ->whereBetween('longitude', [$report->longitude - 0.001, $report->longitude + 0.001])
+                    ->orderByRaw('SQRT(POW(latitude - ?, 2) + POW(longitude - ?, 2))', [$report->latitude, $report->longitude])
+                    ->first();
+
+                if ($activeEvent) {
+                    $report->event_id = $activeEvent->id;
+                    $report->save();
+
+                    Log::info('Report linked to active event', [
+                        'report_id' => $report->id,
+                        'event_id' => $activeEvent->id,
+                    ]);
+                }
 
                 $this->notificationService->notifyReportStatusChanged(
                     report: $report,

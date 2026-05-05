@@ -167,8 +167,13 @@ export const Register = () => {
             const data = await response.json();
 
             if (response.ok) {
-                setSuccess("Account created successfully! Redirecting to login...");
-                
+                const isOrg = shouldShowOrganizationFields(formData.role);
+                setSuccess(
+                    isOrg
+                        ? "Account created successfully! Your organization account is pending admin review. You will be notified once approved."
+                        : "Account created successfully! Redirecting to login..."
+                );
+
                 // Clear the form
                 setFormData({
                     firstName: "",

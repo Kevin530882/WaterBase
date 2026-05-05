@@ -34,6 +34,8 @@ import {
   Target,
   Droplets,
   Loader2,
+  ShieldCheck,
+  Activity,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Link } from "react-router-dom";
@@ -46,6 +48,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import 'leaflet.heat';
 import { WBSICalculator, getReportsForLocation, getSeverityDescription } from '@/utils/wbsiCalculator';
 import SeverityDistributionChart from '@/components/SeverityDistributionChart';
+import DeviceService, { MapDevice } from '@/services/deviceService';
 
 // Real Report interface based on API structure
 interface Report {
@@ -65,16 +68,29 @@ interface Report {
   created_at: string;
   updated_at: string;
   image?: string;
+  event_id?: number | null;
   user?: {
     firstName: string;
     lastName: string;
   };
 }
 
+interface CleanupEvent {
+  id: number;
+  title: string;
+  address: string;
+  latitude: number;
+  longitude: number;
+  status: string;
+  currentVolunteers?: number;
+  maxVolunteers: number;
+}
+
 // Custom hook for fetching and filtering reports
 const useReportsData = () => {
   const { token } = useAuth();
   const [reports, setReports] = useState<Report[]>([]);
+  const [activeEvents, setActiveEvents] = useState<CleanupEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -83,15 +99,23 @@ const useReportsData = () => {
 
     try {
       setLoading(true);
-      const response = await fetch('/api/reports/all', {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Accept': 'application/json',
-        },
-      });
+      const [reportsResponse, eventsResponse] = await Promise.all([
+        fetch('/api/reports/all', {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Accept': 'application/json',
+          },
+        }),
+        fetch('/api/events', {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Accept': 'application/json',
+          },
+        }),
+      ]);
 
-      if (response.ok) {
-        const data = await response.json();
+      if (reportsResponse.ok) {
+        const data = await reportsResponse.json();
         const reportsArray = Array.isArray(data) ? data : data.data || [];
 
         const validReports = reportsArray
@@ -106,7 +130,31 @@ const useReportsData = () => {
           );
         setReports(validReports);
       } else {
-        throw new Error('Failed to fetch reports');
+        console.error('Reports fetch failed:', {
+          status: reportsResponse.status,
+          statusText: reportsResponse.statusText,
+          url: reportsResponse.url
+        });
+        const responseText = await reportsResponse.text();
+        console.error('Response body:', responseText);
+        throw new Error(`Failed to fetch reports: ${reportsResponse.status} ${reportsResponse.statusText}`);
+      }
+
+      if (eventsResponse.ok) {
+        const data = await eventsResponse.json();
+        const eventsArray = Array.isArray(data) ? data : data.data || [];
+        const validEvents = eventsArray
+          .map((e: any) => ({
+            ...e,
+            latitude: parseFloat(e.latitude),
+            longitude: parseFloat(e.longitude),
+          }))
+          .filter((event: CleanupEvent) =>
+            !isNaN(event.latitude) &&
+            !isNaN(event.longitude) &&
+            event.status === 'active'
+          );
+        setActiveEvents(validEvents);
       }
     } catch (err) {
       console.error('Error fetching reports:', err);
@@ -120,12 +168,12 @@ const useReportsData = () => {
     fetchReports();
   }, [token]);
 
-  return { reports, loading, error, refetch: fetchReports };
+  return { reports, activeEvents, loading, error, refetch: fetchReports };
 };
 
 export const MapView = () => {
   const { user } = useAuth();
-  const { reports, loading, error } = useReportsData();
+  const { reports, activeEvents, loading, error } = useReportsData();
   const [selectedReport, setSelectedReport] = useState<Report | null>(null);
   const [filterType, setFilterType] = useState<string>("all");
   const [filterStatus, setFilterStatus] = useState<string>("all");
@@ -133,6 +181,23 @@ export const MapView = () => {
   const [filteredReports, setFilteredReports] = useState<Report[]>([]);
   const [viewMode, setViewMode] = useState<"standard" | "priority">("standard");
   const [wbsiData, setWbsiData] = useState<any>(null);
+
+  // Report pagination
+  const [reportPage, setReportPage] = useState(1);
+  const REPORTS_PER_PAGE = 15;
+  const paginatedReports = filteredReports.slice((reportPage - 1) * REPORTS_PER_PAGE, reportPage * REPORTS_PER_PAGE);
+  const reportTotalPages = Math.max(1, Math.ceil(filteredReports.length / REPORTS_PER_PAGE));
+
+  // Sensor state
+  const { token } = useAuth();
+  const [sensors, setSensors] = useState<MapDevice[]>([]);
+  const [showSensors, setShowSensors] = useState(false);
+
+  useEffect(() => {
+    if (!token) return;
+    const deviceService = new DeviceService(token);
+    deviceService.getMapDevices().then(setSensors).catch(console.error);
+  }, [token]);
 
   // Calculate WBSI when selectedReport changes
   useEffect(() => {
@@ -241,6 +306,38 @@ export const MapView = () => {
     return L.divIcon({
       html: dropletHtml,
       className: 'custom-droplet-marker',
+      iconSize: [32, 32],
+      iconAnchor: [16, 32],
+      popupAnchor: [0, -32],
+    });
+  };
+
+  const createCleanupEventIcon = () => {
+    const iconHtml = renderToStaticMarkup(
+      <div className="w-8 h-8 flex items-center justify-center rounded-full border-2 shadow-lg bg-teal-500 border-teal-600">
+        <ShieldCheck className="w-5 h-5 text-white" />
+      </div>
+    );
+
+    return L.divIcon({
+      html: iconHtml,
+      className: 'custom-cleanup-marker',
+      iconSize: [32, 32],
+      iconAnchor: [16, 32],
+      popupAnchor: [0, -32],
+    });
+  };
+
+  const createSensorIcon = () => {
+    const iconHtml = renderToStaticMarkup(
+      <div className="w-8 h-8 flex items-center justify-center rounded-full border-2 shadow-lg bg-blue-600 border-white">
+        <Activity className="w-5 h-5 text-white" />
+      </div>
+    );
+
+    return L.divIcon({
+      html: iconHtml,
+      className: 'custom-sensor-marker',
       iconSize: [32, 32],
       iconAnchor: [16, 32],
       popupAnchor: [0, -32],
@@ -491,14 +588,46 @@ export const MapView = () => {
             </div>
           </div>
 
-          {/* Priority Zone Highlights */}
-          {viewMode === "priority" && (
-            <div className="p-4 border-b border-gray-200 bg-red-50">
-              <h3 className="text-sm font-semibold text-red-900">
-                High-Priority Areas
-              </h3>
+            {/* Sensor Toggle */}
+            <div className="px-4 py-2 border-b border-gray-200">
+              <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={showSensors}
+                  onChange={(e) => setShowSensors(e.target.checked)}
+                  className="rounded border-gray-300 text-waterbase-600 focus:ring-waterbase-500"
+                />
+                <Activity className="w-4 h-4 text-blue-600" />
+                Show Sensor Stations
+              </label>
             </div>
-          )}
+
+            {/* Legend */}
+            {activeEvents.length > 0 && (
+              <div className="px-4 py-2 border-b border-gray-200">
+                <div className="flex items-center gap-2 text-xs text-gray-600">
+                  <div className="w-3 h-3 rounded-full bg-teal-500 border border-teal-600" />
+                  <span>Under Cleanup ({activeEvents.length} active)</span>
+                </div>
+              </div>
+            )}
+            {sensors.length > 0 && (
+              <div className="px-4 py-2 border-b border-gray-200">
+                <div className="flex items-center gap-2 text-xs text-gray-600">
+                  <div className="w-3 h-3 rounded-full bg-blue-600 border border-blue-700" />
+                  <span>Sensor Stations ({sensors.length})</span>
+                </div>
+              </div>
+            )}
+
+            {/* Priority Zone Highlights */}
+            {viewMode === "priority" && (
+              <div className="p-4 border-b border-gray-200 bg-red-50">
+                <h3 className="text-sm font-semibold text-red-900">
+                  High-Priority Areas
+                </h3>
+              </div>
+            )}
 
           {/* Reports list */}
           <div className="flex-1 overflow-y-auto min-h-0">
@@ -544,6 +673,11 @@ export const MapView = () => {
                               <CardDescription className="text-xs text-gray-500 mt-1">
                                 {report.address}
                               </CardDescription>
+                              {!!report.event_id && activeEvents.some(e => e.id === report.event_id) && (
+                                <Badge className="mt-1 bg-teal-100 text-teal-800 text-[10px]">
+                                  Under Cleanup
+                                </Badge>
+                              )}
                             </div>
                             <div className="flex items-center space-x-1">
                               <div
@@ -611,6 +745,7 @@ export const MapView = () => {
                 {/* Pollution report markers */}
                 {filteredReports.map((report) => {
                   try {
+                    const isUnderCleanup = !!report.event_id && activeEvents.some(e => e.id === report.event_id);
                     return (
                       <Marker
                         key={report.id}
@@ -628,6 +763,11 @@ export const MapView = () => {
                               <Droplets className="w-4 h-4 mr-1 text-waterbase-600" />
                               <span className="font-semibold">{report.address || 'Unknown Location'}</span>
                             </div>
+                            {isUnderCleanup && (
+                              <div className="bg-teal-100 text-teal-800 text-xs font-semibold px-2 py-1 rounded mb-2">
+                                Under Cleanup
+                              </div>
+                            )}
                             <div className={cn("p-2 rounded mb-2", getSeverityColor(getReportSeverity(report)))}>
                               <div className="text-sm font-bold text-white">{report.pollutionType || 'Unknown Type'}</div>
                               <div className="text-xs text-white">{getReportSeverity(report)} Severity</div>
@@ -647,6 +787,80 @@ export const MapView = () => {
                     );
                   } catch (error) {
                     console.error('Error rendering marker for report:', report.id, error);
+                    return null;
+                  }
+                })}
+
+                {/* Active cleanup event markers */}
+                {activeEvents.map((event) => {
+                  try {
+                    return (
+                      <Marker
+                        key={`event-${event.id}`}
+                        position={[event.latitude, event.longitude]}
+                        icon={createCleanupEventIcon()}
+                      >
+                        <Popup>
+                          <div className="text-center min-w-[200px]">
+                            <div className="flex items-center justify-center mb-2">
+                              <ShieldCheck className="w-4 h-4 mr-1 text-teal-600" />
+                              <span className="font-semibold">{event.title}</span>
+                            </div>
+                            <div className="bg-teal-500 text-white text-xs font-semibold px-2 py-1 rounded mb-2">
+                              Under Cleanup
+                            </div>
+                            <div className="text-xs text-gray-600 mb-2">
+                              <div>{event.address}</div>
+                              <div>Volunteers: {event.currentVolunteers ?? 0}/{event.maxVolunteers}</div>
+                            </div>
+                          </div>
+                        </Popup>
+                      </Marker>
+                    );
+                  } catch (error) {
+                    console.error('Error rendering marker for event:', event.id, error);
+                    return null;
+                  }
+                })}
+
+                {/* Sensor station markers */}
+                {showSensors && sensors.map((sensor) => {
+                  try {
+                    return (
+                      <Marker
+                        key={`sensor-${sensor.id}`}
+                        position={[sensor.latitude, sensor.longitude]}
+                        icon={createSensorIcon()}
+                      >
+                        <Popup>
+                          <div className="text-center min-w-[200px]">
+                            <div className="flex items-center justify-center mb-2">
+                              <Activity className="w-4 h-4 mr-1 text-blue-600" />
+                              <span className="font-semibold">{sensor.name || sensor.station_id}</span>
+                            </div>
+                            <div className="text-xs text-gray-600 space-y-1">
+                              {sensor.latest_telemetry?.ph !== null && sensor.latest_telemetry?.ph !== undefined && (
+                                <div>pH: {Number(sensor.latest_telemetry.ph).toFixed(2)}</div>
+                              )}
+                              {sensor.latest_telemetry?.tds_mg_l !== null && sensor.latest_telemetry?.tds_mg_l !== undefined && (
+                                <div>TDS: {Number(sensor.latest_telemetry.tds_mg_l).toFixed(0)} mg/L</div>
+                              )}
+                              {sensor.latest_telemetry?.turbidity_ntu !== null && sensor.latest_telemetry?.turbidity_ntu !== undefined && (
+                                <div>Turbidity: {Number(sensor.latest_telemetry.turbidity_ntu).toFixed(1)} NTU</div>
+                              )}
+                              {sensor.latest_telemetry?.temperature_celsius !== null && sensor.latest_telemetry?.temperature_celsius !== undefined && (
+                                <div>Temp: {Number(sensor.latest_telemetry.temperature_celsius).toFixed(1)}°C</div>
+                              )}
+                              <div className="text-gray-400 mt-1">
+                                Last updated: {sensor.last_seen_at ? new Date(sensor.last_seen_at).toLocaleString() : 'Unknown'}
+                              </div>
+                            </div>
+                          </div>
+                        </Popup>
+                      </Marker>
+                    );
+                  } catch (error) {
+                    console.error('Error rendering marker for sensor:', sensor.id, error);
                     return null;
                   }
                 })}

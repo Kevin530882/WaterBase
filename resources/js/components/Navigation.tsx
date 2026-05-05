@@ -2,7 +2,7 @@ import { Link, useLocation, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger, } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
-import { MapPin, Home, Upload, User, Users, BarChart3, Menu, X, LogOut, ChevronDown, Info, Bell, Award } from "lucide-react";
+import { MapPin, Home, Upload, User, Users, BarChart3, Menu, X, LogOut, ChevronDown, Bell, Award, Shield, ShieldAlert } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { fetchUnreadCount } from "@/services/notificationService";
@@ -23,7 +23,6 @@ const Navigation = () => {
       { href: "/", label: "Home", icon: Home },
       { href: "/map", label: "Live Map", icon: MapPin },
       { href: "/report", label: "Report Pollution", icon: Upload },
-      { href: "/report-pollution-debug", label: "Report Pollution Debug", icon: Info },
     ];
 
     if (!user) return baseItems;
@@ -32,10 +31,12 @@ const Navigation = () => {
     switch (user.role) {
       case 'admin':
         return [
-          { href: "/report-pollution-debug", label: "Report Pollution Debug", icon: Info },
           { href: "/admin/dashboard", label: "Admin Dashboard", icon: BarChart3 },
           { href: "/admin/reports", label: "Admin Reports", icon: Upload },
+          { href: "/admin/users", label: "Admin Users", icon: Users },
+          { href: "/admin/devices", label: "Admin Devices", icon: Shield },
           { href: "/admin/badges", label: "Admin Badges", icon: Award },
+          { href: "/admin/organizations", label: "Organization Approvals", icon: ShieldAlert },
         ];
       case 'ngo':
       case 'lgu':
