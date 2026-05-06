@@ -51,6 +51,8 @@ export const ReportPollution = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitStatus, setSubmitStatus] = useState('idle');
   const [errorMessage, setErrorMessage] = useState('');
+  const [metadataError, setMetadataError] = useState('');
+  const [aiError, setAiError] = useState('');
   // Quick flow verification and location state
   const [verificationStatus, setVerificationStatus] = useState('idle');
   const [showLocationFields, setShowLocationFields] = useState(false);
@@ -132,23 +134,24 @@ export const ReportPollution = () => {
         }));
         setVerificationStatus('success');
         setShowLocationFields(false);
+        setMetadataError('');
         return true;
       } else if (response.ok === true && data.tampered === true && data.gps != null) {
         setVerificationStatus('failed');
         setShowLocationFields(false);
-        setErrorMessage('Error: Image flagged as tampered. Please upload an original, unedited camera photo.');
+        setMetadataError('Error: Image flagged as tampered. Please upload an original, unedited camera photo.');
         return false;
       } else {
         setVerificationStatus('failed');
         setShowLocationFields(true);
-        setErrorMessage('No location metadata found. Please enter location manually.');
+        setMetadataError('No location metadata found. Please enter location manually.');
         return false;
       }
     } catch (error) {
       console.error('Verify image error:', error);
       setVerificationStatus('failed');
       setShowLocationFields(true);
-      setErrorMessage('Failed to verify image metadata. Please enter location manually.');
+      setMetadataError('Failed to verify image metadata. Please enter location manually.');
       return false;
     }
   };
@@ -158,6 +161,9 @@ export const ReportPollution = () => {
     console.log('Selected file:', file);
     if (file) {
       if (file.type.startsWith('image/') && ['image/jpeg', 'image/png', 'image/jpg', 'image/gif'].includes(file.type)) {
+        // Clear only AI-specific errors when starting a new AI run; keep metadata errors intact
+        setMetadataError('');
+        setAiError('');
         setErrorMessage('');
         setWaterDetectedByAI(null);
         setNewReport({ ...newReport, image: file });
@@ -209,7 +215,7 @@ export const ReportPollution = () => {
             setAiScanStatus('error');
             setWaterDetectedByAI(false);
             setFieldsLocked(false);
-            setErrorMessage(waterRequiredMessage);
+            setAiError(waterRequiredMessage);
             return;
           }
 
@@ -249,7 +255,7 @@ export const ReportPollution = () => {
           });
           setAiScanStatus('success');
           setWaterDetectedByAI(true);
-          setErrorMessage('');
+          setAiError('');
 
           // Quick Photo flow: auto-fill and lock only in quick flow
           if (!userStartedDetailedForm) {
@@ -266,6 +272,7 @@ export const ReportPollution = () => {
           console.error('AI verification error:', err);
           setAiScanStatus('error');
           setWaterDetectedByAI(null);
+          setAiError(err instanceof Error ? err.message : String(err));
         }
       } else {
         setErrorMessage('Please select a valid image file (JPEG, PNG, JPG, or GIF).');
@@ -401,7 +408,13 @@ export const ReportPollution = () => {
           headers: Object.fromEntries(response.headers.entries()),
           body: text,
         });
-        throw new Error(`Report submission failed: ${text}`);
+        // Surface full server response to the user instead of throwing a generic error
+        const serverMessage = text && text.length > 0 ? text : `${response.status} ${response.statusText}`;
+        setSubmitStatus('error');
+        setErrorMessage(serverMessage);
+        setIsSubmitting(false);
+        setShowSubmitModal(true);
+        return;
       }
 
       const data = await response.json();
@@ -410,6 +423,9 @@ export const ReportPollution = () => {
 
       if (data.status === 'success') {
         setSubmitStatus('success');
+        setMetadataError('');
+        setAiError('');
+        setErrorMessage('');
         setNewReport({
           title: "",
           content: "",
@@ -767,6 +783,20 @@ const downloadTemplate = () => {
                         </Alert>
                       )}
 
+                      {metadataError && (
+                        <Alert variant="destructive">
+                          <AlertCircle className="h-4 w-4" />
+                          <AlertDescription>{metadataError}</AlertDescription>
+                        </Alert>
+                      )}
+
+                      {aiError && (
+                        <Alert variant="destructive">
+                          <AlertCircle className="h-4 w-4" />
+                          <AlertDescription>{aiError}</AlertDescription>
+                        </Alert>
+                      )}
+
                       {(submitStatus === 'error' || errorMessage) && (
                         <Alert variant="destructive">
                           <AlertCircle className="h-4 w-4" />
@@ -912,11 +942,27 @@ const downloadTemplate = () => {
                 </div>
               )}
 
-              {(verificationStatus === 'failed' || errorMessage) && (
-                <Alert variant="destructive">
-                  <AlertCircle className="h-4 w-4" />
-                  <AlertDescription>{errorMessage}</AlertDescription>
-                </Alert>
+              {(verificationStatus === 'failed' || metadataError || aiError || errorMessage) && (
+                <>
+                  {metadataError && (
+                    <Alert variant="destructive">
+                      <AlertCircle className="h-4 w-4" />
+                      <AlertDescription>{metadataError}</AlertDescription>
+                    </Alert>
+                  )}
+                  {aiError && (
+                    <Alert variant="destructive">
+                      <AlertCircle className="h-4 w-4" />
+                      <AlertDescription>{aiError}</AlertDescription>
+                    </Alert>
+                  )}
+                  {errorMessage && (
+                    <Alert variant="destructive">
+                      <AlertCircle className="h-4 w-4" />
+                      <AlertDescription>{errorMessage}</AlertDescription>
+                    </Alert>
+                  )}
+                </>
               )}
 
               {newReport.image && verificationStatus !== 'verifying' && (
@@ -1094,7 +1140,7 @@ const downloadTemplate = () => {
                       setAiResults(null);
                       setAiScanStatusDetailed('error');
                       setWaterDetectedByAI(false);
-                      setErrorMessage(waterRequiredMessage);
+                      setAiError(waterRequiredMessage);
                       return;
                     }
 
@@ -1109,7 +1155,7 @@ const downloadTemplate = () => {
                     });
                     setAiScanStatusDetailed('success');
                     setWaterDetectedByAI(true);
-                    setErrorMessage('');
+                    setAiError('');
                   } catch (err) {
                     setAiScanStatusDetailed('error');
                     setWaterDetectedByAI(null);
@@ -1129,6 +1175,20 @@ const downloadTemplate = () => {
                   <Loader2 className="w-6 h-6 mx-auto animate-spin text-enviro-600" />
                   <p className="mt-1 text-enviro-700">Scanning image for pollution factors...</p>
                 </div>
+              )}
+
+              {metadataError && (
+                <Alert variant="destructive">
+                  <AlertCircle className="h-4 w-4" />
+                  <AlertDescription>{metadataError}</AlertDescription>
+                </Alert>
+              )}
+
+              {aiError && (
+                <Alert variant="destructive">
+                  <AlertCircle className="h-4 w-4" />
+                  <AlertDescription>{aiError}</AlertDescription>
+                </Alert>
               )}
 
               {errorMessage && (
