@@ -86,10 +86,10 @@ class DetectPollutionController extends Controller
             Log::info('Detailed Report flow - verification result', ['verified' => $verified]);
         }
 
-        return response()->json([
-            'predictions' => $predictions,
-            'ai_verified' => $verified
-        ], 200);
+        // Add ai_verified flag to predictions
+        $predictions['ai_verified'] = $verified;
+        
+        return response()->json($predictions, 200);
     }
 
     
