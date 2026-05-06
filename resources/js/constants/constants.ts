@@ -87,5 +87,13 @@ export const ROUTE = {
         path: "/activity-log",
         name: "Activity Log",
     },
+    TERMS: {
+        path: "/terms",
+        name: "Terms of Service",
+    },
+    PRIVACY: {
+        path: "/privacy",
+        name: "Privacy Policy",
+    },
 
 }

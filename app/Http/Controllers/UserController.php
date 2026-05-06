@@ -10,7 +10,9 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Validation\ValidationException;
+use App\Mail\OrganizationPendingApproval;
 
 class UserController extends Controller
 {
@@ -100,6 +102,15 @@ class UserController extends Controller
                         'user_id' => $user->id,
                         'bounding_box' => $geoResult['bounding_box'],
                     ]);
+                }
+            }
+
+            // Notify organization email that registration is pending approval
+            if ($isOrganizationRole) {
+                try {
+                    Mail::to($user->email)->queue(new OrganizationPendingApproval($user));
+                } catch (\Throwable $e) {
+                    Log::error('Failed to queue organization pending email', ['error' => $e->getMessage(), 'user_id' => $user->id]);
                 }
             }
 

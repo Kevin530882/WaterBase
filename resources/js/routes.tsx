@@ -26,6 +26,8 @@ export const AppRoutes = () => {
                         {/* PUBLIC ROUTES */}
                         <Route path="/" element={<VIEWS.Home />} />
                         <Route path={ROUTE.REGISTER.path} element={<VIEWS.Register />} />
+                        <Route path={ROUTE.TERMS.path} element={<VIEWS.Terms />} />
+                        <Route path={ROUTE.PRIVACY.path} element={<VIEWS.Privacy />} />
                         <Route path={ROUTE.LOGIN.path} element={<VIEWS.Login />} />
                         {/* PRIVATE ROUTES - All with Navigation */}
                         <Route path={ROUTE.MAP.path} element={<ProtectedRoute><VIEWS.MapView /></ProtectedRoute>} />

@@ -27,3 +27,5 @@ export const ResearcherActivityLog = lazy(() => import('./ResearcherActivityLog'
 export const ResearchMap = lazy(() => import('./ResearchMap').then(m => ({ default: m.ResearchMap })));
 export const VolunteerActivityLog = lazy(() => import('./VolunteerActivityLog').then(m => ({ default: m.VolunteerActivityLog })));
 export const VolunteerPortal = lazy(() => import('./VolunteerPortal').then(m => ({ default: m.VolunteerPortal })));
+export const Terms = lazy(() => import('./Terms').then(m => ({ default: m.Terms })));
+export const Privacy = lazy(() => import('./Privacy').then(m => ({ default: m.Privacy })));

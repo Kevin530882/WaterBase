@@ -4,6 +4,13 @@ import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
 
 export default defineConfig({
+    // Ensure dev server binds to IPv4 loopback and HMR uses same host
+    server: {
+        host: '127.0.0.1',
+        hmr: {
+            host: '127.0.0.1',
+        },
+    },
     plugins: [
         laravel({
             input: [

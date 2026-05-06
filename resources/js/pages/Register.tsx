@@ -20,6 +20,14 @@ import { Checkbox } from "@/components/ui/checkbox";
 import Navigation from "@/components/Navigation";
 import { User, Mail, Lock, Phone, MapPin, AlertCircle, UserPlus, Loader2 } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
+import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle,
+} from '@/components/ui/dialog';
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { SearchableSelect } from "@/components/pagecomponents/searchable-select";
 
@@ -46,6 +54,7 @@ export const Register = () => {
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState("");
     const [success, setSuccess] = useState("");
+    const [showPendingModal, setShowPendingModal] = useState(false);
     const navigate = useNavigate();
 
     useEffect(() => {
@@ -168,11 +177,13 @@ export const Register = () => {
 
             if (response.ok) {
                 const isOrg = shouldShowOrganizationFields(formData.role);
-                setSuccess(
-                    isOrg
-                        ? "Account created successfully! Your organization account is pending admin review. You will be notified once approved."
-                        : "Account created successfully! Redirecting to login..."
-                );
+                if (isOrg) {
+                    // Show a modal to clearly tell organization users they must wait for approval
+                    setShowPendingModal(true);
+                } else {
+                    setSuccess("Account created successfully! Redirecting to login...");
+                    setTimeout(() => navigate('/login'), 1000);
+                }
 
                 // Clear the form
                 setFormData({
@@ -188,11 +199,6 @@ export const Register = () => {
                     agreeToTerms: false,
                 });
                 setOrganizationProofFile(null);
-
-                // Redirect to login after 1 second
-                setTimeout(() => {
-                    navigate('/login');
-                }, 1000);
             } else {
                 // Handle validation errors from Laravel
                 if (data.errors) {
@@ -449,19 +455,23 @@ export const Register = () => {
                                 />
                                 <Label htmlFor="terms" className="text-sm">
                                     I agree to the{" "}
-                                    <Link
-                                        to="/terms"
+                                    <a
+                                        href="/terms"
+                                        target="_blank"
+                                        rel="noopener noreferrer"
                                         className="text-waterbase-600 hover:underline"
                                     >
                                         Terms of Service
-                                    </Link>{" "}
+                                    </a>{" "}
                                     and{" "}
-                                    <Link
-                                        to="/privacy"
+                                    <a
+                                        href="/privacy"
+                                        target="_blank"
+                                        rel="noopener noreferrer"
                                         className="text-waterbase-600 hover:underline"
                                     >
                                         Privacy Policy
-                                    </Link>
+                                    </a>
                                 </Label>
                             </div>
 
@@ -496,6 +506,28 @@ export const Register = () => {
                     </CardContent>
                 </Card>
             </div>
+
+            <Dialog open={showPendingModal} onOpenChange={(open) => setShowPendingModal(open)}>
+                <DialogContent className="sm:max-w-lg">
+                    <DialogHeader>
+                        <DialogTitle>Organization Registration Pending</DialogTitle>
+                        <DialogDescription>
+                            Your organization registration has been received and is pending admin review. We will notify you via email once your organization is approved. You may sign in after approval.
+                        </DialogDescription>
+                    </DialogHeader>
+                    <DialogFooter>
+                        <Button
+                            onClick={() => {
+                                setShowPendingModal(false);
+                                navigate('/login');
+                            }}
+                        >
+                            Go to Login
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
         </div>
     );
 };
