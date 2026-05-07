@@ -71,8 +71,8 @@ const createSensorIcon = () => {
     html,
     className: 'custom-sensor-marker',
     iconSize: [32, 32],
-    iconAnchor: [16, 32],
-    popupAnchor: [0, -32],
+    iconAnchor: [16, 16],
+    popupAnchor: [0, -16],
   });
 };
 

@@ -118,6 +118,9 @@ Route::middleware('auth:sanctum')->group(function () {
 
     Route::get('/organizations/{orgId}/join-settings', [OrganizationSocialController::class, 'getJoinSettings']);
     Route::patch('/organizations/{orgId}/join-settings', [OrganizationSocialController::class, 'updateJoinSettings']);
+    Route::get('/organizations/{orgId}/members', [OrganizationSocialController::class, 'organizationMembers']);
+    Route::delete('/organizations/{orgId}/members/me', [OrganizationSocialController::class, 'leaveOrganization']);
+    Route::delete('/organizations/{orgId}/members/{userId}', [OrganizationSocialController::class, 'removeMember']);
 
     Route::post('/organizations/updates', [OrganizationSocialController::class, 'publishUpdate']);
     Route::get('/community/feed', [OrganizationSocialController::class, 'communityFeed']);

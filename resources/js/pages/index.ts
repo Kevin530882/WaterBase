@@ -20,7 +20,6 @@ export const OrganizerActivityLog = lazy(() => import('./OrganizerActivityLog').
 export const OrganizerPortal = lazy(() => import('./OrganizerPortal').then(m => ({ default: m.OrganizerPortal })));
 export const OrganizationProfile = lazy(() => import('./OrganizationProfile').then(m => ({ default: m.OrganizationProfile })));
 export const Profile = lazy(() => import('./Profile').then(m => ({ default: m.Profile })));
-export const ReportPollutionDebug = lazy(() => import('./ReportPollutionDebug').then(m => ({ default: m.ReportPollutionDebug })));
 export const Register = lazy(() => import('./Register').then(m => ({ default: m.Register })));
 export const ReportPollution = lazy(() => import('./ReportPollution').then(m => ({ default: m.ReportPollution })));
 export const ResearcherActivityLog = lazy(() => import('./ResearcherActivityLog').then(m => ({ default: m.ResearcherActivityLog })));

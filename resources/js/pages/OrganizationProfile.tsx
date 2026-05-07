@@ -5,7 +5,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Building, MapPin, Users } from "lucide-react";
+import { Building, MapPin, Users, LogOut } from "lucide-react";
 
 interface OrganizationUpdate {
     id: number;
@@ -114,6 +114,32 @@ export const OrganizationProfile = () => {
         }
     };
 
+    const handleLeaveOrganization = async () => {
+        if (!token || !organizationId || !profile || !profile.is_member || isSubmitting) return;
+
+        if (!confirm('Are you sure you want to leave this organization?')) return;
+
+        try {
+            setIsSubmitting(true);
+            const response = await fetch(`/api/organizations/${organizationId}/members/me`, {
+                method: "DELETE",
+                headers: {
+                    Authorization: `Bearer ${token}`,
+                    Accept: "application/json",
+                },
+            });
+            if (response.ok) {
+                await fetchProfile();
+            } else {
+                console.error("Failed to leave organization");
+            }
+        } catch (error) {
+            console.error("Failed to leave organization:", error);
+        } finally {
+            setIsSubmitting(false);
+        }
+    };
+
     if (!organizationId) {
         return (
             <div className="min-h-screen bg-gradient-to-br from-waterbase-50 to-enviro-50">
@@ -175,13 +201,25 @@ export const OrganizationProfile = () => {
                                     >
                                         {profile.is_following ? "Following" : "Follow"}
                                     </Button>
-                                    <Button
-                                        className="bg-enviro-500 hover:bg-enviro-600"
-                                        onClick={handleJoinRequest}
-                                        disabled={isSubmitting || profile.is_member}
-                                    >
-                                        {profile.is_member ? "Member" : "Request to Join"}
-                                    </Button>
+                                    {profile.is_member ? (
+                                        <Button
+                                            variant="outline"
+                                            className="text-red-600 hover:text-red-700 border-red-200 hover:bg-red-50"
+                                            onClick={handleLeaveOrganization}
+                                            disabled={isSubmitting}
+                                        >
+                                            <LogOut className="w-4 h-4 mr-2" />
+                                            Leave Organization
+                                        </Button>
+                                    ) : (
+                                        <Button
+                                            className="bg-enviro-500 hover:bg-enviro-600"
+                                            onClick={handleJoinRequest}
+                                            disabled={isSubmitting}
+                                        >
+                                            {profile.join_request?.status === "pending" ? "Request Pending" : "Request to Join"}
+                                        </Button>
+                                    )}
                                 </div>
                             </CardContent>
                         </Card>

@@ -105,13 +105,6 @@ export const AppRoutes = () => {
                                 </RoleGuard>
                             </ProtectedRoute>
                         } />
-                        <Route path={ROUTE.REPORT_POLLUTION_DEBUG.path} element={
-                            <ProtectedRoute>
-                                <RoleGuard roles={['admin']}>
-                                    <VIEWS.ReportPollutionDebug />
-                                </RoleGuard>
-                            </ProtectedRoute>
-                        } />
                         <Route path={ROUTE.PROFILE.path} element={<ProtectedRoute><VIEWS.Profile /></ProtectedRoute>} />
                         <Route path={ROUTE.ACTIVITY_LOG.path} element={<ProtectedRoute><VIEWS.ActivityLogRouter /></ProtectedRoute>} />
                         <Route path={ROUTE.ORGANIZATION_PROFILE.path} element={<ProtectedRoute><VIEWS.OrganizationProfile /></ProtectedRoute>} />

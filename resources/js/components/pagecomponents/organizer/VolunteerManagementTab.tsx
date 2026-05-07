@@ -25,6 +25,7 @@ import {
     Trophy,
     Star,
     RefreshCw,
+    LogOut,
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { cn } from "@/lib/utils";
@@ -61,7 +62,20 @@ export const VolunteerManagementTab = () => {
     const [volunteers, setVolunteers] = useState<Volunteer[]>([]);
     const [stats, setStats] = useState<VolunteerStats | null>(null);
     const [isLoading, setIsLoading] = useState(true);
-    const [error, setError] = useState(""); const fetchVolunteers = async () => {
+    const [error, setError] = useState("");
+    const [orgMembers, setOrgMembers] = useState<Array<{
+        id: number;
+        firstName: string;
+        lastName: string;
+        email: string;
+        profile_photo?: string;
+        role: string;
+        joined_at: string;
+        joined_via: string;
+    }>>([]);
+    const [isLoadingMembers, setIsLoadingMembers] = useState(false);
+    const [membersError, setMembersError] = useState("");
+    const [isRemovingMember, setIsRemovingMember] = useState<number | null>(null); const fetchVolunteers = async () => {
         if (!token || !user?.id) {
             setError("User not authenticated");
             setIsLoading(false);
@@ -217,8 +231,64 @@ export const VolunteerManagementTab = () => {
     const filteredVolunteers = volunteers
         .sort((a, b) => new Date(b.joinDate).getTime() - new Date(a.joinDate).getTime()); // Sort latest to oldest
 
+    const fetchOrgMembers = async () => {
+        if (!token || !user?.id) {
+            setMembersError("User not authenticated");
+            return;
+        }
+        try {
+            setIsLoadingMembers(true);
+            setMembersError("");
+            const response = await fetch(`/api/organizations/${user.id}/members`, {
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Accept': 'application/json',
+                },
+            });
+            if (response.ok) {
+                const data = await response.json();
+                setOrgMembers(data.data || []);
+            } else {
+                const text = await response.text();
+                console.error('Failed to fetch org members:', response.status, text);
+                setMembersError(`Failed to fetch members (${response.status}).`);
+            }
+        } catch (err: any) {
+            console.error('Error fetching org members:', err);
+            setMembersError('Network error loading members.');
+        } finally {
+            setIsLoadingMembers(false);
+        }
+    };
+
+    const handleRemoveMember = async (memberId: number) => {
+        if (!token || !user?.id || isRemovingMember !== null) return;
+        if (!confirm('Are you sure you want to remove this member from your organization?')) return;
+        try {
+            setIsRemovingMember(memberId);
+            const response = await fetch(`/api/organizations/${user.id}/members/${memberId}`, {
+                method: 'DELETE',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Accept': 'application/json',
+                },
+            });
+            if (response.ok) {
+                setOrgMembers((prev) => prev.filter((m) => m.id !== memberId));
+            } else {
+                const data = await response.json().catch(() => ({}));
+                alert(data.message || 'Failed to remove member');
+            }
+        } catch (err: any) {
+            alert(err.message || 'Failed to remove member');
+        } finally {
+            setIsRemovingMember(null);
+        }
+    };
+
     useEffect(() => {
         fetchVolunteers();
+        fetchOrgMembers();
     }, [token, user?.id]);
 
     if (isLoading) {
@@ -305,6 +375,87 @@ export const VolunteerManagementTab = () => {
                     </CardContent>
                 </Card>
             </div>
+
+            {/* Organization Members */}
+            <Card className="border-waterbase-200">
+                <CardHeader>
+                    <div className="flex items-center justify-between">
+                        <div>
+                            <CardTitle>Organization Members</CardTitle>
+                            <CardDescription>Members who have joined your organization</CardDescription>
+                        </div>
+                        <Button variant="outline" size="sm" onClick={fetchOrgMembers} disabled={isLoadingMembers}>
+                            <RefreshCw className={cn("w-4 h-4 mr-2", isLoadingMembers && "animate-spin")} />
+                            Refresh
+                        </Button>
+                    </div>
+                </CardHeader>
+                <CardContent>
+                    {membersError && (
+                        <Alert className="mb-4">
+                            <AlertCircle className="h-4 w-4" />
+                            <AlertDescription>{membersError}</AlertDescription>
+                        </Alert>
+                    )}
+                    <div className="overflow-x-auto">
+                        <Table>
+                            <TableHeader>
+                                <TableRow>
+                                    <TableHead>Member</TableHead>
+                                    <TableHead>Role</TableHead>
+                                    <TableHead>Joined</TableHead>
+                                    <TableHead>Via</TableHead>
+                                    <TableHead>Actions</TableHead>
+                                </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                                {isLoadingMembers ? (
+                                    <TableRow>
+                                        <TableCell colSpan={5} className="text-center py-8 text-gray-500">Loading members...</TableCell>
+                                    </TableRow>
+                                ) : orgMembers.map((member) => (
+                                    <TableRow key={member.id}>
+                                        <TableCell>
+                                            <div>
+                                                <div className="font-medium">{member.firstName} {member.lastName}</div>
+                                                <div className="text-sm text-gray-600">{member.email}</div>
+                                            </div>
+                                        </TableCell>
+                                        <TableCell>
+                                            <Badge variant="outline" className="text-xs">{member.role}</Badge>
+                                        </TableCell>
+                                        <TableCell>
+                                            <div className="text-sm">{member.joined_at ? new Date(member.joined_at).toLocaleDateString() : '-'}</div>
+                                        </TableCell>
+                                        <TableCell>
+                                            <div className="text-sm capitalize">{member.joined_via || 'manual'}</div>
+                                        </TableCell>
+                                        <TableCell>
+                                            <Button
+                                                variant="outline"
+                                                size="sm"
+                                                className="text-red-600 hover:text-red-700 border-red-200 hover:bg-red-50"
+                                                onClick={() => handleRemoveMember(member.id)}
+                                                disabled={isRemovingMember === member.id}
+                                            >
+                                                <LogOut className="w-3 h-3 mr-1" />
+                                                {isRemovingMember === member.id ? 'Removing...' : 'Remove'}
+                                            </Button>
+                                        </TableCell>
+                                    </TableRow>
+                                ))}
+                            </TableBody>
+                        </Table>
+                    </div>
+                    {orgMembers.length === 0 && !isLoadingMembers && (
+                        <div className="text-center py-8 text-gray-500">
+                            <Users className="w-12 h-12 mx-auto mb-4 text-gray-400" />
+                            <p>No members found</p>
+                            <p className="text-sm">Members will appear here once they join your organization.</p>
+                        </div>
+                    )}
+                </CardContent>
+            </Card>
 
             {/* Volunteer Directory */}
             <Card className="border-waterbase-200">

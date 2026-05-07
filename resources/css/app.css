@@ -134,19 +134,10 @@ body {
   border: none !important;
 }
 
-.custom-droplet-marker div {
-  transform: translate(-50%, -100%);
-}
-
 .custom-status-marker,
 .custom-sensor-marker {
   background: transparent !important;
   border: none !important;
-}
-
-.custom-status-marker div,
-.custom-sensor-marker div {
-  transform: translate(-50%, -100%);
 }
 
 

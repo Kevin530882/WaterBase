@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/button";
 import {
     Card,
     CardContent,
+    CardDescription,
     CardHeader,
     CardTitle,
 } from "@/components/ui/card";
@@ -48,9 +49,13 @@ import {
     CheckCircle,
     XCircle,
     Clock,
+    AlertCircle,
+    Loader2
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { format, parseISO } from 'date-fns';
+import { Switch } from "@/components/ui/switch";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 
 export const AdminReports = () => {
     const [reports, setReports] = useState([]);
@@ -63,7 +68,22 @@ export const AdminReports = () => {
     const [selectedReport, setSelectedReport] = useState(null);
     const [showReportDialog, setShowReportDialog] = useState(false);
     const [showAdvancedFilters, setShowAdvancedFilters] = useState(false);
+    const [csvFile, setCsvFile] = useState<File | null>(null);
+    const [csvUploading, setCsvUploading] = useState(false);
+    const [csvResult, setCsvResult] = useState<{
+        imported: number;
+        errors: Array<{ row: number; field: string; message: string }>;
+        total_rows: number;
+        auto_approved: boolean;
+    } | null>(null);
+    const [showDebugControls, setShowDebugControls] = useState(false);
+    const [debugSkipMetadata, setDebugSkipMetadata] = useState(() => localStorage.getItem('debug_skip_metadata') === 'true');
+    const [debugSkipWater, setDebugSkipWater] = useState(() => localStorage.getItem('debug_skip_water') === 'true');
+    const [debugSkipValidation, setDebugSkipValidation] = useState(() => localStorage.getItem('debug_skip_validation') === 'true');
 
+    const updateDebugFlag = (key: string, value: boolean) => {
+        localStorage.setItem(key, String(value));
+    };
 
     const [advancedFilters, setAdvancedFilters] = useState({
         severityByUser: 'all',
@@ -101,7 +121,8 @@ export const AdminReports = () => {
             });
             if (!response.ok) throw new Error('Failed to fetch reports');
             const data = await response.json();
-            setReports(data.data);
+            const reportsArray = Array.isArray(data) ? data : data.data || [];
+            setReports(reportsArray.filter(r => typeof r === 'object' && r !== null).map(r => ({ ...r, user: r.user || null, verified_by: r.verified_by || null })));
             setTotalPages(data.last_page);
         } catch (error) {
             console.error('Error fetching reports:', error);
@@ -132,6 +153,64 @@ export const AdminReports = () => {
     useEffect(() => {
         fetchStats();
     }, [filterStatus, filterType, searchQuery, advancedFilters]);
+
+    const downloadTemplate = () => {
+        const headers = 'title,content,address,latitude,longitude,pollutionType,severityByUser,water_body_name,temperature_celsius,ph_level,turbidity_ntu,total_dissolved_solids_mgl,sampling_date';
+        const sampleRow = 'Pasig River Sample,Observed murky water near bridge,Pasig Blvd Barangay Pineda,14.5995,121.0008,Industrial Waste,medium,Pasig River,29.5,6.8,25.3,180.5,2024-01-15';
+        const csvContent = `${headers}\n${sampleRow}`;
+        const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.setAttribute('download', 'waterbase_report_template.csv');
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+        URL.revokeObjectURL(url);
+    };
+
+    const handleCsvUpload = async () => {
+        if (!csvFile) return;
+        setCsvUploading(true);
+        setCsvResult(null);
+
+        try {
+            const formData = new FormData();
+            formData.append('csv_file', csvFile);
+
+            const response = await fetch('/api/reports/bulk-upload', {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${localStorage.getItem('auth_token')}`,
+                },
+                body: formData,
+            });
+
+            const data = await response.json();
+
+            if (!response.ok) {
+                setCsvResult({
+                    imported: data.imported || 0,
+                    errors: data.errors || [],
+                    total_rows: data.total_rows || 0,
+                    auto_approved: false,
+                });
+            } else {
+                setCsvResult({
+                    imported: data.imported,
+                    errors: [],
+                    total_rows: data.total_rows,
+                    auto_approved: data.auto_approved || false,
+                });
+                fetchReports(currentPage);
+                fetchStats();
+            }
+        } catch (error) {
+            console.error('CSV upload error:', error);
+        } finally {
+            setCsvUploading(false);
+        }
+    };
 
     const getStatusColor = (status) => {
         switch (status.toLowerCase()) {
@@ -167,6 +246,120 @@ export const AdminReports = () => {
                         </div>
                     </div>
                 </div>
+
+                {/* Debug Controls */}
+                <Card className="border-amber-200 bg-amber-50/70 mb-6">
+                    <CardHeader className="pb-3">
+                        <div className="flex items-center justify-between">
+                            <div>
+                                <CardTitle className="text-lg text-waterbase-950">Debug Controls</CardTitle>
+                                <CardDescription className="text-waterbase-700">
+                                    These toggles let you bypass client-side checks when submitting reports. Stored in localStorage.
+                                </CardDescription>
+                            </div>
+                            <Button variant="outline" size="sm" onClick={() => setShowDebugControls(!showDebugControls)}>
+                                {showDebugControls ? 'Hide' : 'Show'}
+                            </Button>
+                        </div>
+                    </CardHeader>
+                    {showDebugControls && (
+                        <CardContent className="space-y-4 pt-0">
+                            <div className="flex items-center justify-between gap-4">
+                                <div>
+                                    <p className="text-sm font-medium text-waterbase-950">Disable Metadata Check</p>
+                                    <p className="text-xs text-waterbase-700">Skip image metadata verification on report submission.</p>
+                                </div>
+                                <Switch
+                                    checked={debugSkipMetadata}
+                                    onCheckedChange={(checked) => { setDebugSkipMetadata(checked); updateDebugFlag('debug_skip_metadata', checked); }}
+                                />
+                            </div>
+                            <div className="flex items-center justify-between gap-4">
+                                <div>
+                                    <p className="text-sm font-medium text-waterbase-950">Disable Water Check</p>
+                                    <p className="text-xs text-waterbase-700">Allow submission even when AI does not detect water.</p>
+                                </div>
+                                <Switch
+                                    checked={debugSkipWater}
+                                    onCheckedChange={(checked) => { setDebugSkipWater(checked); updateDebugFlag('debug_skip_water', checked); }}
+                                />
+                            </div>
+                            <div className="flex items-center justify-between gap-4">
+                                <div>
+                                    <p className="text-sm font-medium text-waterbase-950">Disable Other Form Validations</p>
+                                    <p className="text-xs text-waterbase-700">Bypass file type, required fields, and coordinate validations.</p>
+                                </div>
+                                <Switch
+                                    checked={debugSkipValidation}
+                                    onCheckedChange={(checked) => { setDebugSkipValidation(checked); updateDebugFlag('debug_skip_validation', checked); }}
+                                />
+                            </div>
+                        </CardContent>
+                    )}
+                </Card>
+
+                {/* CSV Bulk Upload */}
+                <Card className="border-waterbase-200 mb-6">
+                    <CardHeader className="pb-3">
+                        <CardTitle className="flex items-center text-lg">
+                            <FileText className="w-4 h-4 mr-2" />
+                            Bulk Import CSV
+                        </CardTitle>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                        <Button variant="outline" onClick={downloadTemplate} size="sm">
+                            <Download className="w-4 h-4 mr-2" />
+                            Download CSV Template
+                        </Button>
+                        <div className="border-2 border-dashed border-gray-300 rounded-lg p-4 text-center">
+                            <input
+                                type="file"
+                                accept=".csv"
+                                onChange={(e) => {
+                                    const file = e.target.files?.[0];
+                                    if (file) {
+                                        setCsvFile(file);
+                                        setCsvResult(null);
+                                    }
+                                }}
+                                className="w-full text-sm"
+                            />
+                            {csvFile && <p className="text-xs text-gray-600 mt-2">Selected: {csvFile.name}</p>}
+                        </div>
+                        <Button
+                            onClick={handleCsvUpload}
+                            disabled={!csvFile || csvUploading}
+                            size="sm"
+                            className="bg-waterbase-500 hover:bg-waterbase-600"
+                        >
+                            {csvUploading ? (
+                                <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Uploading...</>
+                            ) : (
+                                <><Upload className="w-4 h-4 mr-2" /> Upload CSV</>
+                            )}
+                        </Button>
+                        {csvResult && (
+                            <Alert className={csvResult.errors.length > 0 ? 'border-yellow-200 bg-yellow-50' : 'border-green-200 bg-green-50'}>
+                                {csvResult.errors.length === 0 ? (
+                                    <>
+                                        <CheckCircle className="h-4 w-4 text-green-600" />
+                                        <AlertDescription className="text-green-700">
+                                            Successfully imported {csvResult.imported} of {csvResult.total_rows} rows.
+                                            {csvResult.auto_approved && ' Reports were auto-verified.'}
+                                        </AlertDescription>
+                                    </>
+                                ) : (
+                                    <>
+                                        <AlertCircle className="h-4 w-4 text-yellow-600" />
+                                        <AlertDescription className="text-yellow-700">
+                                            Imported {csvResult.imported} rows with {csvResult.errors.length} errors.
+                                        </AlertDescription>
+                                    </>
+                                )}
+                            </Alert>
+                        )}
+                    </CardContent>
+                </Card>
 
                 {/* Stats Cards */}
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">

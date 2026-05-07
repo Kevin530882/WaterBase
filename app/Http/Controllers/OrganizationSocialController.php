@@ -598,6 +598,103 @@ class OrganizationSocialController extends Controller
         return response()->json($updates);
     }
 
+    public function organizationMembers(Request $request, int $orgId)
+    {
+        $user = $request->user();
+        $organization = $this->findOrganizationOrFail($orgId);
+
+        if (!$organization) {
+            return response()->json(['message' => 'Organization not found'], 404);
+        }
+
+        if (!$this->canModerateOrganization($user, $organization)) {
+            return response()->json(['message' => 'Unauthorized'], 403);
+        }
+
+        $members = OrganizationMembership::query()
+            ->with(['user:id,firstName,lastName,email,profile_photo,role'])
+            ->where('organization_user_id', $organization->id)
+            ->orderByDesc('joined_at')
+            ->get()
+            ->map(function ($membership) {
+                return [
+                    'id' => $membership->user->id,
+                    'firstName' => $membership->user->firstName,
+                    'lastName' => $membership->user->lastName,
+                    'email' => $membership->user->email,
+                    'profile_photo' => $membership->user->profile_photo,
+                    'role' => $membership->user->role,
+                    'joined_at' => $membership->joined_at,
+                    'joined_via' => $membership->joined_via,
+                ];
+            });
+
+        return response()->json([
+            'data' => $members,
+        ]);
+    }
+
+    public function leaveOrganization(Request $request, int $orgId)
+    {
+        $user = $request->user();
+        $organization = $this->findOrganizationOrFail($orgId);
+
+        if (!$organization) {
+            return response()->json(['message' => 'Organization not found'], 404);
+        }
+
+        $membership = OrganizationMembership::query()
+            ->where('user_id', $user->id)
+            ->where('organization_user_id', $organization->id)
+            ->first();
+
+        if (!$membership) {
+            return response()->json(['message' => 'You are not a member of this organization'], 404);
+        }
+
+        $membership->delete();
+
+        return response()->json([
+            'message' => 'You have left the organization',
+            'organization_id' => $organization->id,
+        ]);
+    }
+
+    public function removeMember(Request $request, int $orgId, int $userId)
+    {
+        $user = $request->user();
+        $organization = $this->findOrganizationOrFail($orgId);
+
+        if (!$organization) {
+            return response()->json(['message' => 'Organization not found'], 404);
+        }
+
+        if (!$this->canModerateOrganization($user, $organization)) {
+            return response()->json(['message' => 'Unauthorized'], 403);
+        }
+
+        if ((int) $userId === (int) $organization->id) {
+            return response()->json(['message' => 'Cannot remove the organization owner'], 422);
+        }
+
+        $membership = OrganizationMembership::query()
+            ->where('user_id', $userId)
+            ->where('organization_user_id', $organization->id)
+            ->first();
+
+        if (!$membership) {
+            return response()->json(['message' => 'Member not found'], 404);
+        }
+
+        $membership->delete();
+
+        return response()->json([
+            'message' => 'Member removed successfully',
+            'organization_id' => $organization->id,
+            'user_id' => $userId,
+        ]);
+    }
+
     private function findOrganizationOrFail(int $orgId): ?User
     {
         return User::query()

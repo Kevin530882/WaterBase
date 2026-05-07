@@ -51,8 +51,8 @@ const createStatusIcon = (color: string) => {
     html,
     className: 'custom-status-marker',
     iconSize: [24, 24],
-    iconAnchor: [12, 24],
-    popupAnchor: [0, -24],
+    iconAnchor: [12, 12],
+    popupAnchor: [0, -12],
   });
 };
 
