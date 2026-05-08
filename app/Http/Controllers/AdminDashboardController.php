@@ -10,8 +10,11 @@ use Illuminate\Http\Request;
 use App\Services\GeographicService;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Validation\ValidationException;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
+use App\Mail\OrganizationApproved;
+use App\Mail\OrganizationRejected;
 use App\Services\NotificationService;
 
 class AdminDashboardController extends Controller
@@ -425,6 +428,15 @@ class AdminDashboardController extends Controller
 
         $this->notificationService->notifyOrganizationApproved($user, $request->user());
 
+        try {
+            Mail::to($user->email)->queue(new OrganizationApproved($user));
+        } catch (\Throwable $e) {
+            Log::error('Failed to queue organization approved email', [
+                'error' => $e->getMessage(),
+                'user_id' => $user->id,
+            ]);
+        }
+
         return response()->json([
             'message' => 'Organization approved successfully',
             'user' => $user->fresh('approvedBy:id,firstName,lastName'),
@@ -452,6 +464,17 @@ class AdminDashboardController extends Controller
         $user->save();
 
         $this->notificationService->notifyOrganizationRejected($user, $validated['notes'] ?? null, $request->user());
+
+        try {
+            Mail::to($user->email)->queue(new OrganizationRejected($user, $validated['notes'] ?? null));
+        } catch (\Throwable $e) {
+            Log::error('Failed to queue organization rejected email', [
+                'error' => $e->getMessage(),
+                'user_id' => $user->id,
+            ]);
+        }
+
+        $user->tokens()->delete();
 
         return response()->json([
             'message' => 'Organization rejected successfully',

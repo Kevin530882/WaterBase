@@ -55,8 +55,29 @@ class ReportController extends Controller
 
             // Use geographic filtering if bounding box data is available
             if ($this->hasGeographicBounds($user)) {
-                $query = $this->filterByGeographicBounds($query, $user);
-                Log::info('Using geographic bounds filtering');
+                $locationParts = $this->extractLocationParts($user->areaOfResponsibility);
+
+                $query->where(function ($q) use ($user, $locationParts) {
+                    // Match reports whose coordinates fall within the org's bounding box
+                    $q->where(function ($subQ) use ($user) {
+                        $subQ->where('latitude', '>=', $user->bbox_south)
+                            ->where('latitude', '<=', $user->bbox_north)
+                            ->where('longitude', '>=', $user->bbox_west)
+                            ->where('longitude', '<=', $user->bbox_east);
+                    });
+
+                    // OR match reports whose address contains the area name
+                    // (covers reports with missing/invalid coordinates or address-only matches)
+                    if (!empty($locationParts)) {
+                        $q->orWhere(function ($subQ) use ($locationParts) {
+                            foreach ($locationParts as $part) {
+                                $subQ->orWhereRaw('UPPER(address) LIKE ?', ['%' . $part . '%']);
+                            }
+                        });
+                    }
+                });
+
+                Log::info('Using combined geographic and text-based area filtering');
             } else {
                 // Fallback to text-based filtering
                 $query = $this->filterByAreaOfResponsibility($query, $user->areaOfResponsibility);
@@ -649,8 +670,28 @@ class ReportController extends Controller
         if ($user->areaOfResponsibility && $user->role !== 'admin') {
             // Use geographic filtering if bounding box data is available
             if ($this->hasGeographicBounds($user)) {
-                $query = $this->filterByGeographicBounds($query, $user);
-                Log::info('getReportsByArea: Using geographic bounds filtering');
+                $locationParts = $this->extractLocationParts($user->areaOfResponsibility);
+
+                $query->where(function ($q) use ($user, $locationParts) {
+                    // Match reports whose coordinates fall within the org's bounding box
+                    $q->where(function ($subQ) use ($user) {
+                        $subQ->where('latitude', '>=', $user->bbox_south)
+                            ->where('latitude', '<=', $user->bbox_north)
+                            ->where('longitude', '>=', $user->bbox_west)
+                            ->where('longitude', '<=', $user->bbox_east);
+                    });
+
+                    // OR match reports whose address contains the area name
+                    if (!empty($locationParts)) {
+                        $q->orWhere(function ($subQ) use ($locationParts) {
+                            foreach ($locationParts as $part) {
+                                $subQ->orWhereRaw('UPPER(address) LIKE ?', ['%' . $part . '%']);
+                            }
+                        });
+                    }
+                });
+
+                Log::info('getReportsByArea: Using combined geographic and text-based area filtering');
             } else {
                 // Fallback to text-based filtering
                 $userArea = $user->areaOfResponsibility;
@@ -744,16 +785,31 @@ class ReportController extends Controller
     }
 
     /**
-     * Enhanced method to get organizations that should see a specific report
+     * Enhanced method to get organizations that should see a specific report.
+     * Accepts either an address string or lat/long coordinates.
      */
     public function getOrganizationsForReport(Request $request)
     {
         try {
             $validated = $request->validate([
-                'address' => 'required|string|max:500'
+                'address' => 'nullable|string|max:500',
+                'latitude' => 'nullable|numeric|between:-90,90',
+                'longitude' => 'nullable|numeric|between:-180,180',
             ]);
 
-            $result = $this->geographicService->findOrgsForReport($validated['address']);
+            if (!empty($validated['address'])) {
+                $result = $this->geographicService->findOrgsForReport($validated['address']);
+            } elseif (isset($validated['latitude']) && isset($validated['longitude'])) {
+                $result = $this->geographicService->findOrgsForReportByCoordinates(
+                    (float) $validated['latitude'],
+                    (float) $validated['longitude']
+                );
+            } else {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Either address or latitude and longitude are required'
+                ], 422);
+            }
 
             return response()->json($result);
 
@@ -777,30 +833,20 @@ class ReportController extends Controller
     }
 
     /**
-     * Filter reports based on user's area of responsibility
+     * Extract location parts from an area of responsibility string for text-based matching.
      */
-    private function filterByAreaOfResponsibility($query, $areaOfResponsibility)
+    private function extractLocationParts(string $areaOfResponsibility): array
     {
-        // Parse the area of responsibility and extract meaningful location parts
         $areaOfResponsibility = strtoupper(trim($areaOfResponsibility));
 
-        Log::info('Area filtering details', [
-            'original_area' => $areaOfResponsibility
-        ]);
-
-        // Extract key location identifiers from the area of responsibility
         $locationParts = [];
-
-        // Split by common delimiters
         $parts = preg_split('/[,\-]+/', $areaOfResponsibility);
 
         foreach ($parts as $part) {
             $part = trim($part);
             if (!empty($part)) {
-                // Add the full part
                 $locationParts[] = $part;
 
-                // Also add individual words from the part (for cases like "METRO MANILA")
                 $words = explode(' ', $part);
                 foreach ($words as $word) {
                     $word = trim($word);
@@ -811,8 +857,19 @@ class ReportController extends Controller
             }
         }
 
-        // Remove duplicates and empty values
-        $locationParts = array_unique(array_filter($locationParts));
+        return array_unique(array_filter($locationParts));
+    }
+
+    /**
+     * Filter reports based on user's area of responsibility
+     */
+    private function filterByAreaOfResponsibility($query, $areaOfResponsibility)
+    {
+        Log::info('Area filtering details', [
+            'original_area' => $areaOfResponsibility
+        ]);
+
+        $locationParts = $this->extractLocationParts($areaOfResponsibility);
 
         Log::info('Extracted location parts for filtering', [
             'location_parts' => $locationParts

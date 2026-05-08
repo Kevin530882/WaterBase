@@ -196,6 +196,19 @@ class GeographicService {
             })
         });
     }
+
+    /**
+     * Get organizations for a specific report by its GPS coordinates (via reports endpoint)
+     */
+    async getOrganizationsForReportByCoordinates(latitude: number, longitude: number): Promise<ApiResponse> {
+        return this.makeRequest('/reports/organizations', {
+            method: 'POST',
+            body: JSON.stringify({
+                latitude,
+                longitude
+            })
+        });
+    }
 }
 
 // Utility functions for geographic calculations

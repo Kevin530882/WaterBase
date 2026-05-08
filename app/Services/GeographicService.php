@@ -252,6 +252,63 @@ class GeographicService
     }
 
     /**
+     * Find organizations that should receive a report based on the report's coordinates.
+     * Uses the actual GPS lat/long instead of geocoding an address.
+     *
+     * @param float $lat Report latitude
+     * @param float $lon Report longitude
+     * @return array Result with matching organizations
+     */
+    public function findOrgsForReportByCoordinates(float $lat, float $lon): array
+    {
+        try {
+            if ($lat < -90 || $lat > 90 || $lon < -180 || $lon > 180) {
+                Log::warning('Invalid coordinates provided', ['lat' => $lat, 'lon' => $lon]);
+                return [
+                    'success' => false,
+                    'error' => 'Invalid coordinate values'
+                ];
+            }
+
+            $matchingOrgs = User::select('id', 'organization', 'areaOfResponsibility', 'firstName', 'lastName', 'email')
+                ->whereNotNull('bbox_south')
+                ->whereNotNull('bbox_north')
+                ->whereNotNull('bbox_west')
+                ->whereNotNull('bbox_east')
+                ->where('bbox_south', '<=', $lat)
+                ->where('bbox_north', '>=', $lat)
+                ->where('bbox_west', '<=', $lon)
+                ->where('bbox_east', '>=', $lon)
+                ->get();
+
+            Log::info('Found matching organizations for report by coordinates', [
+                'coordinates' => compact('lat', 'lon'),
+                'matching_count' => $matchingOrgs->count(),
+                'org_ids' => $matchingOrgs->pluck('id')->toArray()
+            ]);
+
+            return [
+                'success' => true,
+                'coordinates' => compact('lat', 'lon'),
+                'organizations' => $matchingOrgs->toArray()
+            ];
+
+        } catch (\Exception $e) {
+            Log::error('Error in findOrgsForReportByCoordinates', [
+                'lat' => $lat,
+                'lon' => $lon,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString()
+            ]);
+
+            return [
+                'success' => false,
+                'error' => 'An unexpected error occurred while finding organizations'
+            ];
+        }
+    }
+
+    /**
      * Get all organizations with their geographic boundaries
      *
      * @return array List of organizations with their areas and bounding boxes
