@@ -345,17 +345,18 @@ export function generateSummaryReport(wbsi: number, consensus: number, nReports:
   recommendation: string;
   nextSteps: string[];
 } {
-  const interpretation = getWBSIInterpretation(wbsi, consensus, nReports);
-  const matchingScenarios = findMatchingScenarios(wbsi, consensus);
-  
+  const safeWBSI = wbsi ?? 0;
+  const interpretation = getWBSIInterpretation(safeWBSI, consensus, nReports);
+  const matchingScenarios = findMatchingScenarios(safeWBSI, consensus);
+
   return {
-    overall: `Water pollution severity assessed at ${wbsi.toFixed(1)}% (${interpretation.level}). ${interpretation.description}`,
+    overall: `Water pollution severity assessed at ${safeWBSI.toFixed(1)}% (${interpretation.level}). ${interpretation.description}`,
     
     reliability: `Assessment reliability is ${getReliabilityLevel(consensus, nReports)} based on ${nReports} community reports with ${(consensus * 100).toFixed(1)}% consensus.`,
     
     recommendation: `${interpretation.actionPriority} - ${interpretation.timeframe}. ${matchingScenarios[0]?.actionRecommendation || 'Follow standard protocols for this pollution level.'}`,
-    
-    nextSteps: generateNextSteps(wbsi, consensus, nReports, outliers, isPolymodal)
+
+    nextSteps: generateNextSteps(safeWBSI, consensus, nReports, outliers, isPolymodal)
   };
 }
 

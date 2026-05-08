@@ -206,9 +206,13 @@ export const MapView = () => {
 
   // Use backend-generated area WBSI/KDE data instead of broad client-side radius lookup.
   useEffect(() => {
+    console.log('useEffect wbsiData - selectedArea:', selectedArea);
+    console.log('selectedArea?.distribution:', selectedArea?.distribution);
     if (selectedArea?.distribution) {
+      console.log('Setting wbsiData to:', selectedArea.distribution);
       setWbsiData(selectedArea.distribution);
     } else {
+      console.log('Clearing wbsiData');
       setWbsiData(null);
     }
   }, [selectedArea]);
@@ -477,6 +481,31 @@ export const MapView = () => {
       </div>
     );
   }
+
+// Wrapper component to catch chart errors
+const SeverityDistributionChartWrapper = ({ chartData, locationName }: { chartData: any; locationName?: string }) => {
+  try {
+    console.log('Rendering chart with data:', chartData);
+    return <SeverityDistributionChart chartData={chartData} locationName={locationName} />;
+  } catch (error) {
+    console.error('Error rendering SeverityDistributionChart:', error);
+    return (
+      <Card className="w-full">
+        <CardHeader>
+          <CardTitle className="text-sm font-semibold text-red-600">Chart Error</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <p className="text-xs text-gray-600">
+            Failed to render pollution analysis chart. Check console for details.
+          </p>
+          <p className="text-xs text-red-500 mt-1">
+            Error: {error instanceof Error ? error.message : 'Unknown error'}
+          </p>
+        </CardContent>
+      </Card>
+    );
+  }
+};
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -764,6 +793,9 @@ export const MapView = () => {
                         icon={createAreaIcon(area)}
                         eventHandlers={{
                           click: () => {
+                            console.log('Clicked WBSI area:', area);
+                            console.log('Area has distribution:', !!area.distribution);
+                            console.log('Area reports:', area.reports);
                             setSelectedArea(area);
                             setSelectedReport(area.reports?.[0] || null);
                           },
@@ -1001,10 +1033,10 @@ export const MapView = () => {
                 {/* Moved Pollution Analysis here to prevent sidebar overflow */}
                 {wbsiData && (
                       <div className="mt-4 border-t border-gray-200 pt-4">
-                        <SeverityDistributionChart 
-                      chartData={wbsiData} 
-                      locationName={selectedArea?.display_name || selectedReport?.address}
-                    />
+                        <SeverityDistributionChartWrapper
+                          chartData={wbsiData}
+                          locationName={selectedArea?.display_name || selectedReport?.address}
+                        />
                   </div>
                 )}
               </div>

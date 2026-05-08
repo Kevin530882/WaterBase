@@ -54,13 +54,32 @@ export const SeverityDistributionChart: React.FC<SeverityDistributionChartProps>
   className,
   locationName
 }) => {
+  console.log('SeverityDistributionChart received chartData:', chartData);
+
+  if (!chartData || typeof chartData !== 'object') {
+    throw new Error('Invalid chartData: expected object, got ' + typeof chartData);
+  }
+
   const { bar_data, kde_data, config, outliers } = chartData;
+
+  if (!bar_data || !Array.isArray(bar_data)) {
+    throw new Error('Invalid bar_data: expected array, got ' + typeof bar_data);
+  }
+  if (!kde_data || !Array.isArray(kde_data)) {
+    throw new Error('Invalid kde_data: expected array, got ' + typeof kde_data);
+  }
+  if (!config || typeof config !== 'object') {
+    throw new Error('Invalid config: expected object, got ' + typeof config);
+  }
+  if (!Array.isArray(outliers)) {
+    throw new Error('Invalid outliers: expected array, got ' + typeof outliers);
+  }
   const [activeTab, setActiveTab] = useState("overview");
   const [isExpanded, setIsExpanded] = useState(false);
   
   // Decide on displayed WBSI: Use shrunk if small n_reports
   const useShrunk = config.n_reports < 20;  // Threshold for small samples
-  const displayedWBSI = useShrunk ? config.wbsi_display_shrunk : config.wbsi_display;
+  const displayedWBSI = useShrunk ? (config.wbsi_display_shrunk ?? config.wbsi_display ?? 0) : (config.wbsi_display ?? config.wbsi_display_shrunk ?? 0);
   
   // Get comprehensive analysis
   const interpretation = getWBSIInterpretation(displayedWBSI, config.consensus_percentage / 100, config.n_reports);
