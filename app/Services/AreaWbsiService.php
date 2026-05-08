@@ -10,6 +10,9 @@ use Illuminate\Support\Str;
 
 class AreaWbsiService
 {
+    private const SHRINKAGE_KAPPA = 20.0;
+    private const SMALL_SAMPLE_THRESHOLD = 20;
+
     public function __construct(private readonly WbsiService $wbsiService)
     {
     }
@@ -73,6 +76,17 @@ class AreaWbsiService
         ];
     }
 
+    /**
+     * Build a report-only WBSI distribution payload for chart rendering.
+     *
+     * Defaults:
+     * - With no verified reports, uses a neutral WBSI of 50 with 0% consensus.
+     * - Shrinkage uses kappa=20.0 (small samples are damped toward 0% for display).
+     *
+     * Practical behavior:
+     * - Few reports (1-19) yield a noticeably smaller `wbsi_display_shrunk` than the modal severity.
+     * - Many reports (20+) keep `wbsi_display_shrunk` close to the raw modal severity.
+     */
     public function distributionForReports(iterable $reports): array
     {
         $reportArray = is_array($reports) ? $reports : iterator_to_array($reports);
@@ -81,16 +95,19 @@ class AreaWbsiService
         $weights = array_map(fn (Report $report): float => $this->reportWeight($report), $verified);
 
         if ($severities === []) {
+            $defaultWbsi = 50.0;
             return [
-                'wbsi' => null,
+                'wbsi' => $defaultWbsi,
                 'consensus' => 0.0,
                 'n_reports' => 0,
                 'bar_data' => [],
                 'kde_data' => [],
                 'config' => [
-                    'peak_severity' => null,
-                    'consensus_range' => [0, 0],
-                    'wbsi_display' => null,
+                    'peak_severity' => $defaultWbsi,
+                    'consensus_range' => [max(0, $defaultWbsi - 10), min(100, $defaultWbsi + 10)],
+                    'wbsi_display' => $defaultWbsi,
+                    'wbsi_display_shrunk' => $defaultWbsi,
+                    'shrinkage_factor' => 0.0,
                     'consensus_percentage' => 0,
                     'severity_bands' => ['low' => 0, 'medium' => 0, 'high' => 0, 'critical' => 0],
                     'n_reports' => 0,
@@ -106,25 +123,38 @@ class AreaWbsiService
         $consensus = $this->consensus($severities, $weights, $modalSeverity);
         $histogram = $this->histogram($severities, $weights);
         $severityBands = $this->severityBands($severities, $weights);
+        $nReports = count($verified);
+        $shrinkageFactor = $nReports / ($nReports + self::SHRINKAGE_KAPPA);
+        $wbsiDisplayShrunk = round($modalSeverity * $shrinkageFactor, 2);
+        $polymodality = $this->detectPolymodality($kde['x'], $kde['y']);
+        $maxKde = max($kde['y']) ?: 0.0;
+        $maxBarHeight = max(array_column($histogram, 'count')) ?: 0.0;
+        $kdeData = array_map(
+            fn (float $x, float $y): array => [
+                'severity' => round($x, 1),
+                'density' => round($y, 6),
+                'normalized' => round($maxKde > 0 ? ($y / $maxKde) * $maxBarHeight : 0.0, 2),
+            ],
+            $kde['x'],
+            $kde['y']
+        );
 
         return [
             'wbsi' => $modalSeverity,
             'consensus' => round($consensus, 4),
-            'n_reports' => count($verified),
+            'n_reports' => $nReports,
             'bar_data' => $histogram,
-            'kde_data' => array_map(fn (float $x, float $y): array => [
-                'severity' => round($x, 1),
-                'density' => round($y, 6),
-                'normalized' => round($y * 100, 4),
-            ], $kde['x'], $kde['y']),
+            'kde_data' => $kdeData,
             'config' => [
                 'peak_severity' => $modalSeverity,
                 'consensus_range' => [max(0, $modalSeverity - 10), min(100, $modalSeverity + 10)],
                 'wbsi_display' => $modalSeverity,
+                'wbsi_display_shrunk' => $wbsiDisplayShrunk,
+                'shrinkage_factor' => round($shrinkageFactor, 4),
                 'consensus_percentage' => round($consensus * 100, 1),
                 'severity_bands' => $severityBands,
-                'n_reports' => count($verified),
-                'is_polymodal' => false,
+                'n_reports' => $nReports,
+                'is_polymodal' => $polymodality['is_polymodal'],
             ],
             'outliers' => [],
         ];
@@ -178,10 +208,20 @@ class AreaWbsiService
         return $areas;
     }
 
+    /**
+     * Build a report-driven area record with both the report score and chart distribution.
+     *
+     * Defaults:
+    * - `report_wbsi` is null if there are no verified reports.
+    * - `severity_label` is derived from the display WBSI when available.
+    * - `report_score` keeps the raw report score used for Master WBSI weighting.
+     */
     private function makeReportArea(string $id, string $method, Collection $reports, ?string $displayName): array
     {
         $representative = $this->representativeReport($reports);
         $distribution = $this->distributionForReports($reports->all());
+        $reportScore = $this->wbsiService->calculateReportScore($reports);
+        $reportWbsi = $this->displayReportWbsi($distribution);
 
         return [
             'id' => $id,
@@ -192,11 +232,12 @@ class AreaWbsiService
             'report_count' => $reports->count(),
             'reports' => $reports->values()->all(),
             'assigned_sensors' => [],
-            'report_wbsi' => $distribution['wbsi'],
+            'report_score' => $reportScore,
+            'report_wbsi' => $reportWbsi,
             'sensor_score' => null,
             'area_wbsi' => null,
             'source' => 'report_only',
-            'severity_label' => $distribution['wbsi'] === null ? null : $this->wbsiService->severityLabel($distribution['wbsi']),
+            'severity_label' => $reportWbsi === null ? null : $this->wbsiService->severityLabel($reportWbsi),
             'distribution' => $distribution,
         ];
     }
@@ -230,7 +271,7 @@ class AreaWbsiService
             $sensor = $this->sensorPayload($device, $latest, $closestDistanceM);
             $areas[$closestIndex]['assigned_sensors'][] = $sensor;
             $areas[$closestIndex]['sensor_score'] = $this->averageSensorScore($areas[$closestIndex]['assigned_sensors']);
-            $areas[$closestIndex]['area_wbsi'] = $this->wbsiService->calculateMasterScore($areas[$closestIndex]['sensor_score'], $areas[$closestIndex]['report_wbsi']);
+            $areas[$closestIndex]['area_wbsi'] = $this->wbsiService->calculateMasterScore($areas[$closestIndex]['sensor_score'], $areas[$closestIndex]['report_score'] ?? null);
             $areas[$closestIndex]['source'] = 'combined';
             $areas[$closestIndex]['severity_label'] = $areas[$closestIndex]['area_wbsi'] === null ? null : $this->wbsiService->severityLabel($areas[$closestIndex]['area_wbsi']);
             $assignedDeviceIds[$device->id] = true;
@@ -264,6 +305,7 @@ class AreaWbsiService
                     'report_count' => 0,
                     'reports' => [],
                     'assigned_sensors' => [$sensor],
+                    'report_score' => null,
                     'report_wbsi' => null,
                     'sensor_score' => $score,
                     'area_wbsi' => null,
@@ -277,8 +319,27 @@ class AreaWbsiService
             ->all();
     }
 
+    private function displayReportWbsi(array $distribution): ?float
+    {
+        $config = $distribution['config'] ?? [];
+        $nReports = (int) ($config['n_reports'] ?? 0);
+        $raw = $config['wbsi_display'] ?? null;
+        $shrunk = $config['wbsi_display_shrunk'] ?? null;
+
+        if ($raw === null && $shrunk === null) {
+            return null;
+        }
+
+        if ($nReports > 0 && $nReports < self::SMALL_SAMPLE_THRESHOLD && $shrunk !== null) {
+            return (float) $shrunk;
+        }
+
+        return $raw !== null ? (float) $raw : (float) $shrunk;
+    }
+
     private function finalizeArea(array $area): array
     {
+        $area['report_score'] = $area['report_score'] ?? null;
         $area['score'] = $this->bestScore($area);
 
         return $area;
@@ -397,8 +458,11 @@ class AreaWbsiService
         $totalWeight = array_sum($weights);
         $bandwidth = 8.0;
 
-        for ($i = 0; $i < 101; $i++) {
-            $severityPoint = (float) $i;
+        $step = 0.5;
+        $points = (int) round(100.0 / $step);
+
+        for ($i = 0; $i <= $points; $i++) {
+            $severityPoint = $i * $step;
             $density = 0.0;
             foreach ($severities as $index => $severity) {
                 $arg = ($severityPoint - $severity) / $bandwidth;
@@ -426,6 +490,38 @@ class AreaWbsiService
         }
 
         return $consensusWeight / $totalWeight;
+    }
+
+    private function detectPolymodality(array $xPoints, array $densityValues, float $thresholdRatio = 0.8, float $minSeparation = 15.0): array
+    {
+        if (count($densityValues) < 3) {
+            return ['is_polymodal' => false, 'peaks' => []];
+        }
+
+        $peaks = [];
+        for ($i = 1; $i < count($densityValues) - 1; $i++) {
+            if ($densityValues[$i] > $densityValues[$i - 1] && $densityValues[$i] > $densityValues[$i + 1]) {
+                $peaks[] = [$xPoints[$i], $densityValues[$i]];
+            }
+        }
+
+        if (count($peaks) < 2) {
+            return ['is_polymodal' => false, 'peaks' => $peaks];
+        }
+
+        usort($peaks, fn (array $a, array $b) => $b[1] <=> $a[1]);
+
+        $highestPeak = $peaks[0];
+        $secondPeak = $peaks[1];
+        $ratio = $highestPeak[1] > 0 ? ($secondPeak[1] / $highestPeak[1]) : 0.0;
+        $separation = abs($secondPeak[0] - $highestPeak[0]);
+
+        return [
+            'is_polymodal' => $ratio > $thresholdRatio && $separation > $minSeparation,
+            'peaks' => $peaks,
+            'ratio' => $ratio,
+            'separation' => $separation,
+        ];
     }
 
     private function histogram(array $severities, array $weights): array

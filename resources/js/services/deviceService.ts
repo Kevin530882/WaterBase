@@ -149,6 +149,7 @@ export interface AreaWbsiArea {
   report_count: number;
   reports: any[];
   assigned_sensors: Array<MapDevice & { distance_m?: number | null }>;
+  report_score?: number | null;
   report_wbsi: number | null;
   sensor_score: number | null;
   area_wbsi: number | null;

@@ -161,12 +161,19 @@ class WbsiService
     public function reportSeverity(Report $report): float
     {
         if ($report->severityPercentage !== null) {
-            return $this->clamp((float) $report->severityPercentage);
+            $percentage = (float) $report->severityPercentage;
+            if ($percentage > 0.0) {
+                return $this->clamp($percentage);
+            }
         }
 
         $severity = strtolower((string) ($report->severityByAI ?: $report->severityByUser));
+        if (trim($severity) === '') {
+            return 0.0;
+        }
 
         return match (true) {
+            str_contains($severity, 'clean') => 12.5,
             str_contains($severity, 'low') => 12.5,
             str_contains($severity, 'medium'), str_contains($severity, 'moderate') => 37.5,
             str_contains($severity, 'high') => 62.5,
