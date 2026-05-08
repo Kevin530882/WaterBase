@@ -6,13 +6,17 @@ use App\Models\Device;
 use App\Models\DeviceTelemetry;
 use App\Models\Event;
 use App\Models\Report;
+use App\Services\AreaWbsiService;
 use App\Services\WbsiService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 
 class ResearchGeotemporalController extends Controller
 {
-    public function __construct(private readonly WbsiService $wbsiService)
+    public function __construct(
+        private readonly WbsiService $wbsiService,
+        private readonly AreaWbsiService $areaWbsiService,
+    )
     {
     }
 
@@ -137,19 +141,29 @@ class ResearchGeotemporalController extends Controller
             ->values();
         $sensorScore = $sensorScores->isEmpty() ? null : round($sensorScores->avg(), 2);
         $master = $this->wbsiService->calculateMasterScore($sensorScore, $reportScore);
+        $areas = $this->areaWbsiService->areas($from, $to, $this->bbox($request));
+        $nationalSummary = $this->areaWbsiService->nationalSummary($areas);
 
         return response()->json([
             'stations' => $stations,
             'reports' => $reports,
+            'areas' => $areas,
             'heatmap' => $this->heatmap($reports, $stations),
             'summary' => [
                 'sensor_score' => $sensorScore,
                 'report_score' => $reportScore,
                 'master_wbsi' => $master,
+                'national_wbsi' => $nationalSummary['national_wbsi'],
                 'severity_label' => $master === null ? null : $this->wbsiService->severityLabel($master),
                 'station_count' => $stations->count(),
                 'report_count' => $reports->count(),
+                'area_count' => $nationalSummary['area_count'],
+                'combined_count' => $nationalSummary['combined_count'],
+                'report_only_count' => $nationalSummary['report_only_count'],
+                'sensor_only_count' => $nationalSummary['sensor_only_count'],
+                'last_updated_at' => $nationalSummary['last_updated_at'],
             ],
+            'national_summary' => $nationalSummary,
         ]);
     }
 

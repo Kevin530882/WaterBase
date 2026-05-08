@@ -46,9 +46,8 @@ import L from 'leaflet';
 import { renderToStaticMarkup } from 'react-dom/server';
 // @ts-ignore
 import 'leaflet.heat';
-import { WBSICalculator, getReportsForLocation, getSeverityDescription } from '@/utils/wbsiCalculator';
 import SeverityDistributionChart from '@/components/SeverityDistributionChart';
-import DeviceService, { MapDevice } from '@/services/deviceService';
+import DeviceService, { AreaWbsiArea, MapDevice, NationalWbsiSummary } from '@/services/deviceService';
 
 // Real Report interface based on API structure
 interface Report {
@@ -175,6 +174,7 @@ export const MapView = () => {
   const { user } = useAuth();
   const { reports, activeEvents, loading, error } = useReportsData();
   const [selectedReport, setSelectedReport] = useState<Report | null>(null);
+  const [selectedArea, setSelectedArea] = useState<AreaWbsiArea | null>(null);
   const [filterType, setFilterType] = useState<string>("all");
   const [filterStatus, setFilterStatus] = useState<string>("all");
   const [searchQuery, setSearchQuery] = useState("");
@@ -182,52 +182,42 @@ export const MapView = () => {
   const [viewMode, setViewMode] = useState<"standard" | "priority">("standard");
   const [wbsiData, setWbsiData] = useState<any>(null);
 
-  // Report pagination
-  const [reportPage, setReportPage] = useState(1);
-  const REPORTS_PER_PAGE = 15;
-  const paginatedReports = filteredReports.slice((reportPage - 1) * REPORTS_PER_PAGE, reportPage * REPORTS_PER_PAGE);
-  const reportTotalPages = Math.max(1, Math.ceil(filteredReports.length / REPORTS_PER_PAGE));
-
   // Sensor state
   const { token } = useAuth();
   const [sensors, setSensors] = useState<MapDevice[]>([]);
+  const [wbsiAreas, setWbsiAreas] = useState<AreaWbsiArea[]>([]);
+  const [nationalWbsi, setNationalWbsi] = useState<NationalWbsiSummary | null>(null);
   const [showSensors, setShowSensors] = useState(false);
 
   useEffect(() => {
     if (!token) return;
     const deviceService = new DeviceService(token);
-    deviceService.getMapDevices().then(setSensors).catch(console.error);
+    Promise.all([
+      deviceService.getMapDevices(),
+      deviceService.getMapWbsiAreas(),
+    ])
+      .then(([devices, areaResponse]) => {
+        setSensors(devices);
+        setWbsiAreas(areaResponse.areas);
+        setNationalWbsi(areaResponse.national_summary);
+      })
+      .catch(console.error);
   }, [token]);
 
-  // Calculate WBSI when selectedReport changes
+  // Use backend-generated area WBSI/KDE data instead of broad client-side radius lookup.
   useEffect(() => {
-    console.log('selectedReport state changed:', selectedReport);
-    
-    if (selectedReport) {
-      const calculator = new WBSICalculator();
-      // Get reports within 5km of the selected report
-      const nearbyReports = getReportsForLocation(reports, selectedReport, 5);
-      
-      if (nearbyReports.length > 0) {
-        // Calculate WBSI for nearby reports
-        const wbsiResult = calculator.calculateWBSI(nearbyReports);
-        const chartData = calculator.generateChartData(wbsiResult);
-        setWbsiData(chartData);
-      } else {
-        // If there are no nearby reports, use just the selected report
-        const wbsiResult = calculator.calculateWBSI([selectedReport]);
-        const chartData = calculator.generateChartData(wbsiResult);
-        setWbsiData(chartData);
-      }
+    if (selectedArea?.distribution) {
+      setWbsiData(selectedArea.distribution);
     } else {
       setWbsiData(null);
     }
-  }, [selectedReport, reports]);
+  }, [selectedArea]);
 
   // Simplified report selection handler
   const handleReportSelect = (report: Report) => {
     console.log('Selecting report:', report.id, report.address);
     setSelectedReport(report);
+    setSelectedArea(wbsiAreas.find((area) => area.reports?.some((areaReport: any) => areaReport.id === report.id)) || null);
   };
 
   useEffect(() => {
@@ -291,24 +281,35 @@ export const MapView = () => {
     return "bg-gray-500";
   };
 
-  // Add this function before the component
-  const createPollutionIcon = (report: Report) => {
-    const severity = getReportSeverity(report);
-    const dropletHtml = renderToStaticMarkup(
+  const severityColor = (score?: number | null) => {
+    if (score === null || score === undefined) return "bg-gray-500";
+    if (score < 25) return "bg-green-500";
+    if (score < 50) return "bg-yellow-500";
+    if (score < 75) return "bg-orange-500";
+    return "bg-red-500";
+  };
+
+  const createAreaIcon = (area: AreaWbsiArea) => {
+    const iconHtml = renderToStaticMarkup(
       <div className={cn(
-        "w-8 h-8 flex items-center justify-center rounded-full border-2 shadow-lg bg-white",
-        getSeverityColor(severity)
+        "relative w-10 h-10 flex items-center justify-center rounded-full border-2 shadow-lg border-white text-white",
+        severityColor(area.score)
       )}>
-        <Droplets className="w-5 h-5 text-white" />
+        <Droplets className="w-5 h-5" />
+        {area.report_count > 0 && (
+          <span className="absolute -top-2 -right-2 min-w-5 h-5 px-1 rounded-full bg-white text-[10px] font-bold text-gray-800 border border-gray-300 flex items-center justify-center">
+            {area.report_count}
+          </span>
+        )}
       </div>
     );
 
     return L.divIcon({
-      html: dropletHtml,
-      className: 'custom-droplet-marker',
-      iconSize: [32, 32],
-      iconAnchor: [16, 16],
-      popupAnchor: [0, -16],
+      html: iconHtml,
+      className: 'custom-area-wbsi-marker',
+      iconSize: [40, 40],
+      iconAnchor: [20, 20],
+      popupAnchor: [0, -20],
     });
   };
 
@@ -619,6 +620,17 @@ export const MapView = () => {
                 </div>
               </div>
             )}
+            {nationalWbsi && (
+              <div className="px-4 py-3 border-b border-gray-200 bg-waterbase-50">
+                <div className="flex items-center justify-between text-sm">
+                  <span className="font-medium text-waterbase-950">National WBSI</span>
+                  <span className="font-bold text-waterbase-700">{nationalWbsi.national_wbsi ?? 'N/A'}</span>
+                </div>
+                <div className="text-xs text-gray-600 mt-1">
+                  Areas: {nationalWbsi.area_count} | Combined: {nationalWbsi.combined_count} | Report-only: {nationalWbsi.report_only_count} | Sensor-only: {nationalWbsi.sensor_only_count}
+                </div>
+              </div>
+            )}
 
             {/* Priority Zone Highlights */}
             {viewMode === "priority" && (
@@ -742,18 +754,18 @@ export const MapView = () => {
                 {/* Add heatmap layer */}
                 <HeatmapLayer reports={filteredReports} />
 
-                {/* Pollution report markers */}
-                {filteredReports.map((report) => {
+                {/* Local Area WBSI markers */}
+                {wbsiAreas.map((area) => {
                   try {
-                    const isUnderCleanup = !!report.event_id && activeEvents.some(e => e.id === report.event_id);
                     return (
                       <Marker
-                        key={report.id}
-                        position={[report.latitude, report.longitude]}
-                        icon={createPollutionIcon(report)}
+                        key={area.id}
+                        position={[area.latitude, area.longitude]}
+                        icon={createAreaIcon(area)}
                         eventHandlers={{
                           click: () => {
-                            handleReportSelect(report);
+                            setSelectedArea(area);
+                            setSelectedReport(area.reports?.[0] || null);
                           },
                         }}
                       >
@@ -761,32 +773,25 @@ export const MapView = () => {
                           <div className="text-center min-w-[200px]">
                             <div className="flex items-center justify-center mb-2">
                               <Droplets className="w-4 h-4 mr-1 text-waterbase-600" />
-                              <span className="font-semibold">{report.address || 'Unknown Location'}</span>
+                              <span className="font-semibold">{area.display_name}</span>
                             </div>
-                            {isUnderCleanup && (
-                              <div className="bg-teal-100 text-teal-800 text-xs font-semibold px-2 py-1 rounded mb-2">
-                                Under Cleanup
+                            <div className={cn("p-2 rounded mb-2 text-white", severityColor(area.score))}>
+                              <div className="text-sm font-bold">
+                                {area.source === 'combined' ? 'Area WBSI' : area.source === 'sensor_only' ? 'Sensor Score' : 'Report WBSI'}: {area.score ?? 'N/A'}
                               </div>
-                            )}
-                            <div className={cn("p-2 rounded mb-2", getSeverityColor(getReportSeverity(report)))}>
-                              <div className="text-sm font-bold text-white">{report.pollutionType || 'Unknown Type'}</div>
-                              <div className="text-xs text-white">{getReportSeverity(report)} Severity</div>
+                              <div className="text-xs">{area.severity_label || 'No severity'}</div>
                             </div>
                             <div className="text-xs text-gray-600 mb-2">
-                              <div className="flex items-center justify-center space-x-1 mb-1">
-                                {getStatusIcon(report.status)}
-                                <span>{report.status}</span>
-                              </div>
-                              <div>Reported by: {report.user ? `${report.user.firstName} ${report.user.lastName}` : 'Anonymous'}</div>
-                              <div>Date: {report.created_at ? new Date(report.created_at).toLocaleDateString() : 'Unknown'}</div>
+                              <div>Source: {area.source.replace('_', ' ')}</div>
+                              <div>Reports: {area.report_count}</div>
+                              <div>Sensors: {area.assigned_sensors?.length || 0}</div>
                             </div>
-                            <p className="text-xs text-gray-700">{report.content || 'No description available'}</p>
                           </div>
                         </Popup>
                       </Marker>
                     );
                   } catch (error) {
-                    console.error('Error rendering marker for report:', report.id, error);
+                    console.error('Error rendering WBSI area marker:', area.id, error);
                     return null;
                   }
                 })}
@@ -877,7 +882,7 @@ export const MapView = () => {
           </div>
 
           {/* Selected report details overlay */}
-          {selectedReport && (
+          {(selectedReport || selectedArea) && (
             <div
               className="fixed top-20 right-4 w-96 max-h-[calc(100vh-6rem)] overflow-y-auto bg-white rounded-lg shadow-2xl border border-gray-200"
               style={{ zIndex: 50000 }}
@@ -885,12 +890,15 @@ export const MapView = () => {
               <div className="p-4">
                 <div className="flex items-start justify-between mb-3">
                   <h3 className="font-semibold text-waterbase-950">
-                    Report Details
+                    {selectedArea ? 'Area WBSI Details' : 'Report Details'}
                   </h3>
                   <Button
                     variant="ghost"
                     size="icon"
-                    onClick={() => setSelectedReport(null)}
+                    onClick={() => {
+                      setSelectedReport(null);
+                      setSelectedArea(null);
+                    }}
                     className="h-6 w-6"
                   >
                     <X className="w-4 h-4" />
@@ -902,19 +910,22 @@ export const MapView = () => {
                     <div className="flex items-center space-x-2 mb-1">
                       <MapPin className="w-4 h-4 text-waterbase-600" />
                       <span className="font-medium text-sm">
-                        {selectedReport.address}
+                        {selectedArea?.display_name || selectedReport?.address}
                       </span>
                     </div>
-                    <p className="text-sm text-gray-600 ml-6 mb-2">
-                      {selectedReport.content}
-                    </p>
+                    {selectedReport?.content && (
+                      <p className="text-sm text-gray-600 ml-6 mb-2">
+                        {selectedReport.content}
+                      </p>
+                    )}
                   </div>
 
                   <div className="flex items-center justify-between">
                     <Badge variant="outline" className="text-xs">
-                      {selectedReport.pollutionType}
+                      {selectedArea?.source.replace('_', ' ') || selectedReport?.pollutionType}
                     </Badge>
-                    <div className="flex items-center space-x-1">
+                    {selectedReport && (
+                      <div className="flex items-center space-x-1">
                       <div
                         className={cn(
                           "w-2 h-2 rounded-full",
@@ -924,16 +935,31 @@ export const MapView = () => {
                       <span className="text-xs text-gray-600">
                         {getReportSeverity(selectedReport)}
                       </span>
-                    </div>
+                      </div>
+                    )}
                   </div>
+
+                  {selectedArea && (
+                    <div className={cn("p-3 rounded-lg text-white", severityColor(selectedArea.score))}>
+                      <div className="text-sm font-semibold">
+                        {selectedArea.source === 'combined' ? 'Area WBSI' : selectedArea.source === 'sensor_only' ? 'Sensor Score' : 'Report WBSI'}: {selectedArea.score ?? 'N/A'}
+                      </div>
+                      <div className="text-xs mt-1">
+                        Reports: {selectedArea.report_count} | Sensors: {selectedArea.assigned_sensors?.length || 0}
+                      </div>
+                      <div className="text-xs mt-1">
+                        Report WBSI: {selectedArea.report_wbsi ?? 'N/A'} | Sensor Score: {selectedArea.sensor_score ?? 'N/A'}
+                      </div>
+                    </div>
+                  )}
 
                   <div className="text-xs text-gray-600">
                     <strong>Coordinates:</strong>{" "}
-                    {selectedReport.latitude.toFixed(6)},{" "}
-                    {selectedReport.longitude.toFixed(6)}
+                    {(selectedArea?.latitude ?? selectedReport?.latitude ?? 0).toFixed(6)},{" "}
+                    {(selectedArea?.longitude ?? selectedReport?.longitude ?? 0).toFixed(6)}
                   </div>
 
-                  <div className="flex items-center space-x-4 text-xs text-gray-600">
+                  {selectedReport && <div className="flex items-center space-x-4 text-xs text-gray-600">
                     <div className="flex items-center space-x-1">
                       <User className="w-3 h-3" />
                       <span>
@@ -946,9 +972,9 @@ export const MapView = () => {
                       <Calendar className="w-3 h-3" />
                       <span>{new Date(selectedReport.created_at).toLocaleDateString()}</span>
                     </div>
-                  </div>
+                  </div>}
 
-                  <div className="flex items-center justify-between pt-2 border-t border-gray-100">
+                  {selectedReport && <div className="flex items-center justify-between pt-2 border-t border-gray-100">
                     <div className="flex items-center space-x-1">
                       {getStatusIcon(selectedReport.status)}
                       <span className="text-sm font-medium">
@@ -961,9 +987,9 @@ export const MapView = () => {
                         <span>Has photo</span>
                       </div>
                     )}
-                  </div>
+                  </div>}
 
-                  {selectedReport.ai_confidence && (
+                  {selectedReport?.ai_confidence && (
                     <div className="text-xs text-gray-600">
                       AI Verification:{" "}
                       {selectedReport.ai_confidence}%
@@ -974,10 +1000,10 @@ export const MapView = () => {
 
                 {/* Moved Pollution Analysis here to prevent sidebar overflow */}
                 {wbsiData && (
-                  <div className="mt-4 border-t border-gray-200 pt-4">
-                    <SeverityDistributionChart 
+                      <div className="mt-4 border-t border-gray-200 pt-4">
+                        <SeverityDistributionChart 
                       chartData={wbsiData} 
-                      locationName={selectedReport.address}
+                      locationName={selectedArea?.display_name || selectedReport?.address}
                     />
                   </div>
                 )}

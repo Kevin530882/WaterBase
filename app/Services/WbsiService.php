@@ -5,13 +5,11 @@ namespace App\Services;
 use App\Models\Device;
 use App\Models\DeviceTelemetry;
 use App\Models\Report;
+use App\Models\SystemSetting;
 use Illuminate\Support\Carbon;
 
 class WbsiService
 {
-    private const MASTER_SENSOR_WEIGHT = 0.60;
-    private const MASTER_REPORT_WEIGHT = 0.40;
-
     private const BASELINES = [
         'freshwater' => [
             'ph_min' => 6.5,
@@ -110,7 +108,9 @@ class WbsiService
             return round($sensorScore, 2);
         }
 
-        return round((self::MASTER_SENSOR_WEIGHT * $sensorScore) + (self::MASTER_REPORT_WEIGHT * $reportScore), 2);
+        $settings = SystemSetting::current();
+
+        return round(((float) $settings->wbsi_sensor_weight * $sensorScore) + ((float) $settings->wbsi_report_weight * $reportScore), 2);
     }
 
     public function scoreTelemetryForDevice(Device $device, DeviceTelemetry $telemetry, ?float $reportScore = null): array
@@ -190,9 +190,46 @@ class WbsiService
         return array_map(fn (float $value) => $value / $total, $inverse);
     }
 
+    public function settings(): SystemSetting
+    {
+        return SystemSetting::current();
+    }
+
+    public function distanceKm(float $lat1, float $lng1, float $lat2, float $lng2): float
+    {
+        $earthRadius = 6371.0;
+        $dLat = deg2rad($lat2 - $lat1);
+        $dLng = deg2rad($lng2 - $lng1);
+
+        $a = sin($dLat / 2) ** 2
+            + cos(deg2rad($lat1)) * cos(deg2rad($lat2)) * sin($dLng / 2) ** 2;
+
+        return $earthRadius * 2 * atan2(sqrt($a), sqrt(1 - $a));
+    }
+
     private function baseline(string $environmentType): array
     {
-        return self::BASELINES[strtolower($environmentType)] ?? self::BASELINES['freshwater'];
+        $settings = SystemSetting::current();
+
+        if (strtolower($environmentType) === 'marine') {
+            return [
+                'ph_min' => (float) $settings->wbsi_marine_ph_min,
+                'ph_max' => (float) $settings->wbsi_marine_ph_max,
+                'turbidity_ntu' => (float) $settings->wbsi_marine_turbidity_ntu,
+                'tds_mg_l' => (float) $settings->wbsi_marine_tds_mg_l,
+                'temperature_min_celsius' => (float) $settings->wbsi_marine_temperature_min_celsius,
+                'temperature_max_celsius' => (float) $settings->wbsi_marine_temperature_max_celsius,
+            ];
+        }
+
+        return [
+            'ph_min' => (float) $settings->wbsi_freshwater_ph_min,
+            'ph_max' => (float) $settings->wbsi_freshwater_ph_max,
+            'turbidity_ntu' => (float) $settings->wbsi_freshwater_turbidity_ntu,
+            'tds_mg_l' => (float) $settings->wbsi_freshwater_tds_mg_l,
+            'temperature_min_celsius' => (float) $settings->wbsi_freshwater_temperature_min_celsius,
+            'temperature_max_celsius' => (float) $settings->wbsi_freshwater_temperature_max_celsius,
+        ];
     }
 
     private function thresholdSeverity(float $value, float $limit): float
@@ -220,15 +257,4 @@ class WbsiService
         return max(0.0, min(100.0, $value));
     }
 
-    private function distanceKm(float $lat1, float $lng1, float $lat2, float $lng2): float
-    {
-        $earthRadius = 6371.0;
-        $dLat = deg2rad($lat2 - $lat1);
-        $dLng = deg2rad($lng2 - $lng1);
-
-        $a = sin($dLat / 2) ** 2
-            + cos(deg2rad($lat1)) * cos(deg2rad($lat2)) * sin($dLng / 2) ** 2;
-
-        return $earthRadius * 2 * atan2(sqrt($a), sqrt(1 - $a));
-    }
 }

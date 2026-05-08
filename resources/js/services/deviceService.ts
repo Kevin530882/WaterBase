@@ -140,6 +140,34 @@ export interface ResearchStation extends MapDevice {
   scores: WbsiScores;
 }
 
+export interface AreaWbsiArea {
+  id: string;
+  grouping_method: 'water_body' | 'report_group' | 'proximity' | 'sensor';
+  display_name: string;
+  latitude: number;
+  longitude: number;
+  report_count: number;
+  reports: any[];
+  assigned_sensors: Array<MapDevice & { distance_m?: number | null }>;
+  report_wbsi: number | null;
+  sensor_score: number | null;
+  area_wbsi: number | null;
+  score: number | null;
+  source: 'combined' | 'report_only' | 'sensor_only';
+  severity_label: string | null;
+  distribution: any;
+}
+
+export interface NationalWbsiSummary {
+  national_wbsi: number | null;
+  severity_label: string | null;
+  area_count: number;
+  combined_count: number;
+  report_only_count: number;
+  sensor_only_count: number;
+  last_updated_at: string | null;
+}
+
 export interface ResearchTrendPoint {
   date: string;
   value: number;
@@ -400,6 +428,14 @@ class DeviceService {
     return this.apiRequest(`/api/devices/map`);
   }
 
+  async getMapWbsiAreas(from?: string, to?: string): Promise<{ areas: AreaWbsiArea[]; national_summary: NationalWbsiSummary }> {
+    const params = new URLSearchParams();
+    if (from) params.append('from', from);
+    if (to) params.append('to', to);
+    const query = params.toString();
+    return this.apiRequest(`/api/map/wbsi-areas${query ? `?${query}` : ''}`);
+  }
+
   async getResearchStations(from?: string, to?: string): Promise<ResearchStation[]> {
     const params = new URLSearchParams();
     if (from) params.append('from', from);
@@ -423,10 +459,18 @@ class DeviceService {
       sensor_score: number | null;
       report_score: number | null;
       master_wbsi: number | null;
+      national_wbsi?: number | null;
       severity_label: string | null;
       station_count: number;
       report_count: number;
+      area_count?: number;
+      combined_count?: number;
+      report_only_count?: number;
+      sensor_only_count?: number;
+      last_updated_at?: string | null;
     };
+    areas?: AreaWbsiArea[];
+    national_summary?: NationalWbsiSummary;
   }> {
     const params = new URLSearchParams();
     if (from) params.append('from', from);

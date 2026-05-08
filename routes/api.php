@@ -18,6 +18,7 @@ use App\Http\Controllers\BadgeController;
 use App\Http\Controllers\ResearchDocumentController;
 use App\Http\Controllers\DeviceController;
 use App\Http\Controllers\ResearchGeotemporalController;
+use App\Http\Controllers\MapWbsiController;
 
 use App\Http\Controllers\MaintenanceController;
 
@@ -82,6 +83,8 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/predict', [DetectPollutionController::class, 'predict']);
 
     // Device / telemetry routes
+    Route::get('/map/wbsi-areas', [MapWbsiController::class, 'areas']);
+
     Route::get('/devices', [DeviceController::class, 'index']);
     Route::get('/devices/map', [DeviceController::class, 'mapDevices']);
     Route::get('/devices/discovered', [DeviceController::class, 'discovered']);

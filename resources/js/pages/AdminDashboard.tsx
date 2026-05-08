@@ -126,6 +126,23 @@ export const AdminDashboard = () => {
     const [autoApproveEnabled, setAutoApproveEnabled] = useState(false);
     const [autoApproveThreshold, setAutoApproveThreshold] = useState(80);
     const [csvAutoApproveEnabled, setCsvAutoApproveEnabled] = useState(false);
+    const [wbsiNamedWaterBodySegmentRadiusM, setWbsiNamedWaterBodySegmentRadiusM] = useState(500);
+    const [wbsiUngroupedProximityRadiusM, setWbsiUngroupedProximityRadiusM] = useState(150);
+    const [wbsiSensorAssignmentRadiusM, setWbsiSensorAssignmentRadiusM] = useState(1000);
+    const [wbsiSensorWeight, setWbsiSensorWeight] = useState(0.6);
+    const [wbsiReportWeight, setWbsiReportWeight] = useState(0.4);
+    const [wbsiFreshwaterPhMin, setWbsiFreshwaterPhMin] = useState(6.5);
+    const [wbsiFreshwaterPhMax, setWbsiFreshwaterPhMax] = useState(8.5);
+    const [wbsiFreshwaterTurbidityNtu, setWbsiFreshwaterTurbidityNtu] = useState(5);
+    const [wbsiFreshwaterTdsMgL, setWbsiFreshwaterTdsMgL] = useState(500);
+    const [wbsiFreshwaterTemperatureMinCelsius, setWbsiFreshwaterTemperatureMinCelsius] = useState(24);
+    const [wbsiFreshwaterTemperatureMaxCelsius, setWbsiFreshwaterTemperatureMaxCelsius] = useState(32);
+    const [wbsiMarinePhMin, setWbsiMarinePhMin] = useState(7.5);
+    const [wbsiMarinePhMax, setWbsiMarinePhMax] = useState(8.5);
+    const [wbsiMarineTurbidityNtu, setWbsiMarineTurbidityNtu] = useState(5);
+    const [wbsiMarineTdsMgL, setWbsiMarineTdsMgL] = useState(35000);
+    const [wbsiMarineTemperatureMinCelsius, setWbsiMarineTemperatureMinCelsius] = useState(24);
+    const [wbsiMarineTemperatureMaxCelsius, setWbsiMarineTemperatureMaxCelsius] = useState(32);
     const [maintenanceHealth, setMaintenanceHealth] = useState<any>(null);
     const [maintenanceStats, setMaintenanceStats] = useState<any>(null);
     const [isMaintenanceBusy, setIsMaintenanceBusy] = useState(false);
@@ -430,6 +447,23 @@ export const AdminDashboard = () => {
                     setAutoApproveEnabled(Boolean(data.auto_approve_enabled));
                     setAutoApproveThreshold(Number(data.auto_approve_threshold));
                     setCsvAutoApproveEnabled(Boolean(data.csv_auto_approve_enabled));
+                    setWbsiNamedWaterBodySegmentRadiusM(Number(data.wbsi_named_water_body_segment_radius_m ?? 500));
+                    setWbsiUngroupedProximityRadiusM(Number(data.wbsi_ungrouped_proximity_radius_m ?? 150));
+                    setWbsiSensorAssignmentRadiusM(Number(data.wbsi_sensor_assignment_radius_m ?? 1000));
+                    setWbsiSensorWeight(Number(data.wbsi_sensor_weight ?? 0.6));
+                    setWbsiReportWeight(Number(data.wbsi_report_weight ?? 0.4));
+                    setWbsiFreshwaterPhMin(Number(data.wbsi_freshwater_ph_min ?? 6.5));
+                    setWbsiFreshwaterPhMax(Number(data.wbsi_freshwater_ph_max ?? 8.5));
+                    setWbsiFreshwaterTurbidityNtu(Number(data.wbsi_freshwater_turbidity_ntu ?? 5));
+                    setWbsiFreshwaterTdsMgL(Number(data.wbsi_freshwater_tds_mg_l ?? 500));
+                    setWbsiFreshwaterTemperatureMinCelsius(Number(data.wbsi_freshwater_temperature_min_celsius ?? 24));
+                    setWbsiFreshwaterTemperatureMaxCelsius(Number(data.wbsi_freshwater_temperature_max_celsius ?? 32));
+                    setWbsiMarinePhMin(Number(data.wbsi_marine_ph_min ?? 7.5));
+                    setWbsiMarinePhMax(Number(data.wbsi_marine_ph_max ?? 8.5));
+                    setWbsiMarineTurbidityNtu(Number(data.wbsi_marine_turbidity_ntu ?? 5));
+                    setWbsiMarineTdsMgL(Number(data.wbsi_marine_tds_mg_l ?? 35000));
+                    setWbsiMarineTemperatureMinCelsius(Number(data.wbsi_marine_temperature_min_celsius ?? 24));
+                    setWbsiMarineTemperatureMaxCelsius(Number(data.wbsi_marine_temperature_max_celsius ?? 32));
                 }
             } catch (e) {
                 console.error('Error fetching system settings:', e);
@@ -1381,6 +1415,65 @@ export const AdminDashboard = () => {
                                             </Select>
                                         </div>
                                     </div>
+                                    <div className="pt-4 border-t border-gray-200 space-y-4">
+                                        <div>
+                                            <h4 className="text-sm font-semibold text-waterbase-950">WBSI Area Grouping</h4>
+                                            <p className="text-xs text-gray-500">Controls how local Area WBSI pins are grouped and how sensors attach to them.</p>
+                                        </div>
+                                        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                                            <div>
+                                                <Label>Water-body Segment Radius (m)</Label>
+                                                <Input type="number" min="1" value={wbsiNamedWaterBodySegmentRadiusM} onChange={(e) => setWbsiNamedWaterBodySegmentRadiusM(Number(e.target.value))} />
+                                            </div>
+                                            <div>
+                                                <Label>Ungrouped Proximity Radius (m)</Label>
+                                                <Input type="number" min="1" value={wbsiUngroupedProximityRadiusM} onChange={(e) => setWbsiUngroupedProximityRadiusM(Number(e.target.value))} />
+                                            </div>
+                                            <div>
+                                                <Label>Sensor Assignment Radius (m)</Label>
+                                                <Input type="number" min="1" value={wbsiSensorAssignmentRadiusM} onChange={(e) => setWbsiSensorAssignmentRadiusM(Number(e.target.value))} />
+                                            </div>
+                                        </div>
+
+                                        <div>
+                                            <h4 className="text-sm font-semibold text-waterbase-950">Master Formula Weights</h4>
+                                            <p className="text-xs text-gray-500">Must sum to 1.00. Used only when an area has both report and sensor evidence.</p>
+                                        </div>
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                            <div>
+                                                <Label>Sensor Weight</Label>
+                                                <Input type="number" min="0" max="1" step="0.01" value={wbsiSensorWeight} onChange={(e) => setWbsiSensorWeight(Number(e.target.value))} />
+                                            </div>
+                                            <div>
+                                                <Label>Report Weight</Label>
+                                                <Input type="number" min="0" max="1" step="0.01" value={wbsiReportWeight} onChange={(e) => setWbsiReportWeight(Number(e.target.value))} />
+                                            </div>
+                                        </div>
+
+                                        <div>
+                                            <h4 className="text-sm font-semibold text-waterbase-950">Freshwater Baselines</h4>
+                                        </div>
+                                        <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                                            <div><Label>pH Min</Label><Input type="number" step="0.01" value={wbsiFreshwaterPhMin} onChange={(e) => setWbsiFreshwaterPhMin(Number(e.target.value))} /></div>
+                                            <div><Label>pH Max</Label><Input type="number" step="0.01" value={wbsiFreshwaterPhMax} onChange={(e) => setWbsiFreshwaterPhMax(Number(e.target.value))} /></div>
+                                            <div><Label>Turbidity NTU</Label><Input type="number" step="0.01" min="0.01" value={wbsiFreshwaterTurbidityNtu} onChange={(e) => setWbsiFreshwaterTurbidityNtu(Number(e.target.value))} /></div>
+                                            <div><Label>TDS mg/L</Label><Input type="number" step="0.01" min="0.01" value={wbsiFreshwaterTdsMgL} onChange={(e) => setWbsiFreshwaterTdsMgL(Number(e.target.value))} /></div>
+                                            <div><Label>Temp Min C</Label><Input type="number" step="0.01" value={wbsiFreshwaterTemperatureMinCelsius} onChange={(e) => setWbsiFreshwaterTemperatureMinCelsius(Number(e.target.value))} /></div>
+                                            <div><Label>Temp Max C</Label><Input type="number" step="0.01" value={wbsiFreshwaterTemperatureMaxCelsius} onChange={(e) => setWbsiFreshwaterTemperatureMaxCelsius(Number(e.target.value))} /></div>
+                                        </div>
+
+                                        <div>
+                                            <h4 className="text-sm font-semibold text-waterbase-950">Marine Baselines</h4>
+                                        </div>
+                                        <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                                            <div><Label>pH Min</Label><Input type="number" step="0.01" value={wbsiMarinePhMin} onChange={(e) => setWbsiMarinePhMin(Number(e.target.value))} /></div>
+                                            <div><Label>pH Max</Label><Input type="number" step="0.01" value={wbsiMarinePhMax} onChange={(e) => setWbsiMarinePhMax(Number(e.target.value))} /></div>
+                                            <div><Label>Turbidity NTU</Label><Input type="number" step="0.01" min="0.01" value={wbsiMarineTurbidityNtu} onChange={(e) => setWbsiMarineTurbidityNtu(Number(e.target.value))} /></div>
+                                            <div><Label>TDS mg/L</Label><Input type="number" step="0.01" min="0.01" value={wbsiMarineTdsMgL} onChange={(e) => setWbsiMarineTdsMgL(Number(e.target.value))} /></div>
+                                            <div><Label>Temp Min C</Label><Input type="number" step="0.01" value={wbsiMarineTemperatureMinCelsius} onChange={(e) => setWbsiMarineTemperatureMinCelsius(Number(e.target.value))} /></div>
+                                            <div><Label>Temp Max C</Label><Input type="number" step="0.01" value={wbsiMarineTemperatureMaxCelsius} onChange={(e) => setWbsiMarineTemperatureMaxCelsius(Number(e.target.value))} /></div>
+                                        </div>
+                                    </div>
                                     <div className="pt-2">
                                         <Button onClick={async () => {
                                             try {
@@ -1394,6 +1487,23 @@ export const AdminDashboard = () => {
                                                         auto_approve_enabled: autoApproveEnabled,
                                                         auto_approve_threshold: autoApproveThreshold,
                                                         csv_auto_approve_enabled: csvAutoApproveEnabled,
+                                                        wbsi_named_water_body_segment_radius_m: wbsiNamedWaterBodySegmentRadiusM,
+                                                        wbsi_ungrouped_proximity_radius_m: wbsiUngroupedProximityRadiusM,
+                                                        wbsi_sensor_assignment_radius_m: wbsiSensorAssignmentRadiusM,
+                                                        wbsi_sensor_weight: wbsiSensorWeight,
+                                                        wbsi_report_weight: wbsiReportWeight,
+                                                        wbsi_freshwater_ph_min: wbsiFreshwaterPhMin,
+                                                        wbsi_freshwater_ph_max: wbsiFreshwaterPhMax,
+                                                        wbsi_freshwater_turbidity_ntu: wbsiFreshwaterTurbidityNtu,
+                                                        wbsi_freshwater_tds_mg_l: wbsiFreshwaterTdsMgL,
+                                                        wbsi_freshwater_temperature_min_celsius: wbsiFreshwaterTemperatureMinCelsius,
+                                                        wbsi_freshwater_temperature_max_celsius: wbsiFreshwaterTemperatureMaxCelsius,
+                                                        wbsi_marine_ph_min: wbsiMarinePhMin,
+                                                        wbsi_marine_ph_max: wbsiMarinePhMax,
+                                                        wbsi_marine_turbidity_ntu: wbsiMarineTurbidityNtu,
+                                                        wbsi_marine_tds_mg_l: wbsiMarineTdsMgL,
+                                                        wbsi_marine_temperature_min_celsius: wbsiMarineTemperatureMinCelsius,
+                                                        wbsi_marine_temperature_max_celsius: wbsiMarineTemperatureMaxCelsius,
                                                     })
                                                 });
                                                 if (!res.ok) throw new Error('Failed');

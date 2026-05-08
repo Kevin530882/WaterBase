@@ -3,6 +3,7 @@
 namespace Tests\Unit;
 
 use App\Models\DeviceTelemetry;
+use App\Models\SystemSetting;
 use App\Services\WbsiService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
@@ -72,6 +73,16 @@ class WbsiServiceTest extends TestCase
     public function test_master_wbsi_uses_sensor_and_report_weights(): void
     {
         $this->assertSame(44.0, $this->service->calculateMasterScore(60.0, 20.0));
+    }
+
+    public function test_master_wbsi_uses_configured_weights(): void
+    {
+        SystemSetting::create(array_merge(SystemSetting::DEFAULTS, [
+            'wbsi_sensor_weight' => 0.70,
+            'wbsi_report_weight' => 0.30,
+        ]));
+
+        $this->assertSame(48.0, $this->service->calculateMasterScore(60.0, 20.0));
     }
 
     private function telemetry(array $attributes): DeviceTelemetry

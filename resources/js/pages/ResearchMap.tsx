@@ -61,9 +61,15 @@ interface SummaryData {
   sensor_score: number | null;
   report_score: number | null;
   master_wbsi: number | null;
+  national_wbsi?: number | null;
   severity_label: string | null;
   station_count: number;
   report_count: number;
+  area_count?: number;
+  combined_count?: number;
+  report_only_count?: number;
+  sensor_only_count?: number;
+  last_updated_at?: string | null;
 }
 
 const currentYear = new Date().getFullYear();
@@ -328,14 +334,14 @@ export const ResearchMap = () => {
           <div className="flex-1 overflow-y-auto">
             {summary && (
               <div className="p-4 border-b border-gray-100">
-                <div className={cn("p-3 rounded-lg border", severityClass(summary.master_wbsi ?? summary.sensor_score))}>
+                <div className={cn("p-3 rounded-lg border", severityClass(summary.national_wbsi ?? summary.master_wbsi ?? summary.sensor_score))}>
                   <div className="flex items-center justify-between">
-                    <span className="text-sm font-medium">Master WBSI</span>
+                    <span className="text-sm font-medium">National WBSI</span>
                     <Gauge className="w-4 h-4" />
                   </div>
-                  <div className="text-2xl font-bold mt-1">{summary.master_wbsi ?? "N/A"}</div>
+                  <div className="text-2xl font-bold mt-1">{summary.national_wbsi ?? "N/A"}</div>
                   <div className="text-xs mt-1">
-                    Sensors: {summary.sensor_score ?? "N/A"} | Reports: {summary.report_score ?? "N/A"}
+                    Areas: {summary.area_count ?? 0} | Combined: {summary.combined_count ?? 0} | Report-only: {summary.report_only_count ?? 0} | Sensor-only: {summary.sensor_only_count ?? 0}
                   </div>
                 </div>
               </div>
