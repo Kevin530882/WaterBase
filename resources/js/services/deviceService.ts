@@ -13,6 +13,7 @@ export interface Device {
   last_seen_at: string | null;
   latitude: number | null;
   longitude: number | null;
+  environment_type?: string | null;
   telemetry_count: number;
   paired_by_user: {
     id: number;
@@ -119,8 +120,56 @@ export interface MapDevice {
   latitude: number;
   longitude: number;
   status: string;
+  environment_type?: string | null;
   last_seen_at: string | null;
   latest_telemetry: Telemetry | null;
+  scores?: WbsiScores | null;
+}
+
+export interface WbsiScores {
+  sensor_score: number | null;
+  severity_label: string | null;
+  report_score: number | null;
+  master_wbsi: number | null;
+  master_severity_label: string | null;
+  components?: Record<string, number | null>;
+  weights?: Record<string, number>;
+}
+
+export interface ResearchStation extends MapDevice {
+  scores: WbsiScores;
+}
+
+export interface ResearchTrendPoint {
+  date: string;
+  value: number;
+  count: number;
+}
+
+export interface ResearchCleanupEvent {
+  id: number;
+  title: string;
+  address: string;
+  latitude: number;
+  longitude: number;
+  date: string;
+  status: string;
+  attendees_count?: number;
+  currentVolunteers?: number;
+  maxVolunteers?: number;
+  creator?: {
+    organization: string | null;
+    firstName: string;
+    lastName: string;
+  } | null;
+}
+
+export interface ResearchCleanupRanking {
+  organization: string;
+  events_count: number;
+  volunteers_count: number;
+  active_count: number;
+  completed_count: number;
 }
 
 export interface LatencyMetrics {
@@ -349,6 +398,49 @@ class DeviceService {
 
   async getMapDevices(): Promise<MapDevice[]> {
     return this.apiRequest(`/api/devices/map`);
+  }
+
+  async getResearchStations(from?: string, to?: string): Promise<ResearchStation[]> {
+    const params = new URLSearchParams();
+    if (from) params.append('from', from);
+    if (to) params.append('to', to);
+    const query = params.toString();
+    return this.apiRequest(`/api/research/geotemporal/stations${query ? `?${query}` : ''}`);
+  }
+
+  async getResearchTrends(parameter: string, aggregate: string, from?: string, to?: string): Promise<{ parameter: string; aggregate: string; data: ResearchTrendPoint[] }> {
+    const params = new URLSearchParams({ parameter, aggregate });
+    if (from) params.append('from', from);
+    if (to) params.append('to', to);
+    return this.apiRequest(`/api/research/geotemporal/trends?${params.toString()}`);
+  }
+
+  async getResearchSummary(from?: string, to?: string): Promise<{
+    stations: ResearchStation[];
+    reports: any[];
+    heatmap: Array<{ latitude: number; longitude: number; intensity: number; type: string }>;
+    summary: {
+      sensor_score: number | null;
+      report_score: number | null;
+      master_wbsi: number | null;
+      severity_label: string | null;
+      station_count: number;
+      report_count: number;
+    };
+  }> {
+    const params = new URLSearchParams();
+    if (from) params.append('from', from);
+    if (to) params.append('to', to);
+    const query = params.toString();
+    return this.apiRequest(`/api/research/geotemporal/summary${query ? `?${query}` : ''}`);
+  }
+
+  async getResearchCleanups(from?: string, to?: string): Promise<{ events: ResearchCleanupEvent[]; rankings: ResearchCleanupRanking[] }> {
+    const params = new URLSearchParams();
+    if (from) params.append('from', from);
+    if (to) params.append('to', to);
+    const query = params.toString();
+    return this.apiRequest(`/api/research/geotemporal/cleanups${query ? `?${query}` : ''}`);
   }
 
   async getPerformanceMetrics(

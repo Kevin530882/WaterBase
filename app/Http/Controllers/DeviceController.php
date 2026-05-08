@@ -9,6 +9,7 @@ use App\Services\DevicePerformanceService;
 use App\Services\DeviceMaintenanceService;
 use App\Services\MetricsAggregationService;
 use App\Services\MqttBridgeService;
+use App\Services\WbsiService;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 
@@ -21,6 +22,7 @@ class DeviceController extends Controller
         protected DeviceMaintenanceService $maintenanceService,
         protected MetricsAggregationService $metricsService,
         protected DeviceActivityLogService $activityLogService,
+        protected WbsiService $wbsiService,
     )
     {
     }
@@ -269,8 +271,16 @@ class DeviceController extends Controller
                 'latitude' => $device->latitude,
                 'longitude' => $device->longitude,
                 'status' => $device->status,
+                'environment_type' => $device->environment_type ?? 'freshwater',
                 'last_seen_at' => $device->last_seen_at,
                 'latest_telemetry' => $device->latestTelemetry,
+                'scores' => $device->latestTelemetry
+                    ? $this->wbsiService->scoreTelemetryForDevice(
+                        $device,
+                        $device->latestTelemetry,
+                        $this->wbsiService->nearbyReportScore((float) $device->latitude, (float) $device->longitude)
+                    )
+                    : null,
             ];
         }));
     }

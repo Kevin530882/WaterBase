@@ -838,6 +838,11 @@ export const MapView = () => {
                               <Activity className="w-4 h-4 mr-1 text-blue-600" />
                               <span className="font-semibold">{sensor.name || sensor.station_id}</span>
                             </div>
+                            {sensor.scores && (
+                              <div className="bg-blue-50 text-blue-800 text-xs font-semibold px-2 py-1 rounded mb-2">
+                                Sensor Score: {sensor.scores.sensor_score ?? 'N/A'} | Master WBSI: {sensor.scores.master_wbsi ?? 'N/A'}
+                              </div>
+                            )}
                             <div className="text-xs text-gray-600 space-y-1">
                               {sensor.latest_telemetry?.ph !== null && sensor.latest_telemetry?.ph !== undefined && (
                                 <div>pH: {Number(sensor.latest_telemetry.ph).toFixed(2)}</div>
@@ -849,7 +854,10 @@ export const MapView = () => {
                                 <div>Turbidity: {Number(sensor.latest_telemetry.turbidity_ntu).toFixed(1)} NTU</div>
                               )}
                               {sensor.latest_telemetry?.temperature_celsius !== null && sensor.latest_telemetry?.temperature_celsius !== undefined && (
-                                <div>Temp: {Number(sensor.latest_telemetry.temperature_celsius).toFixed(1)}°C</div>
+                                <div>Temp: {Number(sensor.latest_telemetry.temperature_celsius).toFixed(1)} C</div>
+                              )}
+                              {sensor.scores?.master_severity_label && (
+                                <div>Severity: {sensor.scores.master_severity_label}</div>
                               )}
                               <div className="text-gray-400 mt-1">
                                 Last updated: {sensor.last_seen_at ? new Date(sensor.last_seen_at).toLocaleString() : 'Unknown'}

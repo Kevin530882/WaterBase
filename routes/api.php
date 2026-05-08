@@ -17,6 +17,7 @@ use App\Http\Controllers\SystemSettingsController;
 use App\Http\Controllers\BadgeController;
 use App\Http\Controllers\ResearchDocumentController;
 use App\Http\Controllers\DeviceController;
+use App\Http\Controllers\ResearchGeotemporalController;
 
 use App\Http\Controllers\MaintenanceController;
 
@@ -103,6 +104,13 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/devices/{device}/telemetry/latest', [DeviceController::class, 'latest']);
     Route::get('/devices/{device}/telemetry', [DeviceController::class, 'history']);
     Route::get('/devices/{device}/performance', [DeviceController::class, 'performance']);
+
+    // Research geotemporal analysis
+    Route::get('/research/geotemporal/stations', [ResearchGeotemporalController::class, 'stations']);
+    Route::get('/research/geotemporal/readings', [ResearchGeotemporalController::class, 'readings']);
+    Route::get('/research/geotemporal/trends', [ResearchGeotemporalController::class, 'trends']);
+    Route::get('/research/geotemporal/summary', [ResearchGeotemporalController::class, 'summary']);
+    Route::get('/research/geotemporal/cleanups', [ResearchGeotemporalController::class, 'cleanups']);
 
     // Organization social routes
     Route::get('/organizations/directory', [OrganizationSocialController::class, 'directory']);

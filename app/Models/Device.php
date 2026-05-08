@@ -25,6 +25,7 @@ class Device extends Model
         'raw_discovery_payload',
         'latitude',
         'longitude',
+        'environment_type',
         'anomaly_flags',
     ];
 
