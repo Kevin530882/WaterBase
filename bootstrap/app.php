@@ -20,6 +20,7 @@ return Application::configure(basePath: dirname(__DIR__))
         // Add CORS middleware for mobile API access
         $middleware->api(prepend: [
             \Illuminate\Http\Middleware\HandleCors::class,
+            \App\Http\Middleware\AddPerformanceMetricsHeaders::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {

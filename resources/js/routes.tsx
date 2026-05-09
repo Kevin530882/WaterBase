@@ -4,6 +4,7 @@ import { Loader2 } from "lucide-react";
 import { AuthProvider } from '@/contexts/AuthContext';
 import { ProtectedRoute } from '@/components/ProtectedRoute';
 import { RoleGuard } from "./components/RoleGuard";
+import { PerformanceReadout } from "./components/PerformanceReadout";
 import * as VIEWS from "./pages";
 import { ROUTE } from "./constants";
 
@@ -109,6 +110,7 @@ export const AppRoutes = () => {
                         {/* 404 ROUTE */}
                         <Route path="*" element={<VIEWS.NotFound />} />
                     </Routes>
+                    <PerformanceReadout />
                 </Suspense>
             </BrowserRouter>
         </AuthProvider>

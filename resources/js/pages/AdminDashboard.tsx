@@ -37,6 +37,7 @@ import {
     SelectValue,
 } from "@/components/ui/select";
 import Navigation from "@/components/Navigation";
+import { setPerformanceMetricsEnabled as setGlobalPerformanceMetricsEnabled } from "@/utils/performanceMetrics";
 import {
     BarChart3,
     Users,
@@ -144,6 +145,7 @@ export const AdminDashboard = () => {
     const [autoApproveThreshold, setAutoApproveThreshold] = useState(80);
     const [csvAutoApproveEnabled, setCsvAutoApproveEnabled] = useState(false);
     const [mobileGallerySubmissionEnabled, setMobileGallerySubmissionEnabled] = useState(true);
+    const [performanceMetricsEnabled, setPerformanceMetricsEnabled] = useState(false);
     const [wbsiNamedWaterBodySegmentRadiusM, setWbsiNamedWaterBodySegmentRadiusM] = useState(500);
     const [wbsiUngroupedProximityRadiusM, setWbsiUngroupedProximityRadiusM] = useState(150);
     const [wbsiSensorAssignmentRadiusM, setWbsiSensorAssignmentRadiusM] = useState(1000);
@@ -630,6 +632,7 @@ export const AdminDashboard = () => {
                     setAutoApproveThreshold(Number(data.auto_approve_threshold));
                     setCsvAutoApproveEnabled(Boolean(data.csv_auto_approve_enabled));
                     setMobileGallerySubmissionEnabled(Boolean(data.mobile_gallery_submission_enabled ?? true));
+                    setPerformanceMetricsEnabled(Boolean(data.performance_metrics_enabled));
                     setWbsiNamedWaterBodySegmentRadiusM(Number(data.wbsi_named_water_body_segment_radius_m ?? 500));
                     setWbsiUngroupedProximityRadiusM(Number(data.wbsi_ungrouped_proximity_radius_m ?? 150));
                     setWbsiSensorAssignmentRadiusM(Number(data.wbsi_sensor_assignment_radius_m ?? 1000));
@@ -1736,6 +1739,19 @@ export const AdminDashboard = () => {
                                             </Select>
                                         </div>
                                     </div>
+                                    <div>
+                                        <Label>Performance Testing Readout</Label>
+                                        <p className="text-xs text-gray-500 mt-1 mb-2">Shows page, API, object count, and database timing at the bottom of web and mobile screens.</p>
+                                        <div className="mt-1">
+                                            <Select value={performanceMetricsEnabled ? 'enabled' : 'disabled'} onValueChange={(v) => setPerformanceMetricsEnabled(v === 'enabled')}>
+                                                <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
+                                                <SelectContent>
+                                                    <SelectItem value="enabled">Enabled</SelectItem>
+                                                    <SelectItem value="disabled">Disabled</SelectItem>
+                                                </SelectContent>
+                                            </Select>
+                                        </div>
+                                    </div>
                                     <div className="pt-4 border-t border-gray-200 space-y-4">
                                         <div>
                                             <h4 className="text-sm font-semibold text-waterbase-950">WBSI Area Grouping</h4>
@@ -1812,6 +1828,7 @@ export const AdminDashboard = () => {
                                                         auto_approve_threshold: autoApproveThreshold,
                                                         csv_auto_approve_enabled: csvAutoApproveEnabled,
                                                         mobile_gallery_submission_enabled: mobileGallerySubmissionEnabled,
+                                                        performance_metrics_enabled: performanceMetricsEnabled,
                                                         wbsi_named_water_body_segment_radius_m: wbsiNamedWaterBodySegmentRadiusM,
                                                         wbsi_ungrouped_proximity_radius_m: wbsiUngroupedProximityRadiusM,
                                                         wbsi_sensor_assignment_radius_m: wbsiSensorAssignmentRadiusM,
@@ -1832,6 +1849,7 @@ export const AdminDashboard = () => {
                                                     })
                                                 });
                                                 if (!res.ok) throw new Error('Failed');
+                                                setGlobalPerformanceMetricsEnabled(performanceMetricsEnabled);
                                                 setSuccessMessage('Settings saved');
                                                 setShowSettingsSavedRibbon(true);
                                                 setTimeout(() => setSuccessMessage(''), 3000);

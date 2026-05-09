@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\SystemSetting;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Cache;
 
 class SystemSettingsController extends Controller
 {
@@ -19,11 +20,19 @@ class SystemSettingsController extends Controller
             return response()->json(['message' => 'Unauthorized'], 403);
         }
 
+        $settings = SystemSetting::query()->latest()->first();
+        if (!$settings) {
+            $settings = new SystemSetting(SystemSetting::DEFAULTS);
+        }
+
+        $request->merge(array_merge($settings->toArray(), $request->all()));
+
         $validated = $request->validate([
             'auto_approve_enabled' => 'required|boolean',
             'auto_approve_threshold' => 'required|integer|min:0|max:100',
             'csv_auto_approve_enabled' => 'boolean',
             'mobile_gallery_submission_enabled' => 'boolean',
+            'performance_metrics_enabled' => 'boolean',
             'wbsi_named_water_body_segment_radius_m' => 'required|integer|min:1|max:100000',
             'wbsi_ungrouped_proximity_radius_m' => 'required|integer|min:1|max:100000',
             'wbsi_sensor_assignment_radius_m' => 'required|integer|min:1|max:100000',
@@ -53,12 +62,9 @@ class SystemSettingsController extends Controller
             ], 422);
         }
 
-        $settings = SystemSetting::query()->latest()->first();
-        if (!$settings) {
-            $settings = new SystemSetting(SystemSetting::DEFAULTS);
-        }
         $settings->fill($validated);
         $settings->save();
+        Cache::forget('system_settings.performance_metrics_enabled');
 
         return response()->json($settings);
     }
@@ -76,6 +82,7 @@ class SystemSettingsController extends Controller
         $settings = SystemSetting::current();
         $settings->risky_user_threshold = (int) $validated['risky_user_threshold'];
         $settings->save();
+        Cache::forget('system_settings.performance_metrics_enabled');
 
         return response()->json($settings);
     }
