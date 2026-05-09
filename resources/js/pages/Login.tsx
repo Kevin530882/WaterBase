@@ -202,7 +202,7 @@ export const Login = () => {
                             </div>
 
                             <div>
-                                <Button variant="outline" type="button" onClick={() => { window.location.href = '/api/auth/google/redirect'; }}>
+                                <Button variant="outline" type="button" className="w-full" onClick={() => { window.location.href = '/api/auth/google/redirect'; }}>
                                     <svg className="w-4 h-4 mr-2" viewBox="0 0 24 24">
                                         {/* Google SVG paths */}
                                         <path
@@ -224,6 +224,9 @@ export const Login = () => {
                                     </svg>
                                     Google
                                 </Button>
+                                <p className="mt-2 text-center text-xs text-gray-500">
+                                    Google sign-in creates volunteer accounts only. Organizations should sign up with email.
+                                </p>
                             </div>
 
                             <div className="text-center text-sm text-gray-600">
