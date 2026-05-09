@@ -67,13 +67,6 @@ export const AppRoutes = () => {
                                 </RoleGuard>
                             </ProtectedRoute>
                         } />
-                        <Route path={ROUTE.ADMIN_USERS.path} element={
-                            <ProtectedRoute>
-                                <RoleGuard roles={['admin']}>
-                                    <VIEWS.AdminUsers />
-                                </RoleGuard>
-                            </ProtectedRoute>
-                        } />
                         <Route path={ROUTE.ADMIN_BADGES.path} element={
                             <ProtectedRoute>
                                 <RoleGuard roles={['admin']}>

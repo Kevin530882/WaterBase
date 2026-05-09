@@ -85,7 +85,22 @@ export const AdminDashboard = () => {
     const [showUserDialog, setShowUserDialog] = useState(false);
     const [showEditUserDialog, setShowEditUserDialog] = useState(false);
     const [showDeleteUserDialog, setShowDeleteUserDialog] = useState(false);
+    const [showBanDialog, setShowBanDialog] = useState(false);
     const [userToDelete, setUserToDelete] = useState(null);
+    const [selectedUserForBan, setSelectedUserForBan] = useState(null);
+    const [riskThreshold, setRiskThreshold] = useState(5);
+    const [thresholdDraft, setThresholdDraft] = useState("5");
+    const [isSavingThreshold, setIsSavingThreshold] = useState(false);
+    const [riskyUsers, setRiskyUsers] = useState([]);
+    const [riskyUsersTotal, setRiskyUsersTotal] = useState(0);
+    const [riskyCurrentPage, setRiskyCurrentPage] = useState(1);
+    const [riskyTotalPages, setRiskyTotalPages] = useState(1);
+    const [isBanSubmitting, setIsBanSubmitting] = useState(false);
+    const [banForm, setBanForm] = useState({
+        banType: "temporary",
+        banDays: "7",
+        reason: "",
+    });
     const [editFormData, setEditFormData] = useState({
         firstName: '',
         lastName: '',
@@ -290,6 +305,49 @@ export const AdminDashboard = () => {
         }
     }, [activeTab, currentPage, currentUserPage, currentEventPage, refreshKey]);
 
+    useEffect(() => {
+        if (activeTab === 'users') {
+            (async () => {
+                try {
+                    const response = await fetch('/api/admin/system-settings', {
+                        headers: {
+                            'Authorization': `Bearer ${localStorage.getItem('auth_token')}`,
+                        },
+                    });
+
+                    if (response.ok) {
+                        const data = await response.json();
+                        const threshold = Number(data.risky_user_threshold ?? 5);
+                        setRiskThreshold(threshold);
+                        setThresholdDraft(String(threshold));
+                    }
+                } catch (error) {
+                    console.error('Error loading risk threshold:', error);
+                }
+            })();
+
+            (async () => {
+                try {
+                    const response = await fetch(`/api/admin/users/risky?page=${riskyCurrentPage}`, {
+                        headers: {
+                            'Authorization': `Bearer ${localStorage.getItem('auth_token')}`,
+                        },
+                    });
+
+                    if (response.ok) {
+                        const data = await response.json();
+                        const paginator = data.users || data;
+                        setRiskyUsers(paginator.data || []);
+                        setRiskyUsersTotal(paginator.total || 0);
+                        setRiskyTotalPages(paginator.last_page || 1);
+                    }
+                } catch (error) {
+                    console.error('Error loading risky users:', error);
+                }
+            })();
+        }
+    }, [activeTab, riskyCurrentPage]);
+
     const handleReportAction = async (reportId, action, adminNotes) => {
         let status;
         if (action === 'approve') status = 'verified';
@@ -348,6 +406,127 @@ export const AdminDashboard = () => {
 
     const shouldShowOrganizationFields = (role) => {
         return ['ngo', 'lgu'].includes(role);
+    };
+
+    const getStatusColor = (status) => {
+        switch ((status || 'active').toLowerCase()) {
+            case 'banned':
+                return 'bg-red-100 text-red-800';
+            default:
+                return 'bg-green-100 text-green-800';
+        }
+    };
+
+    const getRiskColor = (score) => {
+        if ((score ?? 0) >= riskThreshold) {
+            return 'bg-red-100 text-red-800';
+        }
+
+        if ((score ?? 0) > 0) {
+            return 'bg-yellow-100 text-yellow-800';
+        }
+
+        return 'bg-green-100 text-green-800';
+    };
+
+    const openBanDialog = (user) => {
+        setSelectedUserForBan(user);
+        setBanForm({
+            banType: user.user_status === 'banned' && !user.ban_duration ? 'permanent' : 'temporary',
+            banDays: '7',
+            reason: '',
+        });
+        setShowBanDialog(true);
+    };
+
+    const handleSaveThreshold = async () => {
+        setIsSavingThreshold(true);
+        setErrorMessage('');
+
+        try {
+            const response = await fetch('/api/admin/system-settings/risky-user-threshold', {
+                method: 'PATCH',
+                headers: {
+                    'Authorization': `Bearer ${localStorage.getItem('auth_token')}`,
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ risky_user_threshold: Number(thresholdDraft) }),
+            });
+
+            if (!response.ok) {
+                throw new Error('Failed to update risk threshold');
+            }
+
+            const data = await response.json();
+            const threshold = Number(data.risky_user_threshold ?? thresholdDraft);
+            setRiskThreshold(threshold);
+            setThresholdDraft(String(threshold));
+        } catch (error) {
+            console.error('Error saving risk threshold:', error);
+            setErrorMessage('Failed to update risk threshold. Please try again.');
+        } finally {
+            setIsSavingThreshold(false);
+        }
+    };
+
+    const handleBanUser = async () => {
+        if (!selectedUserForBan) return;
+
+        setIsBanSubmitting(true);
+        setErrorMessage('');
+
+        try {
+            const payload = {
+                reason: banForm.reason.trim() || null,
+                ...(banForm.banType === 'temporary' ? { ban_days: Number(banForm.banDays) } : {}),
+            };
+
+            const response = await fetch(`/api/admin/users/${selectedUserForBan.id}/ban`, {
+                method: 'PATCH',
+                headers: {
+                    'Authorization': `Bearer ${localStorage.getItem('auth_token')}`,
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(payload),
+            });
+
+            if (!response.ok) {
+                throw new Error('Failed to ban user');
+            }
+
+            setShowBanDialog(false);
+            await fetchUsers(currentUserPage);
+        } catch (error) {
+            console.error('Error banning user:', error);
+            setErrorMessage('Failed to ban user. Please try again.');
+        } finally {
+            setIsBanSubmitting(false);
+        }
+    };
+
+    const handleUnbanUser = async (user) => {
+        setIsBanSubmitting(true);
+        setErrorMessage('');
+
+        try {
+            const response = await fetch(`/api/admin/users/${user.id}/unban`, {
+                method: 'PATCH',
+                headers: {
+                    'Authorization': `Bearer ${localStorage.getItem('auth_token')}`,
+                },
+            });
+
+            if (!response.ok) {
+                throw new Error('Failed to unban user');
+            }
+
+            await fetchUsers(currentUserPage);
+        } catch (error) {
+            console.error('Error unbanning user:', error);
+            setErrorMessage('Failed to unban user. Please try again.');
+        } finally {
+            setIsBanSubmitting(false);
+        }
     };
 
     const handleUpdateUser = async () => {
@@ -684,60 +863,18 @@ export const AdminDashboard = () => {
                                     </ResponsiveContainer>
                                 </CardContent>
                             </Card>
-                            <Card className="border-waterbase-200">
-                                <CardHeader>
-                                    <CardTitle className="flex items-center">
-                                        <AlertTriangle className="w-5 h-5 mr-2" />
-                                        Recent Alerts
-                                    </CardTitle>
-                                </CardHeader>
-                                <CardContent>
-                                    <div className="space-y-3">
-                                        {recentAlerts.length > 0 ? (
-                                            recentAlerts.map((alert) => (
-                                                <div key={alert.id} className="p-3 bg-red-50 border border-red-200 rounded-lg">
-                                                    <div className="flex items-center justify-between">
-                                                        <span className="text-sm font-medium text-red-800">{alert.title}</span>
-                                                        <Badge variant="destructive" className="text-xs">{alert.severityByAI || alert.severityByUser}</Badge>
-                                                    </div>
-                                                    <p className="text-xs text-red-600 mt-1">{alert.address} - {format(parseISO(alert.created_at), 'dd MMM yy')}</p>
-                                                </div>
-                                            ))
-                                        ) : (
-                                            <div className="p-3 bg-gray-50 border border-gray-200 rounded-lg text-center text-gray-600">
-                                                No recent high-severity alerts.
-                                            </div>
-                                        )}
-                                    </div>
-                                </CardContent>
-                            </Card>
                         </div>
                     </TabsContent>
 
                     <TabsContent value="reports">
                         <Card className="border-waterbase-200">
-                            <CardHeader className="pb-3">
-                                <div className="flex items-center justify-between">
-                                    <CardTitle className="flex items-center text-lg">
+                            <CardHeader>
+                                <div>
+                                    <CardTitle className="flex items-center text-lg mb-2">
                                         <FileText className="w-4 h-4 mr-2" />
-                                        Report Validation Queue
+                                        Report Management
                                     </CardTitle>
                                     <div className="flex flex-wrap gap-4">
-                                        <Select value={filterPollutionType} onValueChange={setFilterPollutionType}>
-                                            <SelectTrigger className="w-[180px]">
-                                                <SelectValue placeholder="Pollution Type" />
-                                            </SelectTrigger>
-                                            <SelectContent>
-                                                <SelectItem value="All">All</SelectItem>
-                                                <SelectItem value="Industrial Waste">Industrial Waste</SelectItem>
-                                                <SelectItem value="Plastic Pollution">Plastic Pollution</SelectItem>
-                                                <SelectItem value="Sewage Discharge">Sewage Discharge</SelectItem>
-                                                <SelectItem value="Chemical Pollution">Chemical Pollution</SelectItem>
-                                                <SelectItem value="Oil Spill">Oil Spillage</SelectItem>
-                                                <SelectItem value="Unnatural Color - AI">Unnatural Color - AI</SelectItem>
-                                                <SelectItem value="Clean">Clean</SelectItem>
-                                            </SelectContent>
-                                        </Select>
                                         <Select value={filterSeverityByUser} onValueChange={setFilterSeverityByUser}>
                                             <SelectTrigger className="w-[180px]">
                                                 <SelectValue placeholder="User Severity" />
@@ -1012,6 +1149,109 @@ export const AdminDashboard = () => {
                     </TabsContent>
 
                     <TabsContent value="users">
+                        <Card className="border-waterbase-200 mb-4">
+                            <CardHeader className="pb-3">
+                                <CardTitle className="flex items-center text-lg">
+                                    <Shield className="w-4 h-4 mr-2" />
+                                    Risk Threshold
+                                </CardTitle>
+                            </CardHeader>
+                            <CardContent className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                <div>
+                                    <Label htmlFor="riskThreshold">Risk score threshold</Label>
+                                    <Input
+                                        id="riskThreshold"
+                                        type="number"
+                                        min="1"
+                                        value={thresholdDraft}
+                                        onChange={(e) => setThresholdDraft(e.target.value)}
+                                        className="h-8 text-xs"
+                                    />
+                                </div>
+                                <div className="rounded-lg border border-yellow-200 bg-yellow-50 p-3">
+                                    <p className="text-xs font-medium text-yellow-700">Risky users</p>
+                                    <p className="text-2xl font-bold text-yellow-900">{riskyUsersTotal}</p>
+                                    <p className="text-xs text-yellow-700">Current threshold: {riskThreshold}</p>
+                                </div>
+                                <div className="flex items-end">
+                                    <Button
+                                        size="sm"
+                                        onClick={handleSaveThreshold}
+                                        disabled={isSavingThreshold}
+                                        className="h-8 bg-waterbase-500 hover:bg-waterbase-600"
+                                    >
+                                        {isSavingThreshold ? 'Saving...' : 'Save Threshold'}
+                                    </Button>
+                                </div>
+                            </CardContent>
+                        </Card>
+
+                        <Card className="border-waterbase-200">
+                            <CardHeader className="pb-3">
+                                <CardTitle className="flex items-center text-lg">
+                                    <AlertTriangle className="w-4 h-4 mr-2 text-yellow-600" />
+                                    Risky Users
+                                </CardTitle>
+                            </CardHeader>
+                            <CardContent className="p-4">
+                                <div className="overflow-x-auto">
+                                    <Table>
+                                        <TableHeader>
+                                            <TableRow>
+                                                <TableHead className="text-xs">User</TableHead>
+                                                <TableHead className="text-xs">Risk Score</TableHead>
+                                                <TableHead className="text-xs hidden md:table-cell">Status</TableHead>
+                                                <TableHead className="text-xs hidden md:table-cell">Actions</TableHead>
+                                            </TableRow>
+                                        </TableHeader>
+                                        <TableBody>
+                                            {riskyUsers && riskyUsers.length > 0 ? (
+                                                riskyUsers.map((user: any) => (
+                                                    <TableRow key={user.id}>
+                                                        <TableCell className="py-2">
+                                                            <div className="max-w-[150px]">
+                                                                <div className="font-medium text-xs truncate">{user.firstName} {user.lastName}</div>
+                                                                <div className="text-xs text-gray-600 truncate">{user.email}</div>
+                                                            </div>
+                                                        </TableCell>
+                                                        <TableCell className="py-2">
+                                                            <Badge className="bg-yellow-100 text-yellow-800 text-xs">{user.risk_metric_score}</Badge>
+                                                        </TableCell>
+                                                        <TableCell className="py-2 hidden md:table-cell">
+                                                            <Badge variant={user.user_status === 'banned' ? 'destructive' : 'outline'} className="text-xs">
+                                                                {user.user_status === 'banned' ? 'Banned' : 'Active'}
+                                                            </Badge>
+                                                        </TableCell>
+                                                        <TableCell className="py-2 hidden md:table-cell">
+                                                            <Button
+                                                                size="sm"
+                                                                variant={user.user_status === 'banned' ? 'outline' : 'destructive'}
+                                                                className="h-7 text-xs"
+                                                                onClick={() => user.user_status === 'banned' ? handleUnbanUser(user) : openBanDialog(user)}
+                                                            >
+                                                                {user.user_status === 'banned' ? 'Unban' : 'Ban'}
+                                                            </Button>
+                                                        </TableCell>
+                                                    </TableRow>
+                                                ))
+                                            ) : (
+                                                <TableRow>
+                                                    <TableCell colSpan={4} className="text-center py-4 text-gray-500 text-xs">
+                                                        No risky users found
+                                                    </TableCell>
+                                                </TableRow>
+                                            )}
+                                        </TableBody>
+                                    </Table>
+                                </div>
+                                <div className="flex items-center justify-between mt-4">
+                                    <Button onClick={() => setRiskyCurrentPage(prev => Math.max(prev - 1, 1))} disabled={riskyCurrentPage === 1} size="sm" className="h-8 text-xs">Previous</Button>
+                                    <span className="text-xs">Page {riskyCurrentPage} of {riskyTotalPages}</span>
+                                    <Button onClick={() => setRiskyCurrentPage(prev => Math.min(prev + 1, riskyTotalPages))} disabled={riskyCurrentPage === riskyTotalPages} size="sm" className="h-8 text-xs">Next</Button>
+                                </div>
+                            </CardContent>
+                        </Card>
+
                         <Card className="border-waterbase-200">
                             <CardHeader className="pb-1">
                                 <div>
@@ -1094,9 +1334,15 @@ export const AdminDashboard = () => {
                                                             <Button variant="outline" size="sm" className="h-7 w-7 p-0" onClick={() => { setSelectedUser(user); setShowUserDialog(true); }}>
                                                                 <Eye className="w-3 h-3" />
                                                             </Button>
-                                                            <Button variant="outline" size="sm" className="h-7 w-7 p-0 text-red-600" onClick={() => { setUserToDelete(user); setShowDeleteUserDialog(true); }}>
-                                                                <Trash2 className="w-3 h-3" />
-                                                            </Button>
+                                                            {user.user_status === 'banned' ? (
+                                                                <Button variant="outline" size="sm" className="h-7 w-7 p-0 text-green-600" onClick={() => handleUnbanUser(user)} disabled={isBanSubmitting}>
+                                                                    <Shield className="w-3 h-3" />
+                                                                </Button>
+                                                            ) : (
+                                                                <Button variant="outline" size="sm" className="h-7 w-7 p-0 text-red-600" onClick={() => openBanDialog(user)} disabled={isBanSubmitting}>
+                                                                    <Shield className="w-3 h-3" />
+                                                                </Button>
+                                                            )}
                                                         </div>
                                                     </TableCell>
                                                 </TableRow>
@@ -1205,6 +1451,17 @@ export const AdminDashboard = () => {
                                             <Label>Role</Label>
                                             <div className="text-sm">{selectedUser.role}</div>
                                         </div>
+                                        <div>
+                                            <Label>Risk Score</Label>
+                                            <div className="flex items-center gap-2">
+                                                <Badge className={selectedUser.risk_metric_score >= riskThreshold ? "bg-red-100 text-red-800" : "bg-green-100 text-green-800"}>
+                                                    {selectedUser.risk_metric_score || 0}
+                                                </Badge>
+                                                <span className="text-xs text-gray-500">
+                                                    {selectedUser.risk_metric_score >= riskThreshold ? `(Above threshold: ${riskThreshold})` : `(Below threshold: ${riskThreshold})`}
+                                                </span>
+                                            </div>
+                                        </div>
                                         {shouldShowOrganizationFields(selectedUser.role) && (
                                             <>
                                                 <div>
@@ -1221,6 +1478,53 @@ export const AdminDashboard = () => {
                                 </DialogContent>
                             </Dialog>
                         )}
+                        <Dialog open={showBanDialog} onOpenChange={setShowBanDialog}>
+                            <DialogContent className="max-h-[80vh] overflow-y-auto">
+                                <DialogHeader>
+                                    <DialogTitle>Ban User</DialogTitle>
+                                    <DialogDescription>
+                                        {selectedUserForBan ? `Manage ban status for ${selectedUserForBan.firstName} ${selectedUserForBan.lastName}` : 'Manage ban status'}
+                                    </DialogDescription>
+                                </DialogHeader>
+                                <div className="space-y-4">
+                                    <div>
+                                        <Label htmlFor="banType">Ban Type</Label>
+                                        <Select value={banForm.banType} onValueChange={(value) => setBanForm({ ...banForm, banType: value })}>
+                                            <SelectTrigger>
+                                                <SelectValue placeholder="Select ban type" />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                <SelectItem value="temporary">Temporary</SelectItem>
+                                                <SelectItem value="permanent">Permanent</SelectItem>
+                                            </SelectContent>
+                                        </Select>
+                                    </div>
+                                    {banForm.banType === 'temporary' && (
+                                        <div>
+                                            <Label htmlFor="banDays">Ban Duration (days)</Label>
+                                            <Input id="banDays" type="number" min="1" value={banForm.banDays} onChange={(e) => setBanForm({ ...banForm, banDays: e.target.value })} />
+                                        </div>
+                                    )}
+                                    <div>
+                                        <Label htmlFor="banReason">Reason</Label>
+                                        <textarea
+                                            id="banReason"
+                                            className="w-full min-h-[96px] rounded-md border border-gray-300 p-2 text-sm"
+                                            value={banForm.reason}
+                                            onChange={(e) => setBanForm({ ...banForm, reason: e.target.value })}
+                                            placeholder="Describe why this user is being banned"
+                                        />
+                                    </div>
+                                </div>
+                                <div className="flex justify-end space-x-2 mt-6">
+                                    <Button variant="outline" onClick={() => setShowBanDialog(false)} disabled={isBanSubmitting}>Cancel</Button>
+                                    <Button variant="destructive" onClick={handleBanUser} disabled={isBanSubmitting}>
+                                        {isBanSubmitting ? 'Saving...' : 'Confirm Ban'}
+                                    </Button>
+                                </div>
+                            </DialogContent>
+                        </Dialog>
+
                         {userToDelete && (
                             <Dialog open={showDeleteUserDialog} onOpenChange={setShowDeleteUserDialog}>
                                 <DialogContent>

@@ -13,6 +13,7 @@ class SystemSetting extends Model
         'auto_approve_enabled' => false,
         'auto_approve_threshold' => 80,
         'csv_auto_approve_enabled' => false,
+        'risky_user_threshold' => 5,
         'wbsi_named_water_body_segment_radius_m' => 500,
         'wbsi_ungrouped_proximity_radius_m' => 150,
         'wbsi_sensor_assignment_radius_m' => 1000,
@@ -36,6 +37,7 @@ class SystemSetting extends Model
         'auto_approve_enabled',
         'auto_approve_threshold',
         'csv_auto_approve_enabled',
+        'risky_user_threshold',
         'wbsi_named_water_body_segment_radius_m',
         'wbsi_ungrouped_proximity_radius_m',
         'wbsi_sensor_assignment_radius_m',
@@ -58,6 +60,7 @@ class SystemSetting extends Model
     protected $casts = [
         'auto_approve_enabled' => 'boolean',
         'csv_auto_approve_enabled' => 'boolean',
+        'risky_user_threshold' => 'integer',
         'wbsi_sensor_weight' => 'float',
         'wbsi_report_weight' => 'float',
         'wbsi_freshwater_ph_min' => 'float',

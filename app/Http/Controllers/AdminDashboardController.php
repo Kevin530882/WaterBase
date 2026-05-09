@@ -6,6 +6,7 @@ use Carbon\Carbon;
 use App\Models\User;
 use App\Models\Event;
 use App\Models\Report;
+use App\Models\SystemSetting;
 use Illuminate\Http\Request;
 use App\Services\GeographicService;
 use Illuminate\Support\Facades\Log;
@@ -180,6 +181,38 @@ class AdminDashboardController extends Controller
             return response()->json(['message' => 'No users found'], 404);
         }
     }
+
+    public function getRiskyUsers(Request $request)
+    {
+        try {
+            $settings = SystemSetting::current();
+            $threshold = (int) ($settings->risky_user_threshold ?? 5);
+
+            $query = User::query()
+                ->where('risk_metric_score', '>=', $threshold)
+                ->withCount(['attendedEvents', 'createdEvents', 'reports']);
+
+            if ($request->filled('search')) {
+                $search = trim((string) $request->search);
+                $query->where(function ($subQuery) use ($search) {
+                    $subQuery->whereRaw("CONCAT(firstName, ' ', lastName) LIKE ?", ['%' . $search . '%'])
+                        ->orWhere('email', 'LIKE', '%' . $search . '%')
+                        ->orWhere('organization', 'LIKE', '%' . $search . '%');
+                });
+            }
+
+            $users = $query->latest()->paginate(10);
+
+            return response()->json([
+                'threshold' => $threshold,
+                'users' => $users,
+            ]);
+        } catch (\Throwable $e) {
+            Log::error('Failed to get risky users', ['error' => $e->getMessage()]);
+
+            return response()->json(['message' => 'Failed to get risky users'], 500);
+        }
+    }
     public function editExistingUser(Request $request, User $user)
     {
         try {
@@ -249,14 +282,43 @@ class AdminDashboardController extends Controller
         }
     }
 
-    public function deleteUser(User $user)
-        {
-            if (Auth::user()->role !== 'admin') {
-                return response()->json(['message' => 'Unauthorized'], 403);
-            }
-            $user->delete();
-            return response()->json(['message' => 'User deleted successfully']);
+    public function banUser(Request $request, User $user)
+    {
+        if (Auth::user()->role !== 'admin') {
+            return response()->json(['message' => 'Unauthorized'], 403);
         }
+
+        $validated = $request->validate([
+            'ban_days' => 'nullable|integer|min:1|max:3650',
+            'reason' => 'nullable|string|max:1000',
+        ]);
+
+        $user->user_status = User::USER_STATUS_BANNED;
+        $user->ban_duration = isset($validated['ban_days']) ? now()->addDays((int) $validated['ban_days']) : null;
+        $user->save();
+        $user->tokens()->delete();
+
+        return response()->json([
+            'message' => 'User banned successfully',
+            'user' => $user->fresh(),
+        ]);
+    }
+
+    public function unbanUser(Request $request, User $user)
+    {
+        if (Auth::user()->role !== 'admin') {
+            return response()->json(['message' => 'Unauthorized'], 403);
+        }
+
+        $user->user_status = User::USER_STATUS_ACTIVE;
+        $user->ban_duration = null;
+        $user->save();
+
+        return response()->json([
+            'message' => 'User unbanned successfully',
+            'user' => $user->fresh(),
+        ]);
+    }
         
     /**
      * Show the form for creating a new resource.
