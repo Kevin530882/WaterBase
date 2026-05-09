@@ -23,6 +23,7 @@ class SystemSettingsController extends Controller
             'auto_approve_enabled' => 'required|boolean',
             'auto_approve_threshold' => 'required|integer|min:0|max:100',
             'csv_auto_approve_enabled' => 'boolean',
+            'mobile_gallery_submission_enabled' => 'boolean',
             'wbsi_named_water_body_segment_radius_m' => 'required|integer|min:1|max:100000',
             'wbsi_ungrouped_proximity_radius_m' => 'required|integer|min:1|max:100000',
             'wbsi_sensor_assignment_radius_m' => 'required|integer|min:1|max:100000',
@@ -79,4 +80,3 @@ class SystemSettingsController extends Controller
         return response()->json($settings);
     }
 }
-

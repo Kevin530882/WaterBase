@@ -13,6 +13,7 @@ class SystemSetting extends Model
         'auto_approve_enabled' => false,
         'auto_approve_threshold' => 80,
         'csv_auto_approve_enabled' => false,
+        'mobile_gallery_submission_enabled' => true,
         'risky_user_threshold' => 5,
         'wbsi_named_water_body_segment_radius_m' => 500,
         'wbsi_ungrouped_proximity_radius_m' => 150,
@@ -37,6 +38,7 @@ class SystemSetting extends Model
         'auto_approve_enabled',
         'auto_approve_threshold',
         'csv_auto_approve_enabled',
+        'mobile_gallery_submission_enabled',
         'risky_user_threshold',
         'wbsi_named_water_body_segment_radius_m',
         'wbsi_ungrouped_proximity_radius_m',
@@ -60,6 +62,7 @@ class SystemSetting extends Model
     protected $casts = [
         'auto_approve_enabled' => 'boolean',
         'csv_auto_approve_enabled' => 'boolean',
+        'mobile_gallery_submission_enabled' => 'boolean',
         'risky_user_threshold' => 'integer',
         'wbsi_sensor_weight' => 'float',
         'wbsi_report_weight' => 'float',
@@ -94,4 +97,3 @@ class SystemSetting extends Model
         return $settings;
     }
 }
-
