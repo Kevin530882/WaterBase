@@ -71,10 +71,6 @@ export const ROUTE = {
         path: "/admin/reports",
         name: "Admin Reports",
     },
-    ADMIN_USERS : {
-        path: "/admin/users",
-        name: "Admin Users",
-    },
     ADMIN_BADGES : {
         path: "/admin/badges",
         name: "Admin Badges",

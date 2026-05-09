@@ -9,7 +9,6 @@ export const AdminDeviceDetail = lazy(() => import('./AdminDeviceDetail').then(m
 export const AdminDeviceMaintenance = lazy(() => import('./AdminDeviceMaintenance').then(m => ({ default: m.AdminDeviceMaintenance })));
 export const AdminOrganizations = lazy(() => import('./AdminOrganizations').then(m => ({ default: m.AdminOrganizations })));
 export const AdminReports = lazy(() => import('./AdminReports').then(m => ({ default: m.AdminReports })));
-export const AdminUsers = lazy(() => import('./AdminUsers').then(m => ({ default: m.AdminUsers })));
 export const Community = lazy(() => import('./Community').then(m => ({ default: m.Community })));
 export const Dashboard = lazy(() => import('./Dashboard').then(m => ({ default: m.Dashboard })));
 export const Home = lazy(() => import('./Home').then(m => ({ default: m.Home })));

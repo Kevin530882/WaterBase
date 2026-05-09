@@ -582,30 +582,29 @@ export const OrganizerPortal = () => {
 
 
     const handleDeclineReport = async (reportId: number) => {
-        if (!confirm('Are you sure you want to decline this report? This action cannot be undone.')) {
+        if (!confirm('Are you sure you want to flag this report as suspicious? This will mark it declined and increase the submitter risk score.')) {
             return;
         }
 
         try {
-            const response = await fetch(`/api/reports/${reportId}/status`, {
-                method: 'PATCH',
+            const response = await fetch(`/api/reports/${reportId}/flag-suspicious`, {
+                method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                     'Authorization': `Bearer ${token}`,
                     'Accept': 'application/json',
                 },
-                body: JSON.stringify({ status: 'declined' }),
             });
 
             if (response.ok) {
                 await handleRefreshData();
-                alert('Report declined successfully!');
+                alert('Report flagged as suspicious successfully!');
             } else {
-                throw new Error('Failed to decline report');
+                throw new Error('Failed to flag report as suspicious');
             }
         } catch (error) {
-            console.error('Error declining report:', error);
-            alert('Failed to decline report. Please try again.');
+            console.error('Error flagging report as suspicious:', error);
+            alert('Failed to flag report as suspicious. Please try again.');
         }
     };
 

@@ -13,6 +13,8 @@ class User extends Authenticatable
     use HasFactory, Notifiable, HasApiTokens;
 
     public const ORGANIZATION_ROLES = ['ngo', 'lgu'];
+    public const USER_STATUS_ACTIVE = 'active';
+    public const USER_STATUS_BANNED = 'banned';
 
     public const STATUS_PENDING = 'pending';
     public const STATUS_APPROVED = 'approved';
@@ -32,6 +34,9 @@ class User extends Authenticatable
         'approved_by',
         'approved_at',
         'approval_notes',
+        'user_status',
+        'ban_duration',
+        'risk_metric_score',
         'organization',
         'organization_proof_document',
         'areaOfResponsibility',
@@ -57,6 +62,8 @@ class User extends Authenticatable
         'profile_completed_at' => 'datetime',
         'push_token_updated_at' => 'datetime',
         'approved_at' => 'datetime',
+        'ban_duration' => 'datetime',
+        'risk_metric_score' => 'integer',
         'push_notifications_enabled' => 'boolean',
         'push_pref_report_updates' => 'boolean',
         'push_pref_event_reminders' => 'boolean',
@@ -174,5 +181,42 @@ class User extends Authenticatable
     public function isOrganization(): bool
     {
         return in_array(strtolower((string) $this->role), self::ORGANIZATION_ROLES, true);
+    }
+
+    public function isTemporarilyBanned(): bool
+    {
+        return $this->user_status === self::USER_STATUS_BANNED && $this->ban_duration !== null;
+    }
+
+    public function isPermanentlyBanned(): bool
+    {
+        return $this->user_status === self::USER_STATUS_BANNED && $this->ban_duration === null;
+    }
+
+    public function isBanned(): bool
+    {
+        if ($this->user_status !== self::USER_STATUS_BANNED) {
+            return false;
+        }
+
+        if ($this->ban_duration === null) {
+            return true;
+        }
+
+        return $this->ban_duration->isFuture();
+    }
+
+    public function clearExpiredBan(): bool
+    {
+        if (!$this->isTemporarilyBanned() || $this->ban_duration === null || $this->ban_duration->isFuture()) {
+            return false;
+        }
+
+        $this->forceFill([
+            'user_status' => self::USER_STATUS_ACTIVE,
+            'ban_duration' => null,
+        ])->save();
+
+        return true;
     }
 }

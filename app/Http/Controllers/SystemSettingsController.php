@@ -61,5 +61,22 @@ class SystemSettingsController extends Controller
 
         return response()->json($settings);
     }
+
+    public function updateRiskyUserThreshold(Request $request)
+    {
+        if (Auth::user()->role !== 'admin') {
+            return response()->json(['message' => 'Unauthorized'], 403);
+        }
+
+        $validated = $request->validate([
+            'risky_user_threshold' => 'required|integer|min:1|max:1000',
+        ]);
+
+        $settings = SystemSetting::current();
+        $settings->risky_user_threshold = (int) $validated['risky_user_threshold'];
+        $settings->save();
+
+        return response()->json($settings);
+    }
 }
 

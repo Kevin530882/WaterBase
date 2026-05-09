@@ -14,6 +14,7 @@ return Application::configure(basePath: dirname(__DIR__))
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->alias([
             'role' => \App\Http\Middleware\EnsureUserHasRole::class,
+            'banned' => \App\Http\Middleware\EnsureUserNotBanned::class,
         ]);
         
         // Add CORS middleware for mobile API access

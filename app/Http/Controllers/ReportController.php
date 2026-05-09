@@ -16,7 +16,6 @@ use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Validation\ValidationException;
 use App\Models\SystemSetting;
 use App\Services\NotificationService;
-use Illuminate\Support\Facades\Validator;
 
 class ReportController extends Controller
 {
@@ -400,6 +399,63 @@ class ReportController extends Controller
             ], 200);
         } catch (ModelNotFoundException $e) {
             return response()->json(['message' => 'Report not found'], 404);
+        }
+    }
+
+    public function flagSuspicious(Request $request, string $id)
+    {
+        try {
+            $report = Report::with('user:id,firstName,lastName,email,risk_metric_score')->findOrFail($id);
+            $actor = $request->user();
+
+            if (!in_array(strtolower((string) $actor->role), ['ngo', 'lgu', 'admin'], true)) {
+                return response()->json(['message' => 'Unauthorized'], 403);
+            }
+
+            if ($report->user_id === $actor->id) {
+                return response()->json(['message' => 'You cannot flag your own report.'], 422);
+            }
+
+            if ($actor->role !== 'admin' && !$this->reportMatchesUserArea($report, $actor)) {
+                return response()->json(['message' => 'You can only flag reports within your area of responsibility.'], 403);
+            }
+
+            if ((string) $report->status === ReportStatus::DECLINED->value) {
+                return response()->json(['message' => 'This report has already been flagged as suspicious.'], 422);
+            }
+
+            $oldStatus = (string) $report->status;
+            $report->status = ReportStatus::DECLINED->value;
+            $report->flagged_by = $actor->id;
+            $report->flagged_at = now();
+            $report->save();
+
+            $report->user?->increment('risk_metric_score');
+
+            $this->notificationService->notifyReportStatusChanged(
+                report: $report,
+                oldStatus: $oldStatus,
+                newStatus: ReportStatus::DECLINED->value,
+                actor: $actor,
+                extra: ['source' => 'suspicious_flag']
+            );
+
+            return response()->json([
+                'message' => 'Report flagged as suspicious',
+                'report' => $report->fresh(['user:id,firstName,lastName,email,risk_metric_score']),
+                'risk_metric_score' => $report->user?->risk_metric_score,
+            ]);
+        } catch (ModelNotFoundException $e) {
+            return response()->json(['message' => 'Report not found'], 404);
+        } catch (\Throwable $e) {
+            Log::error('Failed to flag report as suspicious', [
+                'report_id' => $id,
+                'error' => $e->getMessage(),
+            ]);
+
+            return response()->json([
+                'message' => 'Failed to flag report as suspicious',
+            ], 500);
         }
     }
 
@@ -858,6 +914,36 @@ class ReportController extends Controller
         }
 
         return array_unique(array_filter($locationParts));
+    }
+
+    private function reportMatchesUserArea(Report $report, $user): bool
+    {
+        if (empty($user->areaOfResponsibility)) {
+            return false;
+        }
+
+        if ($this->hasGeographicBounds($user) && $report->latitude !== null && $report->longitude !== null) {
+            $lat = (float) $report->latitude;
+            $lng = (float) $report->longitude;
+
+            if (
+                $lat >= (float) $user->bbox_south &&
+                $lat <= (float) $user->bbox_north &&
+                $lng >= (float) $user->bbox_west &&
+                $lng <= (float) $user->bbox_east
+            ) {
+                return true;
+            }
+        }
+
+        $address = strtoupper((string) $report->address);
+        foreach ($this->extractLocationParts($user->areaOfResponsibility) as $part) {
+            if ($part !== '' && str_contains($address, strtoupper($part))) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     /**

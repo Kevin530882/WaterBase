@@ -33,7 +33,6 @@ const Navigation = () => {
         return [
           { href: "/admin/dashboard", label: "Admin Dashboard", icon: BarChart3 },
           { href: "/admin/reports", label: "Admin Reports", icon: Upload },
-          { href: "/admin/users", label: "Admin Users", icon: Users },
           { href: "/admin/devices", label: "Admin Devices", icon: Shield },
           { href: "/admin/badges", label: "Admin Badges", icon: Award },
           { href: "/admin/organizations", label: "Organization Approvals", icon: ShieldAlert },

@@ -318,7 +318,7 @@ export const AreaDetails = ({
                                                                     onClick={() => onDeclineReport(report.id)}
                                                                 >
                                                                     <AlertTriangle className="w-3 h-3 mr-1" />
-                                                                    Decline
+                                                                    Flag Suspicious
                                                                 </Button>
 
                                                             </>

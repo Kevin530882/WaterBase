@@ -151,6 +151,18 @@ class UserController extends Controller
             ], 401);
         }
 
+        if ($user->clearExpiredBan()) {
+            $user->refresh();
+        }
+
+        if ($user->isBanned()) {
+            return response()->json([
+                'message' => $user->isTemporarilyBanned()
+                    ? 'Your account is temporarily banned. Please try again later.'
+                    : 'Your account has been banned. Please contact an administrator.',
+            ], 403);
+        }
+
         if ($user->isOrganization() && $user->approval_status !== User::STATUS_APPROVED) {
             $statusLabel = $user->approval_status === User::STATUS_REJECTED ? 'rejected' : 'pending';
             return response()->json([

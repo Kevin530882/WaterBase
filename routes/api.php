@@ -32,7 +32,7 @@ Route::get('/auth/google/callback', [UserController::class, 'handleGoogleCallbac
 Route::post('/auth/google/mobile', [UserController::class, 'googleMobile']);
 Route::get('/organizations', [UserController::class, 'getOrganizations']);
 
-Route::middleware('auth:sanctum')->group(function () {
+Route::middleware(['auth:sanctum', 'banned'])->group(function () {
     Route::post('/logout', [UserController::class, 'logout']);
     Route::post('/auth/complete-profile', [UserController::class, 'completeProfile']);
     Route::post('/user/push-token', [UserController::class, 'registerPushToken']);
@@ -53,6 +53,7 @@ Route::middleware('auth:sanctum')->group(function () {
     // Report routes - specific routes MUST come before resourceful routes
     Route::get('/reports/all', [ReportController::class, 'all']);
     Route::get('/reports/accessible', [ReportController::class, 'accessible']);
+    Route::post('/reports/{report}/flag-suspicious', [ReportController::class, 'flagSuspicious']);
     Route::patch('/reports/{report}/status', [ReportController::class, 'updateStatus']);
     Route::patch('/reports/bulk-status', [ReportController::class, 'bulkUpdateStatus']);
     Route::get('/reports/area/{area}', [ReportController::class, 'getReportsByArea']);
@@ -174,8 +175,10 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::put('/admin/reports/{report}/status', [AdminDashboardController::class, 'updateStatus']);
 
     Route::get('/admin/users', [AdminDashboardController::class, 'getExistingUsers']);
+    Route::get('/admin/users/risky', [AdminDashboardController::class, 'getRiskyUsers']);
     Route::put('/admin/users/{user}', [AdminDashboardController::class, 'editExistingUser']);
-    Route::delete('/admin/users/{user}', [AdminDashboardController::class, 'deleteUser']);
+    Route::patch('/admin/users/{user}/ban', [AdminDashboardController::class, 'banUser']);
+    Route::patch('/admin/users/{user}/unban', [AdminDashboardController::class, 'unbanUser']);
 
     Route::get("/admin/events", [AdminDashboardController::class,"getEvents"]);
     Route::delete('/admin/events/{event}', [AdminDashboardController::class, 'deleteEvent']);
@@ -190,6 +193,7 @@ Route::middleware('auth:sanctum')->group(function () {
     // System settings
     Route::get('/admin/system-settings', [SystemSettingsController::class, 'get']);
     Route::put('/admin/system-settings', [SystemSettingsController::class, 'update']);
+    Route::patch('/admin/system-settings/risky-user-threshold', [SystemSettingsController::class, 'updateRiskyUserThreshold']);
 
     // Maintenance routes
     Route::get('/admin/maintenance/health', [MaintenanceController::class, 'healthCheck']);
