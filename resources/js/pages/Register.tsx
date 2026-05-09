@@ -226,7 +226,7 @@ export const Register = () => {
                             <User className="w-8 h-8 text-white" />
                         </div>
                         <CardTitle className="text-2xl text-waterbase-950">
-                            Join WaterBase
+                            Join WaterbasePH
                         </CardTitle>
                         <CardDescription className="text-waterbase-600">
                             Create your account to start reporting and monitoring water pollution

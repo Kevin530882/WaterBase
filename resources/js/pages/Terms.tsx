@@ -9,7 +9,7 @@ export const Terms = () => {
                 <p className="mb-4 text-waterbase-600">This is a placeholder Terms of Service page used for registration links and testing. Replace with the project's official terms.</p>
                 <section className="prose prose-invert">
                     <h2>Acceptable Use</h2>
-                    <p>By using WaterBase you agree to the rules and guidelines outlined here.</p>
+                    <p>By using WaterbasePH you agree to the rules and guidelines outlined here.</p>
                     <h2>Content</h2>
                     <p>Users are responsible for the content they submit. Do not upload illegal materials.</p>
                     <h2>Privacy</h2>

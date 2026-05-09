@@ -61,7 +61,7 @@ export const ResetPassword = () => {
                     <CardHeader className="text-center">
                         <CardTitle className="text-2xl text-waterbase-950">Choose New Password</CardTitle>
                         <CardDescription className="text-waterbase-600">
-                            Set a new password for your WaterBase account.
+                            Set a new password for your WaterbasePH account.
                         </CardDescription>
                     </CardHeader>
                     <CardContent>

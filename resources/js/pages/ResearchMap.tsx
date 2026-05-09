@@ -303,7 +303,7 @@ export const ResearchMap = () => {
   const exportWaterQualityReport = () => {
     const generatedAt = new Date().toISOString();
     const lines = [
-      "WaterBase Water Quality Report",
+      "WaterbasePH Water Quality Report",
       `Generated At: ${generatedAt}`,
       `Period: ${dateFilters.from} to ${dateFilters.to}`,
       "",

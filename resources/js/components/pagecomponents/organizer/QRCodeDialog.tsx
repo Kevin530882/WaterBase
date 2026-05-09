@@ -115,7 +115,7 @@ export const QRCodeDialog = ({
                     </div>
 
                     <p className="text-sm text-gray-600 text-center max-w-xs">
-                        Ask volunteers to open the WaterBase app and scan this QR code
+                        Ask volunteers to open the WaterbasePH app and scan this QR code
                         to mark their attendance.
                     </p>
                 </div>

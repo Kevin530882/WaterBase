@@ -54,7 +54,7 @@ export const CompleteProfile = () => {
                     <CardHeader className="text-center">
                         <CardTitle className="text-2xl text-waterbase-950">Complete Your Profile</CardTitle>
                         <CardDescription className="text-waterbase-600">
-                            Add your phone number to finish setting up your WaterBase account.
+                            Add your phone number to finish setting up your WaterbasePH account.
                         </CardDescription>
                     </CardHeader>
                     <CardContent>

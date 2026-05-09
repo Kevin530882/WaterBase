@@ -360,7 +360,7 @@ export const RecentActivity = () => {
                         Recent Activity
                     </CardTitle>
                     <CardDescription className="text-waterbase-600">
-                        Your latest contributions to the WaterBase community
+                        Your latest contributions to the WaterbasePH community
                     </CardDescription>
                 </CardHeader>
                 <CardContent>

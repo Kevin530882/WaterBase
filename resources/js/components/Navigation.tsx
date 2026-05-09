@@ -7,6 +7,7 @@ import { useEffect, useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { fetchUnreadCount } from "@/services/notificationService";
 import { toast } from "sonner";
+import { BrandWordmark } from "@/components/BrandWordmark";
 
 const Navigation = () => {
   const location = useLocation();
@@ -146,9 +147,7 @@ const Navigation = () => {
             <div className="w-8 h-8 bg-gradient-to-br from-waterbase-500 to-enviro-500 rounded-lg flex items-center justify-center">
               <MapPin className="w-5 h-5 text-white" />
             </div>
-            <span className="text-xl font-bold text-waterbase-950">
-              WaterBase
-            </span>
+            <BrandWordmark className="text-xl text-waterbase-950" />
           </Link>
 
           {/* Desktop Navigation */}

@@ -95,7 +95,7 @@ export const Login = () => {
                             Welcome Back
                         </CardTitle>
                         <CardDescription className="text-waterbase-600">
-                            Sign in to your WaterBase account to continue monitoring and
+                            Sign in to your WaterbasePH account to continue monitoring and
                             reporting water pollution
                         </CardDescription>
                     </CardHeader>

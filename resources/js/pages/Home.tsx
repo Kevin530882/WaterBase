@@ -18,6 +18,7 @@ import {
   Shield,
   Zap,
 } from "lucide-react";
+import { BrandWordmark } from "@/components/BrandWordmark";
 
 export const Home = () => {
   return (
@@ -36,7 +37,7 @@ export const Home = () => {
               in the Philippines
             </h1>
             <p className="text-xl text-waterbase-700 mb-8 max-w-3xl mx-auto">
-              WaterBase empowers communities to monitor and report water
+              WaterbasePH empowers communities to monitor and report water
               pollution through AI-powered verification, creating transparency
               and driving environmental action.
             </p>
@@ -232,7 +233,7 @@ export const Home = () => {
           </h3>
           <p className="text-xl text-waterbase-100 mb-8">
             Whether you're a concerned citizen, environmental organization, or
-            government agency, WaterBase provides the tools you need to make a
+            government agency, WaterbasePH provides the tools you need to make a
             real impact.
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
@@ -267,7 +268,7 @@ export const Home = () => {
                 <div className="w-8 h-8 bg-gradient-to-br from-waterbase-500 to-enviro-500 rounded-lg flex items-center justify-center">
                   <MapPin className="w-5 h-5 text-white" />
                 </div>
-                <span className="text-xl font-bold">WaterBase</span>
+                <BrandWordmark className="text-xl text-white" />
               </div>
               <p className="text-waterbase-300 mb-4">
                 Transforming water protection through community engagement, AI
@@ -343,7 +344,7 @@ export const Home = () => {
 
           <div className="border-t border-waterbase-800 mt-8 pt-8 text-center text-waterbase-400">
             <p>
-              &copy; 2024 WaterBase. Environmental protection through technology
+              &copy; 2024 WaterbasePH. Environmental protection through technology
               and community.
             </p>
           </div>
