@@ -10,6 +10,9 @@ interface User {
     organization?: string;
     areaOfResponsibility?: string;
     profile_photo?: string;
+    avatar?: string;
+    profile_completed?: boolean;
+    profile_completed_at?: string | null;
 }
 
 interface AuthContextType {

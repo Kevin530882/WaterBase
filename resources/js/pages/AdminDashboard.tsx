@@ -347,7 +347,7 @@ export const AdminDashboard = () => {
     };
 
     const shouldShowOrganizationFields = (role) => {
-        return ['ngo', 'lgu', 'researcher'].includes(role);
+        return ['ngo', 'lgu'].includes(role);
     };
 
     const handleUpdateUser = async () => {

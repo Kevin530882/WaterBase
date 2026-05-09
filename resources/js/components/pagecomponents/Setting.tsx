@@ -37,7 +37,7 @@ export const Setting = ({ onProfileUpdate }: SettingProps) => {
     });
 
     const isAreaRequiredForRole = (role?: string) => {
-        return ['ngo', 'lgu', 'researcher'].includes((role || '').toLowerCase());
+        return ['ngo', 'lgu'].includes((role || '').toLowerCase());
     };
 
     useEffect(() => {

@@ -12,7 +12,7 @@ class User extends Authenticatable
 {
     use HasFactory, Notifiable, HasApiTokens;
 
-    public const ORGANIZATION_ROLES = ['ngo', 'lgu', 'researcher'];
+    public const ORGANIZATION_ROLES = ['ngo', 'lgu'];
 
     public const STATUS_PENDING = 'pending';
     public const STATUS_APPROVED = 'approved';
@@ -25,6 +25,9 @@ class User extends Authenticatable
         'password',
         'phoneNumber',
         'role',
+        'google_id',
+        'avatar',
+        'profile_completed_at',
         'approval_status',
         'approved_by',
         'approved_at',
@@ -51,6 +54,7 @@ class User extends Authenticatable
     ];
 
     protected $casts = [
+        'profile_completed_at' => 'datetime',
         'push_token_updated_at' => 'datetime',
         'approved_at' => 'datetime',
         'push_notifications_enabled' => 'boolean',

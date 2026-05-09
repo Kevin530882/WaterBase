@@ -46,7 +46,7 @@ class BackfillGeographicBounds extends Command
         }
 
         // Find organizations without bounding boxes
-        $query = User::whereIn('role', ['ngo', 'lgu', 'researcher'])
+        $query = User::whereIn('role', User::ORGANIZATION_ROLES)
             ->whereNotNull('areaOfResponsibility')
             ->where('areaOfResponsibility', '!=', '');
 

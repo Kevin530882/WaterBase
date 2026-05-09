@@ -29,6 +29,10 @@ export const AppRoutes = () => {
                         <Route path={ROUTE.TERMS.path} element={<VIEWS.Terms />} />
                         <Route path={ROUTE.PRIVACY.path} element={<VIEWS.Privacy />} />
                         <Route path={ROUTE.LOGIN.path} element={<VIEWS.Login />} />
+                        <Route path={ROUTE.FORGOT_PASSWORD.path} element={<VIEWS.ForgotPassword />} />
+                        <Route path={ROUTE.RESET_PASSWORD.path} element={<VIEWS.ResetPassword />} />
+                        <Route path={ROUTE.GOOGLE_CALLBACK.path} element={<VIEWS.GoogleAuthCallback />} />
+                        <Route path={ROUTE.COMPLETE_PROFILE.path} element={<ProtectedRoute><VIEWS.CompleteProfile /></ProtectedRoute>} />
                         {/* PRIVATE ROUTES - All with Navigation */}
                         <Route path={ROUTE.MAP.path} element={<ProtectedRoute><VIEWS.MapView /></ProtectedRoute>} />
                         <Route path={ROUTE.RESEARCH_MAP.path} element={<ProtectedRoute><VIEWS.ResearchMap /></ProtectedRoute>} />

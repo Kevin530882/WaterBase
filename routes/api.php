@@ -25,10 +25,16 @@ use App\Http\Controllers\MaintenanceController;
 
 Route::post('/login', [UserController::class, 'login']);
 Route::post('/register', [UserController::class, 'register']);
+Route::post('/forgot-password', [UserController::class, 'forgotPassword']);
+Route::post('/reset-password', [UserController::class, 'resetPassword']);
+Route::get('/auth/google/redirect', [UserController::class, 'redirectToGoogle']);
+Route::get('/auth/google/callback', [UserController::class, 'handleGoogleCallback']);
+Route::post('/auth/google/mobile', [UserController::class, 'googleMobile']);
 Route::get('/organizations', [UserController::class, 'getOrganizations']);
 
 Route::middleware('auth:sanctum')->group(function () {
     Route::post('/logout', [UserController::class, 'logout']);
+    Route::post('/auth/complete-profile', [UserController::class, 'completeProfile']);
     Route::post('/user/push-token', [UserController::class, 'registerPushToken']);
     Route::delete('/user/push-token', [UserController::class, 'revokePushToken']);
 

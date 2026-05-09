@@ -66,6 +66,7 @@ export const Profile = () => {
     const [networkSubTab, setNetworkSubTab] = useState<'members' | 'followers'>('members');
 
     const isOrganizer = ['ngo', 'lgu', 'admin'].includes((user?.role || '').toLowerCase());
+    const isResearcher = (user?.role || '').toLowerCase() === 'researcher';
 
     useEffect(() => {
         setActiveTab(activeTabFromQuery);
@@ -114,6 +115,13 @@ export const Profile = () => {
 
     const fetchUserOrganizations = async () => {
         if (!token || !user) return;
+        if ((user.role || '').toLowerCase() === 'researcher') {
+            setJoinedOrganizations([]);
+            setFollowedOrganizations([]);
+            setMembers([]);
+            setFollowers([]);
+            return;
+        }
 
         try {
             setIsOrganizationsLoading(true);
@@ -574,9 +582,9 @@ export const Profile = () => {
                     }}
                     className="space-y-3"
                 >
-                    <TabsList className="grid w-full grid-cols-5">
+                    <TabsList className={`grid w-full ${isResearcher ? 'grid-cols-3' : 'grid-cols-5'}`}>
                         <TabsTrigger value="activity">Recent Activity</TabsTrigger>
-                        {isOrganizer ? (
+                        {!isResearcher && (isOrganizer ? (
                             <>
                                 <TabsTrigger value="following">Following</TabsTrigger>
                                 <TabsTrigger value="network">Network</TabsTrigger>
@@ -586,13 +594,13 @@ export const Profile = () => {
                                 <TabsTrigger value="joined">Groups Joined</TabsTrigger>
                                 <TabsTrigger value="followed">Organizations Followed</TabsTrigger>
                             </>
-                        )}
+                        ))}
                         <TabsTrigger value="notifications">Notifications</TabsTrigger>
                         <TabsTrigger value="settings">Settings</TabsTrigger>
                     </TabsList>
 
                     <RecentActivity />
-                    {isOrganizer ? (
+                    {!isResearcher && (isOrganizer ? (
                         <>
                             {renderOrganizationsTab(
                                 'following',
@@ -704,7 +712,7 @@ export const Profile = () => {
                                 'Following'
                             )}
                         </>
-                    )}
+                    ))}
                     <Notification />
                     <Setting onProfileUpdate={handleProfileUpdate} />
                 </Tabs>

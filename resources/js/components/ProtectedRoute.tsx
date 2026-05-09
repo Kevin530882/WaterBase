@@ -6,7 +6,7 @@ interface ProtectedRouteProps {
 }
 
 export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children }) => {
-    const { isAuthenticated, isLoading } = useAuth();
+    const { isAuthenticated, isLoading, user } = useAuth();
     const location = useLocation();
 
     // Show loading spinner while checking authentication
@@ -24,6 +24,10 @@ export const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children }) => {
     // Only redirect if we're sure the user is not authenticated
     if (!isAuthenticated) {
         return <Navigate to="/login" state={{ from: location }} replace />;
+    }
+
+    if (user?.profile_completed === false && location.pathname !== '/complete-profile') {
+        return <Navigate to="/complete-profile" state={{ from: location }} replace />;
     }
 
     return <>{children}</>;

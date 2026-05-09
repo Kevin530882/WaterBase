@@ -48,7 +48,7 @@ export const Register = () => {
     });
 
     const shouldShowOrganizationFields = (role: string) => {
-        return ['ngo', 'lgu', 'researcher'].includes(role);
+        return ['ngo', 'lgu'].includes(role);
     };
 
     const [isLoading, setIsLoading] = useState(false);

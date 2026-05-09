@@ -7,6 +7,22 @@ export const ROUTE = {
         path: "/register",
         name: "Register",
     },
+    FORGOT_PASSWORD: {
+        path: "/forgot-password",
+        name: "Forgot Password",
+    },
+    RESET_PASSWORD: {
+        path: "/reset-password",
+        name: "Reset Password",
+    },
+    GOOGLE_CALLBACK: {
+        path: "/auth/google/callback",
+        name: "Google Callback",
+    },
+    COMPLETE_PROFILE: {
+        path: "/complete-profile",
+        name: "Complete Profile",
+    },
     MAIN : {
         path: "/",
         name: "Home",

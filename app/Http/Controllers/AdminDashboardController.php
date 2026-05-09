@@ -203,8 +203,8 @@ class AdminDashboardController extends Controller
             // Update user fields
             $user->update($validated);
 
-            // Handle geocoding for areaOfResponsibility if provided and user is NGO, LGU, or researcher
-            if (isset($validated['areaOfResponsibility']) && in_array($user->role, ['ngo', 'lgu', 'researcher'])) {
+            // Handle geocoding for areaOfResponsibility if provided and user is NGO or LGU.
+            if (isset($validated['areaOfResponsibility']) && in_array($user->role, User::ORGANIZATION_ROLES, true)) {
                 Log::info('Updating area of responsibility for user', [
                     'user_id' => $user->id,
                     'organization' => $user->organization,

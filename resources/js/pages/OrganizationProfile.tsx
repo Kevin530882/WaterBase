@@ -36,7 +36,8 @@ interface OrganizationPayload {
 export const OrganizationProfile = () => {
     const { organizationId } = useParams();
     const navigate = useNavigate();
-    const { token } = useAuth();
+    const { token, user } = useAuth();
+    const isResearcher = (user?.role || '').toLowerCase() === 'researcher';
 
     const [profile, setProfile] = useState<OrganizationPayload | null>(null);
     const [isLoading, setIsLoading] = useState(true);
@@ -193,6 +194,7 @@ export const OrganizationProfile = () => {
                                     </p>
                                 )}
 
+                                {!isResearcher && (
                                 <div className="flex flex-wrap gap-2">
                                     <Button
                                         variant={profile.is_following ? "outline" : "default"}
@@ -221,6 +223,7 @@ export const OrganizationProfile = () => {
                                         </Button>
                                     )}
                                 </div>
+                                )}
                             </CardContent>
                         </Card>
 

@@ -14,6 +14,10 @@ export const Community = lazy(() => import('./Community').then(m => ({ default: 
 export const Dashboard = lazy(() => import('./Dashboard').then(m => ({ default: m.Dashboard })));
 export const Home = lazy(() => import('./Home').then(m => ({ default: m.Home })));
 export const Login = lazy(() => import('./Login').then(m => ({ default: m.Login })));
+export const ForgotPassword = lazy(() => import('./ForgotPassword').then(m => ({ default: m.ForgotPassword })));
+export const ResetPassword = lazy(() => import('./ResetPassword').then(m => ({ default: m.ResetPassword })));
+export const GoogleAuthCallback = lazy(() => import('./GoogleAuthCallback').then(m => ({ default: m.GoogleAuthCallback })));
+export const CompleteProfile = lazy(() => import('./CompleteProfile').then(m => ({ default: m.CompleteProfile })));
 export const MapView = lazy(() => import('./MapView').then(m => ({ default: m.MapView })));
 export const NotFound = lazy(() => import('./NotFound').then(m => ({ default: m.NotFound })));
 export const OrganizerActivityLog = lazy(() => import('./OrganizerActivityLog').then(m => ({ default: m.OrganizerActivityLog })));

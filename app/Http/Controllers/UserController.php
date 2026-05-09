@@ -6,13 +6,18 @@ use App\Models\User;
 use App\Services\BadgeEvaluationService;
 use App\Services\GeographicService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Str;
+use Illuminate\Support\Carbon;
 use Illuminate\Validation\ValidationException;
 use App\Mail\OrganizationPendingApproval;
+use Laravel\Socialite\Facades\Socialite;
 
 class UserController extends Controller
 {
@@ -40,7 +45,7 @@ class UserController extends Controller
                 'areaOfResponsibility' => 'nullable|string|max:255',
             ]);
 
-            $isOrganizationRole = in_array($validated['role'], ['ngo', 'lgu', 'researcher'], true);
+            $isOrganizationRole = in_array($validated['role'], User::ORGANIZATION_ROLES, true);
 
             if ($isOrganizationRole && empty(trim((string) ($validated['organization'] ?? '')))) {
                 return response()->json([
@@ -157,9 +162,173 @@ class UserController extends Controller
         $token = $user->createToken('auth_token')->plainTextToken;
 
         return response()->json([
-            'user' => $user,
+            'user' => $this->userForAuthResponse($user),
             'access_token' => $token,
             'token_type' => 'Bearer',
+        ]);
+    }
+
+    public function forgotPassword(Request $request)
+    {
+        $request->validate([
+            'email' => 'required|email',
+        ]);
+
+        $user = User::where('email', $request->email)->first();
+
+        if ($user) {
+            $token = Str::random(64);
+            DB::table('password_reset_tokens')->updateOrInsert(
+                ['email' => $user->email],
+                [
+                    'token' => Hash::make($token),
+                    'created_at' => now(),
+                ]
+            );
+
+            $resetUrl = rtrim(config('app.url'), '/') . '/reset-password?token=' . urlencode($token) . '&email=' . urlencode($user->email);
+
+            try {
+                Mail::raw(
+                    "You requested a WaterBase password reset.\n\nOpen this link to set a new password:\n{$resetUrl}\n\nThis link expires in " . config('auth.passwords.users.expire', 60) . " minutes.",
+                    function ($message) use ($user) {
+                        $message->to($user->email)->subject('Reset your WaterBase password');
+                    }
+                );
+            } catch (\Throwable $e) {
+                Log::error('Failed to send password reset email', [
+                    'user_id' => $user->id,
+                    'error' => $e->getMessage(),
+                ]);
+            }
+        }
+
+        return response()->json([
+            'message' => 'If an account exists for that email, a password reset link has been sent.',
+        ]);
+    }
+
+    public function resetPassword(Request $request)
+    {
+        $validated = $request->validate([
+            'email' => 'required|email',
+            'token' => 'required|string',
+            'password' => 'required|string|min:8|confirmed',
+        ]);
+
+        $record = DB::table('password_reset_tokens')->where('email', $validated['email'])->first();
+        $expiresAt = now()->subMinutes((int) config('auth.passwords.users.expire', 60));
+
+        if (!$record || !$record->created_at || Carbon::parse($record->created_at)->lt($expiresAt) || !Hash::check($validated['token'], $record->token)) {
+            return response()->json([
+                'message' => 'This password reset link is invalid or has expired.',
+            ], 422);
+        }
+
+        $user = User::where('email', $validated['email'])->first();
+
+        if (!$user) {
+            return response()->json([
+                'message' => 'This password reset link is invalid or has expired.',
+            ], 422);
+        }
+
+        $user->password = Hash::make($validated['password']);
+        $user->save();
+
+        DB::table('password_reset_tokens')->where('email', $validated['email'])->delete();
+
+        return response()->json([
+            'message' => 'Password reset successfully. You can now sign in with your new password.',
+        ]);
+    }
+
+    public function redirectToGoogle()
+    {
+        return Socialite::driver('google')->stateless()->redirect();
+    }
+
+    public function handleGoogleCallback()
+    {
+        try {
+            $googleUser = Socialite::driver('google')->stateless()->user();
+            $user = $this->findOrCreateGoogleVolunteer(
+                $googleUser->getEmail(),
+                $googleUser->getId(),
+                $googleUser->getName(),
+                $googleUser->getAvatar()
+            );
+
+            $token = $user->createToken('auth_token')->plainTextToken;
+            $frontendUrl = rtrim(config('app.url'), '/') . '/auth/google/callback';
+
+            return redirect()->away($frontendUrl . '?token=' . urlencode($token));
+        } catch (\Throwable $e) {
+            Log::error('Google OAuth callback failed', ['error' => $e->getMessage()]);
+
+            return redirect()->away(rtrim(config('app.url'), '/') . '/login?oauth_error=google');
+        }
+    }
+
+    public function googleMobile(Request $request)
+    {
+        $validated = $request->validate([
+            'id_token' => 'required|string',
+        ]);
+
+        $response = Http::get('https://oauth2.googleapis.com/tokeninfo', [
+            'id_token' => $validated['id_token'],
+        ]);
+
+        if (!$response->successful()) {
+            return response()->json(['message' => 'Invalid Google token'], 401);
+        }
+
+        $payload = $response->json();
+        $allowedAudiences = array_filter([
+            config('services.google.client_id'),
+            config('services.google.mobile_client_id'),
+            config('services.google.ios_client_id'),
+            config('services.google.android_client_id'),
+        ]);
+
+        if (!empty($allowedAudiences) && !in_array($payload['aud'] ?? null, $allowedAudiences, true)) {
+            return response()->json(['message' => 'Invalid Google token audience'], 401);
+        }
+
+        if (!in_array($payload['email_verified'] ?? false, [true, 'true', '1', 1], true)) {
+            return response()->json(['message' => 'Google email must be verified'], 422);
+        }
+
+        $user = $this->findOrCreateGoogleVolunteer(
+            $payload['email'] ?? null,
+            $payload['sub'] ?? null,
+            $payload['name'] ?? null,
+            $payload['picture'] ?? null
+        );
+
+        $token = $user->createToken('auth_token')->plainTextToken;
+
+        return response()->json([
+            'user' => $this->userForAuthResponse($user),
+            'access_token' => $token,
+            'token_type' => 'Bearer',
+        ]);
+    }
+
+    public function completeProfile(Request $request)
+    {
+        $validated = $request->validate([
+            'phoneNumber' => 'required|string|max:15',
+        ]);
+
+        $user = $request->user();
+        $user->phoneNumber = $validated['phoneNumber'];
+        $user->profile_completed_at = now();
+        $user->save();
+
+        return response()->json([
+            'user' => $this->userForAuthResponse($user),
         ]);
     }
 
@@ -170,6 +339,60 @@ class UserController extends Controller
         return response()->json([
             'message' => 'Successfully logged out',
         ]);
+    }
+
+    private function userForAuthResponse(User $user): User
+    {
+        $user->setAttribute('profile_completed', $this->isProfileComplete($user));
+
+        return $user;
+    }
+
+    private function isProfileComplete(User $user): bool
+    {
+        return !empty(trim((string) $user->phoneNumber));
+    }
+
+    private function findOrCreateGoogleVolunteer(?string $email, ?string $googleId, ?string $name, ?string $avatar): User
+    {
+        if (!$email || !$googleId) {
+            throw ValidationException::withMessages([
+                'google' => ['Google did not return the required account information.'],
+            ]);
+        }
+
+        $nameParts = preg_split('/\s+/', trim((string) $name), 2);
+        $firstName = $nameParts[0] ?: 'WaterBase';
+        $lastName = $nameParts[1] ?? 'Volunteer';
+
+        $user = User::where('google_id', $googleId)->orWhere('email', $email)->first();
+
+        if (!$user) {
+            return User::create([
+                'firstName' => $firstName,
+                'lastName' => $lastName,
+                'email' => $email,
+                'password' => Hash::make(Str::random(40)),
+                'phoneNumber' => '',
+                'role' => 'volunteer',
+                'approval_status' => User::STATUS_APPROVED,
+                'google_id' => $googleId,
+                'avatar' => $avatar,
+                'email_verified_at' => now(),
+            ]);
+        }
+
+        $user->google_id = $user->google_id ?: $googleId;
+        $user->avatar = $user->avatar ?: $avatar;
+        $user->email_verified_at = $user->email_verified_at ?: now();
+
+        if ($this->isProfileComplete($user) && !$user->profile_completed_at) {
+            $user->profile_completed_at = now();
+        }
+
+        $user->save();
+
+        return $user;
     }
 
     public function registerPushToken(Request $request)

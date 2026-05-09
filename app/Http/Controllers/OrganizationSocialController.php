@@ -17,6 +17,10 @@ class OrganizationSocialController extends Controller
         $user = $request->user();
         $organization = $this->findOrganizationOrFail($orgId);
 
+        if ($this->isResearcher($user)) {
+            return response()->json(['message' => 'Researchers do not participate in organization follow workflows'], 403);
+        }
+
         if (!$organization) {
             return response()->json(['message' => 'Organization not found'], 404);
         }
@@ -37,6 +41,10 @@ class OrganizationSocialController extends Controller
     {
         $user = $request->user();
         $organization = $this->findOrganizationOrFail($orgId);
+
+        if ($this->isResearcher($user)) {
+            return response()->json(['message' => 'Researchers do not participate in organization membership workflows'], 403);
+        }
 
         if (!$organization) {
             return response()->json(['message' => 'Organization not found'], 404);
@@ -639,6 +647,10 @@ class OrganizationSocialController extends Controller
         $user = $request->user();
         $organization = $this->findOrganizationOrFail($orgId);
 
+        if ($this->isResearcher($user)) {
+            return response()->json(['message' => 'Researchers do not participate in organization membership workflows'], 403);
+        }
+
         if (!$organization) {
             return response()->json(['message' => 'Organization not found'], 404);
         }
@@ -710,5 +722,10 @@ class OrganizationSocialController extends Controller
         }
 
         return strtolower((string) $user->role) === 'admin';
+    }
+
+    private function isResearcher(User $user): bool
+    {
+        return strtolower((string) $user->role) === 'researcher';
     }
 }

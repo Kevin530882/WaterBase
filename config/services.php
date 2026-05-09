@@ -39,6 +39,15 @@ return [
         'enabled' => env('WATERBASE_NOTIFICATIONS_ENABLED', true),
     ],
 
+    'google' => [
+        'client_id' => env('GOOGLE_CLIENT_ID'),
+        'client_secret' => env('GOOGLE_CLIENT_SECRET'),
+        'redirect' => env('GOOGLE_REDIRECT_URI'),
+        'mobile_client_id' => env('GOOGLE_MOBILE_CLIENT_ID'),
+        'ios_client_id' => env('GOOGLE_IOS_CLIENT_ID'),
+        'android_client_id' => env('GOOGLE_ANDROID_CLIENT_ID'),
+    ],
+
     'waterbase_forecast' => [
         'model_version' => env('WATERBASE_FORECAST_MODEL_VERSION', 'forecast-v1'),
         'rollback_version' => env('WATERBASE_FORECAST_ROLLBACK_VERSION', 'forecast-v0'),

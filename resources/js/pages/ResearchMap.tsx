@@ -16,9 +16,7 @@ import {
   Droplets,
   FileSpreadsheet,
   Gauge,
-  Home,
   Layers,
-  Leaf,
   Loader2,
   MapPin,
   Microscope,
@@ -213,10 +211,7 @@ export const ResearchMap = () => {
     sensors: true,
     pollution: true,
     heatmap: true,
-    satellite: false,
-    landuse: false,
     events: false,
-    cleanups: false,
   });
 
   const dateFilters = useMemo(() => ({
@@ -286,6 +281,109 @@ export const ResearchMap = () => {
       : selectedParameter === "sensor_score"
         ? "Sensor Score"
         : selectedParameter.toUpperCase();
+
+  const downloadFile = (filename: string, content: string, type: string) => {
+    const blob = new Blob([content], { type });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
+  const csvCell = (value: unknown) => {
+    if (value === null || value === undefined) return "";
+    const text = String(value);
+    return /[",\n\r]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+  };
+
+  const exportWaterQualityReport = () => {
+    const generatedAt = new Date().toISOString();
+    const lines = [
+      "WaterBase Water Quality Report",
+      `Generated At: ${generatedAt}`,
+      `Period: ${dateFilters.from} to ${dateFilters.to}`,
+      "",
+      "National Summary",
+      `National WBSI: ${summary?.national_wbsi ?? "N/A"}`,
+      `Severity: ${summary?.severity_label ?? "N/A"}`,
+      `Areas: ${summary?.area_count ?? 0}`,
+      `Combined Areas: ${summary?.combined_count ?? 0}`,
+      `Report-only Areas: ${summary?.report_only_count ?? 0}`,
+      `Sensor-only Areas: ${summary?.sensor_only_count ?? 0}`,
+      "",
+      "Sensor Summary",
+      `Stations: ${stations.length}`,
+      `Average Sensor Score: ${summary?.sensor_score ?? "N/A"}`,
+      "",
+      "Report Summary",
+      `Reports: ${reports.length}`,
+      `Average Report Score: ${summary?.report_score ?? "N/A"}`,
+      "",
+      "Cleanup Events",
+      `Events: ${cleanupEvents.length}`,
+      "",
+      "Top Organization Activity",
+      ...rankings.slice(0, 10).map((ranking, index) => `${index + 1}. ${ranking.organization}: ${ranking.events_count} events, ${ranking.volunteers_count} volunteers`),
+    ];
+
+    downloadFile(`water-quality-report-${dateFilters.from}-to-${dateFilters.to}.txt`, lines.join("\n"), "text/plain;charset=utf-8");
+  };
+
+  const downloadRawCsv = () => {
+    const rows = [
+      ["dataset", "id", "name_or_type", "latitude", "longitude", "recorded_at", "score_or_value", "extra"],
+      ...stations.map((station) => [
+        "sensor",
+        station.id,
+        station.name || station.station_id || "Sensor Station",
+        station.latitude,
+        station.longitude,
+        station.latest_telemetry?.recorded_at || station.last_seen_at || "",
+        station.scores?.sensor_score ?? "",
+        `pH=${station.latest_telemetry?.ph ?? ""};tds=${station.latest_telemetry?.tds_mg_l ?? ""};turbidity=${station.latest_telemetry?.turbidity_ntu ?? ""};temp=${station.latest_telemetry?.temperature_celsius ?? ""}`,
+      ]),
+      ...reports.map((report) => [
+        "report",
+        report.id,
+        report.pollutionType,
+        report.latitude,
+        report.longitude,
+        report.created_at,
+        reportScore(report),
+        `status=${report.status};address=${report.address}`,
+      ]),
+      ...cleanupEvents.map((event) => [
+        "event",
+        event.id,
+        event.title,
+        event.latitude,
+        event.longitude,
+        event.date,
+        event.attendees_count ?? event.currentVolunteers ?? "",
+        `status=${event.status};address=${event.address}`,
+      ]),
+      ...trendData.map((point) => [
+        "trend",
+        point.date,
+        selectedParameter,
+        "",
+        "",
+        point.date,
+        point.value,
+        `aggregate=${aggregate};count=${point.count}`,
+      ]),
+    ];
+
+    downloadFile(
+      `waterbase-raw-data-${dateFilters.from}-to-${dateFilters.to}.csv`,
+      rows.map((row) => row.map(csvCell).join(",")).join("\n"),
+      "text/csv;charset=utf-8"
+    );
+  };
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -363,11 +461,9 @@ export const ResearchMap = () => {
                           {key === "sensors" && <Droplets className="w-4 h-4 text-waterbase-600" />}
                           {key === "pollution" && <AlertTriangle className="w-4 h-4 text-red-600" />}
                           {key === "heatmap" && <Activity className="w-4 h-4 text-orange-600" />}
-                          {key === "satellite" && <Leaf className="w-4 h-4 text-green-600" />}
-                          {key === "landuse" && <Home className="w-4 h-4 text-gray-600" />}
-                          {(key === "events" || key === "cleanups") && <Calendar className="w-4 h-4 text-blue-600" />}
+                          {key === "events" && <Calendar className="w-4 h-4 text-blue-600" />}
                           <span className="text-sm text-gray-700 capitalize">
-                            {key === "landuse" ? "Land Use" : key}
+                            {key}
                           </span>
                         </div>
                         <Switch checked={value} onCheckedChange={(checked) => setShowLayers({ ...showLayers, [key]: checked })} />
@@ -410,7 +506,7 @@ export const ResearchMap = () => {
                   </Card>
                 )}
 
-                {showLayers.cleanups && (
+                {showLayers.events && (
                   <Card className="border-waterbase-200">
                     <CardHeader className="pb-3">
                       <CardTitle className="text-sm flex items-center">
@@ -522,11 +618,11 @@ export const ResearchMap = () => {
             <div className="p-4 border-t border-gray-200">
               <h3 className="text-sm font-semibold text-waterbase-950 mb-3">Export Scientific Data</h3>
               <div className="space-y-2">
-                <Button variant="outline" size="sm" className="w-full justify-start">
+                <Button variant="outline" size="sm" className="w-full justify-start" onClick={exportWaterQualityReport}>
                   <Download className="w-4 h-4 mr-2" />
                   Export Water Quality Report
                 </Button>
-                <Button variant="outline" size="sm" className="w-full justify-start">
+                <Button variant="outline" size="sm" className="w-full justify-start" onClick={downloadRawCsv}>
                   <FileSpreadsheet className="w-4 h-4 mr-2" />
                   Download Raw Data (CSV)
                 </Button>
@@ -578,7 +674,7 @@ export const ResearchMap = () => {
               </Marker>
             ))}
 
-            {showLayers.cleanups && cleanupEvents.map((event) => (
+            {showLayers.events && cleanupEvents.map((event) => (
               <Marker key={`cleanup-${event.id}`} position={[Number(event.latitude), Number(event.longitude)]} icon={cleanupIcon()}>
                 <Popup>
                   <div className="text-center min-w-[200px]">
