@@ -27,4 +27,8 @@ Homestead.yaml
 Thumbs.db
 python_environment
 
+# Recovery artifacts that must stay local
+/database/recovery_backups/
+/scripts/recover_iot_from_binlogs.php
+
 *.md
