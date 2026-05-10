@@ -519,7 +519,7 @@ export const VolunteerManagementTab = () => {
                             <Users className="w-12 h-12 mx-auto mb-4 text-gray-400" />
                             <p>No volunteers found</p>
                             <p className="text-sm">
-                                Volunteers will appear here once they join your events and the participant tracking system is fully implemented
+                                Volunteers will appear here once they join or check in to your cleanup events.
                             </p>
                         </div>
                     )}

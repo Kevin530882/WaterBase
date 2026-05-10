@@ -81,9 +81,8 @@ export const OrganizerActivityLog = () => {
       setIsLoading(true);
       
       // Fetch events created by this user
-      const allEvents = await eventService.getAllEvents(token);
-      const userEvents = allEvents.filter((e) => e.user_id === user.id);
-      const sorted = userEvents.sort(
+      const createdEvents = await eventService.getCreatedEvents(token);
+      const sorted = createdEvents.sort(
         (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
       );
       setEvents(sorted);
@@ -108,21 +107,15 @@ export const OrganizerActivityLog = () => {
       }
       setBadgesIssuedCount(badgeCount);
 
-      // Fetch reports from their area
-      if (user.areaOfResponsibility) {
-        try {
-          const reportsRes = await fetch(`/api/reports/area/${encodeURIComponent(user.areaOfResponsibility)}`, {
-            headers: {
-              'Authorization': `Bearer ${token}`,
-              'Content-Type': 'application/json',
-            },
-          });
-          if (reportsRes.ok) {
-            setReports(await reportsRes.json());
-          }
-        } catch (e) {
-          console.error('Error fetching area reports:', e);
-        }
+      // Fetch reports submitted by this user
+      const reportsRes = await fetch('/api/reports', {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+      });
+      if (reportsRes.ok) {
+        setReports(await reportsRes.json());
       }
 
       // Fetch stats
@@ -347,11 +340,7 @@ export const OrganizerActivityLog = () => {
         <Card className="border-waterbase-200">
           <CardContent className="py-12 text-center">
             <AlertCircle className="w-12 h-12 mx-auto mb-4 text-waterbase-300" />
-            <p className="text-waterbase-600">
-              {user?.areaOfResponsibility 
-                ? "No reports found in your area" 
-                : "Set your area of responsibility to see reports"}
-            </p>
+            <p className="text-waterbase-600">No reports found</p>
           </CardContent>
         </Card>
       ) : (
@@ -478,7 +467,7 @@ export const OrganizerActivityLog = () => {
             onClick={() => setActiveTab('reports')}
             className="rounded-none border-b-2"
           >
-            Area Reports ({reports.length})
+            Reports ({reports.length})
           </Button>
           <Button
             variant={activeTab === 'badges' ? 'default' : 'ghost'}

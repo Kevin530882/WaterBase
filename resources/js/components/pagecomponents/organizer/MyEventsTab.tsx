@@ -40,6 +40,24 @@ import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
 import { QRCodeDialog } from "./QRCodeDialog";
 
+interface CleanupEvidence {
+    id: number;
+    image: string;
+    ai_annotated_image?: string | null;
+    ai_severity?: string | null;
+    ai_confidence?: number | string;
+    pollution_percentage?: number | string;
+    result: string;
+    notes?: string | null;
+    created_at: string;
+    submitter?: {
+        firstName: string;
+        lastName: string;
+        email: string;
+        role: string;
+    };
+}
+
 export const MyEventsTab = ({
     createdEvents,
     isLoadingEvents,
@@ -71,6 +89,12 @@ export const MyEventsTab = ({
     const [isCompleting, setIsCompleting] = useState(false);
 
     const [isStarting, setIsStarting] = useState<number | null>(null);
+    const [evidenceDialogOpen, setEvidenceDialogOpen] = useState(false);
+    const [evidenceEvent, setEvidenceEvent] = useState<any>(null);
+    const [cleanupEvidences, setCleanupEvidences] = useState<CleanupEvidence[]>([]);
+    const [cleanupEvidenceFile, setCleanupEvidenceFile] = useState<File | null>(null);
+    const [isLoadingEvidence, setIsLoadingEvidence] = useState(false);
+    const [isSubmittingEvidence, setIsSubmittingEvidence] = useState(false);
 
     const sortedEvents = useMemo(() => {
         const statusOrder: Record<string, number> = {
@@ -228,6 +252,82 @@ export const MyEventsTab = ({
         setQrDialogOpen(true);
     };
 
+    const getCleanupVerificationLabel = (status?: string) => {
+        switch (status) {
+            case 'pending':
+                return 'Pending cleanup proof';
+            case 'approved':
+                return 'Cleanliness verified';
+            case 'failed':
+                return 'Cleanup proof failed / needs more evidence';
+            default:
+                return 'Cleanup proof not required yet';
+        }
+    };
+
+    const loadCleanupEvidence = async (event: any) => {
+        if (!token) return;
+        setEvidenceEvent(event);
+        setEvidenceDialogOpen(true);
+        setCleanupEvidenceFile(null);
+        setIsLoadingEvidence(true);
+
+        try {
+            const response = await fetch(`/api/events/${event.id}/cleanup-evidence`, {
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Accept': 'application/json',
+                },
+            });
+
+            if (response.ok) {
+                const data = await response.json();
+                setCleanupEvidences(Array.isArray(data.evidences) ? data.evidences : []);
+            } else {
+                setCleanupEvidences([]);
+            }
+        } catch (error) {
+            console.error('Error loading cleanup evidence:', error);
+            setCleanupEvidences([]);
+        } finally {
+            setIsLoadingEvidence(false);
+        }
+    };
+
+    const handleSubmitCleanupEvidence = async () => {
+        if (!evidenceEvent || !cleanupEvidenceFile || !token) return;
+
+        const formData = new FormData();
+        formData.append('image', cleanupEvidenceFile);
+
+        setIsSubmittingEvidence(true);
+        try {
+            const response = await fetch(`/api/events/${evidenceEvent.id}/cleanup-evidence`, {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Accept': 'application/json',
+                },
+                body: formData,
+            });
+            const data = await response.json();
+
+            if (response.ok) {
+                setCleanupEvidenceFile(null);
+                alert(data.message || 'Cleanup evidence submitted');
+                await loadCleanupEvidence({ ...evidenceEvent, cleanup_verification_status: data.cleanup_verification_status });
+                onRefresh();
+            } else {
+                alert(data.message || 'Failed to submit cleanup evidence');
+            }
+        } catch (error) {
+            console.error('Error submitting cleanup evidence:', error);
+            alert('Error submitting cleanup evidence');
+        } finally {
+            setIsSubmittingEvidence(false);
+        }
+    };
+
     const getStatusColor = (status: string) => {
         switch (status.toLowerCase()) {
             case "verified":
@@ -332,6 +432,11 @@ export const MyEventsTab = ({
                                         >
                                             {event.status.charAt(0).toUpperCase() + event.status.slice(1)}
                                         </Badge>
+                                        {event.status === 'completed' && (
+                                            <Badge variant="outline" className="text-xs">
+                                                {getCleanupVerificationLabel(event.cleanup_verification_status)}
+                                            </Badge>
+                                        )}
                                     </div>
                                 </div>
 
@@ -426,6 +531,7 @@ export const MyEventsTab = ({
                                                     variant="outline"
                                                     size="sm"
                                                     className="w-full text-xs"
+                                                    onClick={() => loadCleanupEvidence(event)}
                                                 >
                                                     <Camera className="w-3 h-3 mr-1" />
                                                     Event Updates
@@ -589,7 +695,7 @@ export const MyEventsTab = ({
                     <DialogHeader>
                         <DialogTitle>Complete Event</DialogTitle>
                         <DialogDescription>
-                            Are you sure you want to mark &quot;{eventToComplete?.title}&quot; as completed? All linked reports will be auto-resolved and badges will be awarded to attendees.
+                            Are you sure you want to mark &quot;{eventToComplete?.title}&quot; as completed? Linked reports will wait for after-cleanup photo evidence before they are resolved.
                         </DialogDescription>
                     </DialogHeader>
                     <div className="flex justify-end space-x-2 mt-6">
@@ -685,6 +791,84 @@ export const MyEventsTab = ({
                 eventTitle={qrEvent?.title}
                 currentVolunteers={qrEvent?.currentVolunteers || 0}
             />
+
+            {/* Cleanup Evidence Dialog */}
+            <Dialog open={evidenceDialogOpen} onOpenChange={setEvidenceDialogOpen}>
+                <DialogContent className="sm:max-w-2xl">
+                    <DialogHeader>
+                        <DialogTitle className="flex items-center gap-2">
+                            <Camera className="w-5 h-5" />
+                            Cleanup Evidence
+                        </DialogTitle>
+                        <DialogDescription>
+                            {evidenceEvent?.title} - {getCleanupVerificationLabel(evidenceEvent?.cleanup_verification_status)}
+                        </DialogDescription>
+                    </DialogHeader>
+
+                    <div className="space-y-4">
+                        {(evidenceEvent?.status === 'active' || evidenceEvent?.status === 'completed') && evidenceEvent?.cleanup_verification_status !== 'approved' && (
+                            <div className="rounded-lg border border-waterbase-200 p-4 space-y-3">
+                                <div>
+                                    <div className="text-sm font-medium text-waterbase-950">Upload after-cleanup photo</div>
+                                    <div className="text-xs text-gray-600">AI will check whether visible trash pollution has dropped enough to resolve linked reports.</div>
+                                </div>
+                                <input
+                                    type="file"
+                                    accept="image/png,image/jpeg,image/jpg"
+                                    onChange={(event) => setCleanupEvidenceFile(event.target.files?.[0] ?? null)}
+                                    className="block w-full text-sm"
+                                />
+                                <Button
+                                    onClick={handleSubmitCleanupEvidence}
+                                    disabled={!cleanupEvidenceFile || isSubmittingEvidence}
+                                    className="bg-waterbase-500 hover:bg-waterbase-600"
+                                >
+                                    {isSubmittingEvidence ? (
+                                        <>
+                                            <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                                            Submitting...
+                                        </>
+                                    ) : (
+                                        <>
+                                            <Camera className="w-4 h-4 mr-2" />
+                                            Submit Evidence
+                                        </>
+                                    )}
+                                </Button>
+                            </div>
+                        )}
+
+                        <div className="space-y-2">
+                            <div className="text-sm font-medium text-waterbase-950">Submitted evidence</div>
+                            {isLoadingEvidence ? (
+                                <div className="text-sm text-gray-600">Loading evidence...</div>
+                            ) : cleanupEvidences.length === 0 ? (
+                                <div className="text-sm text-gray-600">No cleanup evidence submitted yet.</div>
+                            ) : (
+                                <div className="space-y-3 max-h-80 overflow-y-auto">
+                                    {cleanupEvidences.map((evidence) => (
+                                        <div key={evidence.id} className="rounded-lg border border-gray-200 p-3">
+                                            <div className="flex items-start justify-between gap-3">
+                                                <div>
+                                                    <div className="text-sm font-medium capitalize">{evidence.result}</div>
+                                                    <div className="text-xs text-gray-600">
+                                                        AI severity: {evidence.ai_severity || 'n/a'} | Pollution: {evidence.pollution_percentage ?? 0}%
+                                                    </div>
+                                                    <div className="text-xs text-gray-600">
+                                                        Submitted by {evidence.submitter ? `${evidence.submitter.firstName} ${evidence.submitter.lastName}` : 'Unknown'} on {new Date(evidence.created_at).toLocaleString()}
+                                                    </div>
+                                                </div>
+                                                <Badge variant="outline" className="capitalize">{evidence.result}</Badge>
+                                            </div>
+                                            {evidence.notes && <div className="text-xs text-gray-600 mt-2">{evidence.notes}</div>}
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                </DialogContent>
+            </Dialog>
         </div>
     );
 };

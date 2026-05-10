@@ -1,4 +1,5 @@
 import { useAuth } from "@/contexts/AuthContext";
+import { Navigate } from "react-router-dom";
 import { VolunteerActivityLog } from "./VolunteerActivityLog";
 import { OrganizerActivityLog } from "./OrganizerActivityLog";
 import { ResearcherActivityLog } from "./ResearcherActivityLog";
@@ -20,8 +21,7 @@ export const ActivityLogRouter = () => {
     case 'researcher':
       return <ResearcherActivityLog />;
     case 'admin':
-      // Admins can view any activity log type, default to volunteer view
-      return <VolunteerActivityLog />;
+      return <Navigate to="/admin/dashboard" replace />;
     default:
       return <VolunteerActivityLog />;
   }

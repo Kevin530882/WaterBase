@@ -24,6 +24,10 @@ class Event extends Model
         'report_group_id',
         'started_at',
         'ended_at',
+        'cleanup_verification_status',
+        'cleanup_verified_at',
+        'cleanup_verified_by',
+        'cleanup_verification_notes',
     ];
 
     protected $casts = [
@@ -34,6 +38,7 @@ class Event extends Model
         'duration' => 'decimal:2',
         'started_at' => 'datetime',
         'ended_at' => 'datetime',
+        'cleanup_verified_at' => 'datetime',
     ];
 
     public function getCurrentVolunteersAttribute()
@@ -63,5 +68,15 @@ class Event extends Model
     public function reportGroup()
     {
         return $this->belongsTo(ReportGroup::class, 'report_group_id');
+    }
+
+    public function cleanupEvidences()
+    {
+        return $this->hasMany(EventCleanupEvidence::class);
+    }
+
+    public function cleanupVerifier()
+    {
+        return $this->belongsTo(User::class, 'cleanup_verified_by');
     }
 }

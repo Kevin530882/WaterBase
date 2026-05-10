@@ -74,5 +74,20 @@ export const eventService = {
         }
 
         return response.json();
+    },
+
+    async getCreatedEvents(token: string): Promise<Event[]> {
+        const response = await fetch('/api/user/created-events', {
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'Accept': 'application/json',
+            },
+        });
+
+        if (!response.ok) {
+            throw new Error('Failed to fetch created events');
+        }
+
+        return response.json();
     }
 };

@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 
 class DetectPollutionController extends Controller
 {
@@ -17,7 +18,7 @@ class DetectPollutionController extends Controller
 
         // Store the uploaded image
         $file = $request->image;
-        $fileName = $file->getClientOriginalName();
+        $fileName = $this->makeUniqueUploadFileName($file);
         $imagePath = Storage::disk("public")->putFileAs("uploads", $file, $fileName);
 
         $imageFullPath = Storage::disk('public')->path($imagePath);
@@ -90,6 +91,19 @@ class DetectPollutionController extends Controller
         $predictions['ai_verified'] = $verified;
         
         return response()->json($predictions, 200);
+    }
+
+    private function makeUniqueUploadFileName($file): string
+    {
+        $extension = strtolower($file->getClientOriginalExtension() ?: $file->extension() ?: 'jpg');
+        if (!in_array($extension, ['jpg', 'jpeg', 'png'], true)) {
+            $extension = 'jpg';
+        }
+
+        $baseName = pathinfo($file->getClientOriginalName(), PATHINFO_FILENAME);
+        $safeBaseName = Str::slug($baseName) ?: 'pollution-report';
+
+        return now()->format('YmdHis') . '_' . Str::uuid() . '_' . $safeBaseName . '.' . $extension;
     }
 
     

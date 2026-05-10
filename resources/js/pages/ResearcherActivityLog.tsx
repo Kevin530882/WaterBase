@@ -80,7 +80,7 @@ export const ResearcherActivityLog = () => {
       setIsLoading(true);
       
       // Fetch reports
-      const reportsRes = await fetch('/api/reports/all', {
+      const reportsRes = await fetch('/api/reports', {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json',

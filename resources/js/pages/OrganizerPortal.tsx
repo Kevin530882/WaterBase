@@ -153,6 +153,16 @@ export const OrganizerPortal = () => {
         return distance <= 0.001; // approximately 100m threshold
     };
 
+    const isAreaBlockingEvent = (event: any) => {
+        const status = String(event.status).toLowerCase();
+
+        if (status === 'recruiting' || status === 'active') {
+            return true;
+        }
+
+        return status === 'completed' && event.cleanup_verification_status !== 'failed';
+    };
+
     const checkIfLocationHasEvent = (coordinates: { lat: number; lng: number }, eventsData: any[]) => {
         console.log('Checking if location has event:', coordinates);
         console.log('Available events:', eventsData);
@@ -163,6 +173,10 @@ export const OrganizerPortal = () => {
         }
 
         const hasEvent = eventsData.some(event => {
+            if (!isAreaBlockingEvent(event)) {
+                return false;
+            }
+
             const eventCoords = { lat: event.latitude, lng: event.longitude };
             const isMatching = areLocationsMatching(eventCoords, coordinates);
             console.log(`Event at ${eventCoords.lat}, ${eventCoords.lng} matches ${coordinates.lat}, ${coordinates.lng}:`, isMatching);
@@ -177,6 +191,10 @@ export const OrganizerPortal = () => {
         if (!eventsData || eventsData.length === 0) return new Date(0);
 
         const eventsAtLocation = eventsData.filter(event => {
+            if (!isAreaBlockingEvent(event)) {
+                return false;
+            }
+
             const eventCoords = { lat: event.latitude, lng: event.longitude };
             return areLocationsMatching(eventCoords, coordinates);
         });
@@ -187,6 +205,10 @@ export const OrganizerPortal = () => {
         const mostRecentEvent = eventsAtLocation.sort((a, b) =>
             new Date(b.created_at || b.createdAt || b.date).getTime() - new Date(a.created_at || a.createdAt || a.date).getTime()
         )[0];
+
+        if (mostRecentEvent.status === 'recruiting' || mostRecentEvent.status === 'active') {
+            return new Date(8640000000000000);
+        }
 
         return new Date(mostRecentEvent.created_at || mostRecentEvent.createdAt || mostRecentEvent.date);
     };

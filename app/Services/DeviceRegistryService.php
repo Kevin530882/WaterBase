@@ -15,17 +15,27 @@ class DeviceRegistryService
 
     public function registerDiscovery(array $payload): Device
     {
-        $device = Device::updateOrCreate(
-            ['mac_address' => $payload['mac_address']],
-            [
-                'name' => $payload['name'] ?? null,
-                'status' => 'awaiting_pair',
-                'discovery_last_seen_at' => now(),
-                'firmware_version' => $payload['firmware_version'] ?? null,
-                'hardware_revision' => $payload['hardware_revision'] ?? null,
-                'raw_discovery_payload' => $payload,
-            ]
-        );
+        $device = Device::withTrashed()->firstOrNew([
+            'mac_address' => $payload['mac_address'],
+        ]);
+
+        if ($device->trashed()) {
+            $device->restore();
+            $device->station_id = null;
+            $device->paired_by_user_id = null;
+            $device->paired_at = null;
+        }
+
+        $device->fill([
+            'name' => $payload['name'] ?? null,
+            'status' => 'awaiting_pair',
+            'discovery_last_seen_at' => now(),
+            'firmware_version' => $payload['firmware_version'] ?? null,
+            'hardware_revision' => $payload['hardware_revision'] ?? null,
+            'raw_discovery_payload' => $payload,
+        ]);
+
+        $device->save();
 
         if ($device->paired_at !== null) {
             $device->status = 'paired';

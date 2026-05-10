@@ -9,7 +9,6 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { TabsContent } from "@/components/ui/tabs";
 import {
     Dialog,
     DialogContent,
@@ -161,8 +160,7 @@ export const Events = () => {
     };
 
     return (
-        <TabsContent value="events">
-            <div className="space-y-6">
+        <div className="space-y-6">
                 {/* Success/Error Messages */}
                 {success && (
                     <Alert className="border-green-200 bg-green-50">
@@ -409,7 +407,6 @@ export const Events = () => {
                         ))}
                     </div>
                 )}
-            </div>
-        </TabsContent>
+        </div>
     );
 };

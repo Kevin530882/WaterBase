@@ -47,8 +47,11 @@ Route::middleware(['auth:sanctum', 'banned'])->group(function () {
     Route::post('/events/{id}/qr-scan', [EventController::class, 'qrScan']);
     Route::post('/events/{id}/message-volunteers', [EventController::class, 'messageVolunteers']);
     Route::post('/events/{id}/complete', [EventController::class, 'complete']);
+    Route::get('/events/{id}/cleanup-evidence', [EventController::class, 'cleanupEvidence']);
+    Route::post('/events/{id}/cleanup-evidence', [EventController::class, 'storeCleanupEvidence']);
     Route::get('/events/{id}/volunteers', [EventController::class, 'getVolunteers']);
     Route::get('/user/events', [EventController::class, 'getUserEvents']);
+    Route::get('/user/created-events', [EventController::class, 'getCreatedEvents']);
 
     // Report routes - specific routes MUST come before resourceful routes
     Route::get('/reports/all', [ReportController::class, 'all']);

@@ -659,7 +659,7 @@ export const AdminDashboard = () => {
 
     const fetchRecentAlerts = async () => {
         try {
-            const response = await fetch('/api/admin/reports/high-severity', {
+            const response = await fetch('/api/admin/reports/pending?page=1', {
                 method: 'GET',
                 headers: {
                     'Authorization': `Bearer ${localStorage.getItem('auth_token')}`,
@@ -667,7 +667,7 @@ export const AdminDashboard = () => {
             });
             if (!response.ok) throw new Error('Failed to fetch recent alerts');
             const data = await response.json();
-            setRecentAlerts(data);
+            setRecentAlerts((data.data || []).slice(0, 5));
         } catch (error) {
             console.error('Error fetching recent alerts:', error);
             setErrorMessage('Failed to load recent alerts. Please try again.');
@@ -828,15 +828,15 @@ export const AdminDashboard = () => {
                     </TabsList>
 
                     <TabsContent value="overview">
-                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                            <Card className="border-waterbase-200">
-                                <CardHeader>
+                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-stretch">
+                            <Card className="border-waterbase-200 flex h-[360px] flex-col">
+                                <CardHeader className="pb-2">
                                     <CardTitle className="flex items-center">
                                         <BarChart3 className="w-5 h-5 mr-2" />
                                         System Activity
                                     </CardTitle>
                                 </CardHeader>
-                                <CardContent className="p-2 h-64">
+                                <CardContent className="flex-1 p-0 pl-2 pr-4 pb-4">
                                     <ResponsiveContainer width="100%" height="100%">
                                         <LineChart
                                             data={[
@@ -846,9 +846,9 @@ export const AdminDashboard = () => {
                                                 { name: 'Active Volunteers', value: adminStats.activeVolunteers },
                                             ]}
                                             margin={{
-                                                top: 10,
-                                                right: 30,
-                                                left: 0,
+                                                top: 8,
+                                                right: 20,
+                                                left: -20,
                                                 bottom: 0,
                                             }}
                                         >
@@ -868,6 +868,51 @@ export const AdminDashboard = () => {
                                             <Line type="monotone" dataKey="value" stroke="#60A5FA" strokeWidth={2} dot={{ r: 4, fill: '#60A5FA' }} activeDot={{ r: 6, fill: '#2563EB', stroke: '#2563EB' }} />
                                         </LineChart>
                                     </ResponsiveContainer>
+                                </CardContent>
+                            </Card>
+
+                            <Card className="border-waterbase-200 flex h-[360px] flex-col">
+                                <CardHeader className="pb-2">
+                                    <CardTitle className="flex items-center">
+                                        <AlertTriangle className="w-5 h-5 mr-2" />
+                                        Recent Alerts
+                                    </CardTitle>
+                                </CardHeader>
+                                <CardContent className="flex-1 space-y-3 overflow-y-auto px-4 pb-4">
+                                    {recentAlerts.length === 0 ? (
+                                        <p className="text-sm text-gray-500">No recent alerts.</p>
+                                    ) : (
+                                        recentAlerts.map((report) => {
+                                            const severity = report.severityByAI || report.severityByUser || 'medium';
+                                            const reportTitle = report.title || `Water Pollution Report #${report.id}`;
+
+                                            return (
+                                                <button
+                                                    key={report.id}
+                                                    type="button"
+                                                    className="w-full rounded-md border border-red-200 bg-red-50 px-3 py-2.5 text-left transition hover:border-red-300 hover:bg-red-100"
+                                                    onClick={() => {
+                                                        setSelectedReport(report);
+                                                        setShowReportDialog(true);
+                                                    }}
+                                                >
+                                                    <div className="flex items-start justify-between gap-3">
+                                                        <div className="min-w-0 flex-1">
+                                                            <p className="truncate text-sm font-semibold text-red-700">
+                                                                {report.pollutionType ? `${report.pollutionType}: ` : ''}{reportTitle}
+                                                            </p>
+                                                            <p className="mt-1 truncate text-xs text-red-700">
+                                                                {report.address || 'No address provided'} - {report.created_at ? format(parseISO(report.created_at), 'dd MMM yy') : 'No date'}
+                                                            </p>
+                                                        </div>
+                                                        <Badge className={cn("shrink-0 text-xs h-5 px-2", getSeverityColor(severity))}>
+                                                            {severity}
+                                                        </Badge>
+                                                    </div>
+                                                </button>
+                                            );
+                                        })
+                                    )}
                                 </CardContent>
                             </Card>
                         </div>
@@ -1157,63 +1202,69 @@ export const AdminDashboard = () => {
 
                     <TabsContent value="users">
                         <Card className="border-waterbase-200 mb-4">
-                            <CardHeader className="pb-3">
+                            <CardHeader className="pb-2">
                                 <CardTitle className="flex items-center text-lg">
                                     <Shield className="w-4 h-4 mr-2" />
                                     Risk Threshold
                                 </CardTitle>
                             </CardHeader>
-                            <CardContent className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                                <div>
-                                    <Label htmlFor="riskThreshold">Risk score threshold</Label>
-                                    <Input
-                                        id="riskThreshold"
-                                        type="number"
-                                        min="1"
-                                        value={thresholdDraft}
-                                        onChange={(e) => setThresholdDraft(e.target.value)}
-                                        className="h-8 text-xs"
-                                    />
+                            <CardContent className="grid grid-cols-1 gap-4 px-4 pb-4 pt-0 md:grid-cols-[auto_220px] md:items-stretch">
+                                <div className="flex h-16 flex-col justify-center rounded-md border border-waterbase-100 bg-white px-3">
+                                    <Label htmlFor="riskThreshold" className="mb-1 block text-xs font-medium uppercase tracking-wide text-waterbase-700">Risk score threshold</Label>
+                                    <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                                        <Input
+                                            id="riskThreshold"
+                                            type="number"
+                                            min="1"
+                                            value={thresholdDraft}
+                                            onChange={(e) => setThresholdDraft(e.target.value)}
+                                            className="h-9 w-full text-sm sm:w-24"
+                                        />
+                                        <Button
+                                            size="sm"
+                                            onClick={handleSaveThreshold}
+                                            disabled={isSavingThreshold}
+                                            className="h-9 w-full bg-waterbase-500 px-4 text-sm hover:bg-waterbase-600 sm:w-auto"
+                                        >
+                                            {isSavingThreshold ? 'Saving...' : 'Save Threshold'}
+                                        </Button>
+                                    </div>
                                 </div>
-                                <div className="rounded-lg border border-yellow-200 bg-yellow-50 p-3">
-                                    <p className="text-xs font-medium text-yellow-700">Risky users</p>
-                                    <p className="text-2xl font-bold text-yellow-900">{riskyUsersTotal}</p>
-                                    <p className="text-xs text-yellow-700">Current threshold: {riskThreshold}</p>
-                                </div>
-                                <div className="flex items-end">
-                                    <Button
-                                        size="sm"
-                                        onClick={handleSaveThreshold}
-                                        disabled={isSavingThreshold}
-                                        className="h-8 bg-waterbase-500 hover:bg-waterbase-600"
-                                    >
-                                        {isSavingThreshold ? 'Saving...' : 'Save Threshold'}
-                                    </Button>
+                                <div className="flex h-16 flex-col justify-center rounded-md border border-yellow-200 bg-yellow-50 px-3">
+                                    <p className="text-xs font-medium uppercase tracking-wide text-yellow-700">Risky users</p>
+                                    <div className="mt-1 flex items-end justify-between gap-3">
+                                        <p className="text-2xl font-bold leading-none text-yellow-900">{riskyUsersTotal}</p>
+                                        <p className="text-xs text-yellow-700">Threshold {riskThreshold}</p>
+                                    </div>
                                 </div>
                             </CardContent>
                         </Card>
 
-                        <Card className="border-waterbase-200">
+                        <Card className="border-waterbase-200 mb-4">
                             <CardHeader className="pb-3">
-                                <CardTitle className="flex items-center text-lg">
-                                    <AlertTriangle className="w-4 h-4 mr-2 text-yellow-600" />
-                                    Risky Users
-                                </CardTitle>
+                                <div className="flex items-center justify-between gap-3">
+                                    <CardTitle className="flex items-center text-lg">
+                                        <AlertTriangle className="w-4 h-4 mr-2 text-yellow-600" />
+                                        Risky Users
+                                    </CardTitle>
+                                    <Badge className="bg-yellow-100 text-yellow-800">{riskyUsersTotal}</Badge>
+                                </div>
                             </CardHeader>
-                            <CardContent className="p-4">
-                                <div className="overflow-x-auto">
-                                    <Table>
-                                        <TableHeader>
-                                            <TableRow>
-                                                <TableHead className="text-xs">User</TableHead>
-                                                <TableHead className="text-xs">Risk Score</TableHead>
-                                                <TableHead className="text-xs hidden md:table-cell">Status</TableHead>
-                                                <TableHead className="text-xs hidden md:table-cell">Actions</TableHead>
-                                            </TableRow>
-                                        </TableHeader>
-                                        <TableBody>
-                                            {riskyUsers && riskyUsers.length > 0 ? (
-                                                riskyUsers.map((user: any) => (
+                            <CardContent className="px-4 pb-4 pt-0">
+                                {riskyUsers && riskyUsers.length > 0 ? (
+                                    <>
+                                        <div className="overflow-x-auto rounded-md border border-waterbase-100">
+                                            <Table>
+                                                <TableHeader>
+                                                    <TableRow className="bg-gray-50">
+                                                        <TableHead className="text-xs">User</TableHead>
+                                                        <TableHead className="text-xs">Risk Score</TableHead>
+                                                        <TableHead className="text-xs hidden md:table-cell">Status</TableHead>
+                                                        <TableHead className="text-xs hidden md:table-cell text-right">Actions</TableHead>
+                                                    </TableRow>
+                                                </TableHeader>
+                                                <TableBody>
+                                                    {riskyUsers.map((user: any) => (
                                                     <TableRow key={user.id}>
                                                         <TableCell className="py-2">
                                                             <div className="max-w-[150px]">
@@ -1229,7 +1280,7 @@ export const AdminDashboard = () => {
                                                                 {user.user_status === 'banned' ? 'Banned' : 'Active'}
                                                             </Badge>
                                                         </TableCell>
-                                                        <TableCell className="py-2 hidden md:table-cell">
+                                                        <TableCell className="py-2 hidden md:table-cell text-right">
                                                             <Button
                                                                 size="sm"
                                                                 variant={user.user_status === 'banned' ? 'outline' : 'destructive'}
@@ -1240,22 +1291,23 @@ export const AdminDashboard = () => {
                                                             </Button>
                                                         </TableCell>
                                                     </TableRow>
-                                                ))
-                                            ) : (
-                                                <TableRow>
-                                                    <TableCell colSpan={4} className="text-center py-4 text-gray-500 text-xs">
-                                                        No risky users found
-                                                    </TableCell>
-                                                </TableRow>
-                                            )}
-                                        </TableBody>
-                                    </Table>
-                                </div>
-                                <div className="flex items-center justify-between mt-4">
-                                    <Button onClick={() => setRiskyCurrentPage(prev => Math.max(prev - 1, 1))} disabled={riskyCurrentPage === 1} size="sm" className="h-8 text-xs">Previous</Button>
-                                    <span className="text-xs">Page {riskyCurrentPage} of {riskyTotalPages}</span>
-                                    <Button onClick={() => setRiskyCurrentPage(prev => Math.min(prev + 1, riskyTotalPages))} disabled={riskyCurrentPage === riskyTotalPages} size="sm" className="h-8 text-xs">Next</Button>
-                                </div>
+                                                    ))}
+                                                </TableBody>
+                                            </Table>
+                                        </div>
+                                        {riskyTotalPages > 1 && (
+                                            <div className="flex items-center justify-end gap-3 mt-3">
+                                                <Button onClick={() => setRiskyCurrentPage(prev => Math.max(prev - 1, 1))} disabled={riskyCurrentPage === 1} size="sm" variant="outline" className="h-8 text-xs">Previous</Button>
+                                                <span className="text-xs text-gray-600">Page {riskyCurrentPage} of {riskyTotalPages}</span>
+                                                <Button onClick={() => setRiskyCurrentPage(prev => Math.min(prev + 1, riskyTotalPages))} disabled={riskyCurrentPage === riskyTotalPages} size="sm" variant="outline" className="h-8 text-xs">Next</Button>
+                                            </div>
+                                        )}
+                                    </>
+                                ) : (
+                                    <div className="flex h-24 items-center justify-center rounded-md border border-dashed border-waterbase-200 bg-gray-50 text-sm text-gray-500">
+                                        No risky users found
+                                    </div>
+                                )}
                             </CardContent>
                         </Card>
 

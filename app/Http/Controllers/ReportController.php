@@ -16,6 +16,7 @@ use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Validation\ValidationException;
 use App\Models\SystemSetting;
 use App\Services\NotificationService;
+use Illuminate\Support\Str;
 
 class ReportController extends Controller
 {
@@ -37,7 +38,25 @@ class ReportController extends Controller
     {
         $user = $request->user();
 
-        Log::info('Reports index called', [
+        $reports = Report::with(['user:id,firstName,lastName,email'])
+            ->where('user_id', $user->id)
+            ->orderBy('created_at', 'desc')
+            ->get();
+
+        Log::info('Fetched user reports', [
+            'user_id' => $user->id,
+            'user_role' => $user->role,
+            'count' => $reports->count(),
+        ]);
+
+        return response()->json($reports);
+    }
+
+    public function accessible(Request $request)
+    {
+        $user = $request->user();
+
+        Log::info('Reports accessible called', [
             'user_id' => $user->id,
             'user_role' => $user->role,
             'user_area' => $user->areaOfResponsibility ?? 'none'
@@ -110,12 +129,6 @@ class ReportController extends Controller
         return response()->json($reports);
     }
 
-    public function accessible(Request $request)
-    {
-        // This method provides the same functionality as index but with explicit "accessible" naming
-        return $this->index($request);
-    }
-
     public function all(Request $request)
     {
         // Get all reports without area filtering for map view
@@ -176,9 +189,10 @@ class ReportController extends Controller
             $reportsValidated = $request->validate($rules);
 
             // Store image
+            $fileName = null;
             try {
                 $file = $request->file('image');
-                $fileName = $file->getClientOriginalName();
+                $fileName = $this->makeUniqueUploadFileName($file);
                 // Store original image
                 $path = Storage::disk('public')->putFileAs('uploads', $file, $fileName);
                 $imagePath = Storage::url($path);
@@ -317,6 +331,19 @@ class ReportController extends Controller
                 'message' => 'An unexpected error occurred. Please try again later.',
             ], 500);
         }
+    }
+
+    private function makeUniqueUploadFileName($file): string
+    {
+        $extension = strtolower($file->getClientOriginalExtension() ?: $file->extension() ?: 'jpg');
+        if (!in_array($extension, ['jpg', 'jpeg', 'png', 'gif'], true)) {
+            $extension = 'jpg';
+        }
+
+        $baseName = pathinfo($file->getClientOriginalName(), PATHINFO_FILENAME);
+        $safeBaseName = Str::slug($baseName) ?: 'pollution-report';
+
+        return now()->format('YmdHis') . '_' . Str::uuid() . '_' . $safeBaseName . '.' . $extension;
     }
 
     public function show(string $id)

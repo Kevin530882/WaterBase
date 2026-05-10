@@ -5,13 +5,18 @@ namespace App\Http\Controllers;
 use Illuminate\Http\Request;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use App\Models\Event;
+use App\Models\EventCleanupEvidence;
+use App\Models\OrganizationUpdate;
 use App\Models\User;
 use Illuminate\Validation\Rules\Enum;
 use App\Enums\EventStatus;
 use App\Services\BadgeEvaluationService;
 use App\Services\NotificationService;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 
 class EventController extends Controller
 {
@@ -24,7 +29,8 @@ class EventController extends Controller
     public function index(Request $request)
     {
         try {
-            $query = Event::query();
+            $query = Event::query()
+                ->with('creator:id,firstName,lastName,organization,profile_photo,role');
 
             // Filter by user_id if provided
             if ($request->has('user_id')) {
@@ -61,10 +67,21 @@ class EventController extends Controller
             $validated['status'] = 'recruiting';
         }
 
-        $event = Event::create($validated);
+        $event = Event::create($validated)->load('creator');
+
+        $this->publishEventUpdate(
+            event: $event,
+            title: 'Cleanup drive posted: ' . $event->title,
+            content: sprintf(
+                '%s is organizing a cleanup drive at %s on %s.',
+                $this->organizationDisplayName($event->creator),
+                $event->address,
+                $event->date?->format('M j, Y') ?? $event->date
+            )
+        );
 
         $this->notificationService->notifyEventCreated(
-            event: $event->load('creator'),
+            event: $event,
             actor: Auth::user()
         );
 
@@ -164,6 +181,27 @@ class EventController extends Controller
             $event->status = 'cancelled';
             $event->save();
 
+            $releasedReports = 0;
+            $restoredReports = 0;
+
+            $event->linkedReports()->each(function ($report) use (&$releasedReports, &$restoredReports) {
+                if ((string) $report->status === 'resolved') {
+                    $report->status = 'verified';
+                    $restoredReports++;
+                }
+
+                $report->event_id = null;
+                $report->save();
+                $releasedReports++;
+            });
+
+            $event->reportGroup()
+                ->where('cleanup_event_id', $event->id)
+                ->update([
+                    'cleanup_event_id' => null,
+                    'is_active' => true,
+                ]);
+
             // Notify all volunteers about the cancellation
             $this->notificationService->notifyEventStatusChanged(
                 event: $event,
@@ -176,6 +214,8 @@ class EventController extends Controller
                 'event_id' => $event->id,
                 'old_status' => $oldStatus,
                 'cancelled_by' => Auth::id(),
+                'released_reports' => $releasedReports,
+                'restored_reports' => $restoredReports,
             ]);
 
             return response()->json(['success' => 'Event cancelled successfully'], 200);
@@ -291,6 +331,27 @@ class EventController extends Controller
 
         } catch (\Exception $e) {
             return response()->json(['message' => 'Failed to fetch user events'], 500);
+        }
+    }
+
+    public function getCreatedEvents(Request $request)
+    {
+        try {
+            $user = Auth::user();
+
+            if (!$user instanceof User) {
+                return response()->json(['message' => 'Unauthorized'], 401);
+            }
+
+            $createdEvents = Event::query()
+                ->with('creator:id,firstName,lastName,organization,profile_photo,role')
+                ->where('user_id', $user->id)
+                ->orderBy('created_at', 'desc')
+                ->get();
+
+            return response()->json($createdEvents);
+        } catch (\Exception $e) {
+            return response()->json(['message' => 'Failed to fetch created events'], 500);
         }
     }
 
@@ -506,15 +567,14 @@ class EventController extends Controller
             $oldStatus = $event->status;
             $event->status = 'completed';
             $event->ended_at = now();
+            $event->cleanup_verification_status = 'pending';
+            $event->cleanup_verified_at = null;
+            $event->cleanup_verified_by = null;
+            $event->cleanup_verification_notes = 'Cleanup completed. Awaiting after-cleanup photo evidence.';
             $event->save();
+            $event->load('creator');
 
-            // Auto-resolve all linked reports
-            $resolvedCount = 0;
-            $event->linkedReports()->where('status', '!=', 'resolved')->each(function ($report) use (&$resolvedCount) {
-                $report->status = 'resolved';
-                $report->save();
-                $resolvedCount++;
-            });
+            $linkedReportsCount = $event->linkedReports()->count();
 
             // Award badges to attendees who were present
             $presentAttendees = $event->attendees()
@@ -532,21 +592,304 @@ class EventController extends Controller
                 actor: Auth::user()
             );
 
+            $this->publishEventUpdate(
+                event: $event,
+                title: 'Cleanup completed: ' . $event->title,
+                content: sprintf(
+                    '%s completed a cleanup drive at %s. %d linked reports are awaiting cleanup proof and %d volunteers checked in.',
+                    $this->organizationDisplayName($event->creator),
+                    $event->address,
+                    $linkedReportsCount,
+                    $presentAttendees->count()
+                )
+            );
+
             Log::info('Event completed', [
                 'event_id' => $event->id,
                 'completed_by' => Auth::id(),
-                'resolved_reports' => $resolvedCount,
+                'linked_reports_pending_verification' => $linkedReportsCount,
                 'present_attendees' => $presentAttendees->count(),
             ]);
 
             return response()->json([
                 'success' => 'Event completed successfully',
                 'event' => $event->fresh(),
-                'resolved_reports' => $resolvedCount,
+                'resolved_reports' => 0,
+                'linked_reports_pending_verification' => $linkedReportsCount,
                 'present_attendees' => $presentAttendees->count(),
             ], 200);
         } catch (ModelNotFoundException $e) {
             return response()->json(['message' => 'Event not found'], 404);
         }
+    }
+
+    public function cleanupEvidence(Request $request, string $id)
+    {
+        try {
+            $event = Event::with('cleanupEvidences.submitter:id,firstName,lastName,email,role')->findOrFail($id);
+
+            if (!$this->canViewCleanupEvidence($event, $request->user())) {
+                return response()->json(['message' => 'Unauthorized'], 403);
+            }
+
+            return response()->json([
+                'event_id' => $event->id,
+                'cleanup_verification_status' => $event->cleanup_verification_status,
+                'cleanup_verified_at' => $event->cleanup_verified_at,
+                'cleanup_verification_notes' => $event->cleanup_verification_notes,
+                'evidences' => $event->cleanupEvidences()
+                    ->with('submitter:id,firstName,lastName,email,role')
+                    ->latest()
+                    ->get(),
+            ]);
+        } catch (ModelNotFoundException $e) {
+            return response()->json(['message' => 'Event not found'], 404);
+        }
+    }
+
+    public function storeCleanupEvidence(Request $request, string $id)
+    {
+        try {
+            $event = Event::findOrFail($id);
+            $user = $request->user();
+
+            if (!$user instanceof User) {
+                return response()->json(['message' => 'Unauthorized'], 401);
+            }
+
+            if (!in_array($event->status, ['active', 'completed'], true)) {
+                return response()->json(['message' => 'Cleanup evidence can only be submitted for active or completed events'], 422);
+            }
+
+            if (!$this->canSubmitCleanupEvidence($event, $user)) {
+                return response()->json(['message' => 'Only checked-in volunteers, the organizer, researchers, or admins can submit cleanup evidence'], 403);
+            }
+
+            $validated = $request->validate([
+                'image' => 'required|image|mimes:jpeg,png,jpg|max:10120',
+                'latitude' => 'nullable|numeric|between:-90,90',
+                'longitude' => 'nullable|numeric|between:-180,180',
+            ]);
+
+            $file = $request->file('image');
+            $fileName = $this->makeCleanupEvidenceFileName($file);
+            $path = Storage::disk('public')->putFileAs('cleanup_evidence', $file, $fileName);
+            $imagePath = Storage::url($path);
+            $imageFullPath = Storage::disk('public')->path($path);
+
+            $analysis = $this->analyzeCleanupEvidenceImage($imageFullPath, $request);
+            $result = $this->cleanupEvidencePasses($analysis) ? 'approved' : 'failed';
+
+            $evidence = null;
+            DB::transaction(function () use ($event, $user, $validated, $imagePath, $analysis, $result, &$evidence) {
+                $evidence = EventCleanupEvidence::create([
+                    'event_id' => $event->id,
+                    'submitted_by' => $user->id,
+                    'image' => $imagePath,
+                    'ai_annotated_image' => $analysis['annotated_image_path'] ?? null,
+                    'latitude' => $validated['latitude'] ?? null,
+                    'longitude' => $validated['longitude'] ?? null,
+                    'ai_severity' => $analysis['severity_level'] ?? 'medium',
+                    'ai_confidence' => (float) ($analysis['overall_confidence'] ?? 0),
+                    'pollution_percentage' => (float) ($analysis['pollution_percentage'] ?? 0),
+                    'ai_verified' => (bool) ($analysis['ai_verified'] ?? false),
+                    'result' => $result,
+                    'notes' => $result === 'approved'
+                        ? 'After-cleanup image passed AI cleanliness check.'
+                        : 'After-cleanup image still shows pollution. Reports were returned to the eligible pool.',
+                ]);
+
+                if ($result === 'approved') {
+                    $resolvedCount = 0;
+                    $event->linkedReports()->where('status', '!=', 'resolved')->each(function ($report) use (&$resolvedCount) {
+                        $report->status = 'resolved';
+                        $report->save();
+                        $resolvedCount++;
+                    });
+
+                    $event->cleanup_verification_status = 'approved';
+                    $event->cleanup_verified_at = now();
+                    $event->cleanup_verified_by = $user->id;
+                    $event->cleanup_verification_notes = "Cleanup verified by after-photo evidence. {$resolvedCount} reports resolved.";
+                    $event->save();
+                } else {
+                    $releasedCount = 0;
+                    $event->linkedReports()->each(function ($report) use (&$releasedCount) {
+                        if ((string) $report->status === 'resolved') {
+                            $report->status = 'verified';
+                        }
+
+                        if (!in_array((string) $report->status, ['pending', 'declined'], true)) {
+                            $report->status = 'verified';
+                        }
+
+                        $report->event_id = null;
+                        $report->save();
+                        $releasedCount++;
+                    });
+
+                    $event->reportGroup()
+                        ->where('cleanup_event_id', $event->id)
+                        ->update([
+                            'cleanup_event_id' => null,
+                            'is_active' => true,
+                        ]);
+
+                    $event->cleanup_verification_status = 'failed';
+                    $event->cleanup_verified_at = now();
+                    $event->cleanup_verified_by = $user->id;
+                    $event->cleanup_verification_notes = "Cleanup evidence did not pass AI cleanliness check. {$releasedCount} reports returned for future cleanup.";
+                    $event->save();
+                }
+            });
+
+            return response()->json([
+                'message' => $result === 'approved'
+                    ? 'Cleanup evidence approved. Linked reports were resolved.'
+                    : 'Cleanup evidence needs more work. Linked reports were returned to eligible areas.',
+                'result' => $result,
+                'cleanup_verification_status' => $event->fresh()->cleanup_verification_status,
+                'evidence' => $evidence?->fresh('submitter:id,firstName,lastName,email,role'),
+            ], 201);
+        } catch (ModelNotFoundException $e) {
+            return response()->json(['message' => 'Event not found'], 404);
+        }
+    }
+
+    private function publishEventUpdate(Event $event, string $title, string $content): void
+    {
+        $organization = $event->creator;
+
+        if (!$organization instanceof User || !$organization->isOrganization()) {
+            return;
+        }
+
+        OrganizationUpdate::query()->create([
+            'organization_user_id' => $organization->id,
+            'title' => $title,
+            'content' => $content,
+            'update_type' => 'event',
+            'is_published' => true,
+            'published_at' => now(),
+        ]);
+    }
+
+    private function organizationDisplayName(?User $organization): string
+    {
+        if (!$organization) {
+            return 'An organization';
+        }
+
+        return $organization->organization ?: trim("{$organization->firstName} {$organization->lastName}");
+    }
+
+    private function canViewCleanupEvidence(Event $event, ?User $user): bool
+    {
+        if (!$user) {
+            return false;
+        }
+
+        if (in_array(strtolower((string) $user->role), ['admin', 'researcher'], true)) {
+            return true;
+        }
+
+        if ($event->user_id === $user->id) {
+            return true;
+        }
+
+        return $event->attendees()->where('users.id', $user->id)->exists();
+    }
+
+    private function canSubmitCleanupEvidence(Event $event, User $user): bool
+    {
+        if (in_array(strtolower((string) $user->role), ['admin', 'researcher'], true)) {
+            return true;
+        }
+
+        if ($event->user_id === $user->id) {
+            return true;
+        }
+
+        return $event->attendees()
+            ->where('users.id', $user->id)
+            ->wherePivot('is_present', true)
+            ->exists();
+    }
+
+    private function makeCleanupEvidenceFileName($file): string
+    {
+        $extension = strtolower($file->getClientOriginalExtension() ?: $file->extension() ?: 'jpg');
+        if (!in_array($extension, ['jpg', 'jpeg', 'png'], true)) {
+            $extension = 'jpg';
+        }
+
+        $baseName = pathinfo($file->getClientOriginalName(), PATHINFO_FILENAME);
+        $safeBaseName = Str::slug($baseName) ?: 'cleanup-evidence';
+
+        return now()->format('YmdHis') . '_' . Str::uuid() . '_' . $safeBaseName . '.' . $extension;
+    }
+
+    private function analyzeCleanupEvidenceImage(string $imageFullPath, Request $request): array
+    {
+        if (app()->environment('testing') && $request->has('test_ai_severity')) {
+            return [
+                'severity_level' => $request->input('test_ai_severity', 'low'),
+                'pollution_percentage' => (float) $request->input('test_pollution_percentage', 0),
+                'overall_confidence' => (float) $request->input('test_ai_confidence', 95),
+                'ai_verified' => true,
+                'annotated_image_path' => null,
+            ];
+        }
+
+        set_time_limit(600);
+
+        $python = base_path('python_environment/Scripts/python.exe');
+        $script = base_path('scripts/predict_pollution.py');
+        $workingDir = base_path();
+        $cmd = "cd /d \"$workingDir\" && \"$python\" \"$script\" \"$imageFullPath\"";
+        Log::info('Cleanup evidence Python command: ' . $cmd);
+        $output = shell_exec($cmd);
+        Log::info('Cleanup evidence Python output: ' . $output);
+
+        if (!$output) {
+            return [
+                'severity_level' => 'medium',
+                'pollution_percentage' => 100,
+                'overall_confidence' => 0,
+                'ai_verified' => false,
+                'annotated_image_path' => null,
+            ];
+        }
+
+        $lines = explode("\n", trim($output));
+        $jsonLine = end($lines);
+        $predictions = json_decode($jsonLine, true);
+
+        if (!is_array($predictions)) {
+            Log::error('Cleanup evidence JSON decode failed', ['json' => $jsonLine]);
+            return [
+                'severity_level' => 'medium',
+                'pollution_percentage' => 100,
+                'overall_confidence' => 0,
+                'ai_verified' => false,
+                'annotated_image_path' => null,
+            ];
+        }
+
+        return array_merge([
+            'severity_level' => 'medium',
+            'pollution_percentage' => 100,
+            'overall_confidence' => 0,
+            'ai_verified' => false,
+            'annotated_image_path' => null,
+        ], $predictions);
+    }
+
+    private function cleanupEvidencePasses(array $analysis): bool
+    {
+        $severity = strtolower((string) ($analysis['severity_level'] ?? 'medium'));
+        $pollutionPercentage = (float) ($analysis['pollution_percentage'] ?? 100);
+
+        return $severity === 'low' || $pollutionPercentage <= 10;
     }
 }

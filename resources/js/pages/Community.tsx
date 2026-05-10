@@ -20,6 +20,7 @@ interface CommunityUpdate {
     firstName: string;
     lastName: string;
     organization?: string;
+    profile_photo?: string | null;
   };
 }
 
@@ -60,9 +61,11 @@ interface CleanupDrive {
   badge?: string;
   status: string;
   creator?: {
+    id: number;
     firstName: string;
     lastName: string;
     organization?: string;
+    profile_photo?: string | null;
   };
   pivot?: {
     is_present?: boolean | number;
@@ -70,6 +73,22 @@ interface CleanupDrive {
 }
 
 type CommunitySection = "drives" | "feed" | "organizations";
+
+const resolveProfilePhotoUrl = (path?: string | null) => {
+  if (!path) return null;
+  if (path.startsWith("http://") || path.startsWith("https://") || path.startsWith("data:")) return path;
+  return path.startsWith("/") ? path : `/${path}`;
+};
+
+const getInitials = (firstName?: string, lastName?: string, organization?: string) => {
+  const source = organization || `${firstName || ""} ${lastName || ""}`.trim();
+  return source
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase())
+    .join("") || "WB";
+};
 
 export const Community = () => {
   const { user, token } = useAuth();
@@ -123,6 +142,18 @@ export const Community = () => {
   }, [organizations, orgSearchQuery]);
 
   const joinedDriveIdSet = useMemo(() => new Set(joinedDriveIds), [joinedDriveIds]);
+
+  const organizationNetworkById = useMemo(() => {
+    const map = new Map<number, "Member org" | "Following">();
+    organizations.forEach((organization) => {
+      if (organization.is_member) {
+        map.set(organization.id, "Member org");
+      } else if (organization.is_following) {
+        map.set(organization.id, "Following");
+      }
+    });
+    return map;
+  }, [organizations]);
 
   const fetchCommunityData = useCallback(async () => {
     if (!token || !user) return;
@@ -294,7 +325,16 @@ export const Community = () => {
     }
   };
 
-  const recruitingDrives = cleanupDrives.filter((drive) => drive.status === "recruiting" || drive.status === "active");
+  const recruitingDrives = useMemo(() => {
+    return cleanupDrives
+      .filter((drive) => drive.status === "recruiting" || drive.status === "active")
+      .sort((a, b) => {
+        const aIsNetwork = a.creator?.id ? organizationNetworkById.has(a.creator.id) : false;
+        const bIsNetwork = b.creator?.id ? organizationNetworkById.has(b.creator.id) : false;
+        if (aIsNetwork !== bIsNetwork) return aIsNetwork ? -1 : 1;
+        return new Date(`${a.date}T${a.time}`).getTime() - new Date(`${b.date}T${b.time}`).getTime();
+      });
+  }, [cleanupDrives, organizationNetworkById]);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-waterbase-50 to-enviro-50">
@@ -399,6 +439,7 @@ export const Community = () => {
                     const slotsLeft = Math.max((drive.maxVolunteers ?? 0) - volunteers, 0);
                     const isJoined = joinedDriveIdSet.has(drive.id);
                     const isPresent = presentDriveIds.has(drive.id);
+                    const networkLabel = drive.creator?.id ? organizationNetworkById.get(drive.creator.id) : null;
 
                     return (
                       <Card key={drive.id} className="border-waterbase-200">
@@ -411,7 +452,10 @@ export const Community = () => {
                                 {drive.address}
                               </CardDescription>
                             </div>
-                            <Badge variant="outline" className="capitalize">{drive.status}</Badge>
+                            <div className="flex flex-wrap justify-end gap-2">
+                              {networkLabel && <Badge className="bg-enviro-600">{networkLabel}</Badge>}
+                              <Badge variant="outline" className="capitalize">{drive.status}</Badge>
+                            </div>
                           </div>
                         </CardHeader>
                         <CardContent className="space-y-3">
@@ -473,11 +517,24 @@ export const Community = () => {
                   {updates.map((update) => (
                     <div key={update.id} className="p-4 rounded-lg border border-waterbase-200 bg-waterbase-50">
                       <div className="flex items-start justify-between gap-3 mb-2">
-                        <div>
-                          <Link to={`/organizations/${update.organization.id}`} className="font-semibold text-waterbase-950 hover:underline">
-                            {update.organization.organization || `${update.organization.firstName} ${update.organization.lastName}`}
-                          </Link>
-                          <p className="text-sm font-medium text-waterbase-900 mt-1">{update.title}</p>
+                        <div className="flex items-start gap-3 min-w-0">
+                          {resolveProfilePhotoUrl(update.organization.profile_photo) ? (
+                            <img
+                              src={resolveProfilePhotoUrl(update.organization.profile_photo) || ""}
+                              alt=""
+                              className="h-11 w-11 rounded-full object-cover border border-waterbase-200 bg-white"
+                            />
+                          ) : (
+                            <div className="h-11 w-11 rounded-full bg-waterbase-100 text-waterbase-800 border border-waterbase-200 flex items-center justify-center text-sm font-semibold">
+                              {getInitials(update.organization.firstName, update.organization.lastName, update.organization.organization)}
+                            </div>
+                          )}
+                          <div className="min-w-0">
+                            <Link to={`/organizations/${update.organization.id}`} className="font-semibold text-waterbase-950 hover:underline">
+                              {update.organization.organization || `${update.organization.firstName} ${update.organization.lastName}`}
+                            </Link>
+                            <p className="text-sm font-medium text-waterbase-900 mt-1">{update.title}</p>
+                          </div>
                         </div>
                         <Badge variant="outline" className="capitalize">{update.update_type}</Badge>
                       </div>
