@@ -38,6 +38,7 @@ class SystemSettingsController extends Controller
             'wbsi_sensor_assignment_radius_m' => 'required|integer|min:1|max:100000',
             'wbsi_sensor_weight' => 'required|numeric|min:0|max:1',
             'wbsi_report_weight' => 'required|numeric|min:0|max:1',
+            'wbsi_kde_distribution_enabled' => 'boolean',
             'wbsi_freshwater_ph_min' => 'required|numeric|min:0|max:14',
             'wbsi_freshwater_ph_max' => 'required|numeric|min:0|max:14|gt:wbsi_freshwater_ph_min',
             'wbsi_freshwater_turbidity_ntu' => 'required|numeric|min:0.01|max:100000',

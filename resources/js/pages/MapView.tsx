@@ -765,7 +765,7 @@ const SeverityDistributionChartWrapper = ({ chartData, locationName }: { chartDa
             <div className="w-full h-full relative overflow-hidden">
               {/* Simulated map background */}
               <MapContainer
-                center={[14.4793, 120.9106]}
+                center={[10.3157, 123.8854]}
                 zoom={10}
                 className="w-full h-full"
                 style={{ height: "100%", width: "100%" }}

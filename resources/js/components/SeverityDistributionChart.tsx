@@ -76,9 +76,10 @@ export const SeverityDistributionChart: React.FC<SeverityDistributionChartProps>
   }
   const [activeTab, setActiveTab] = useState("overview");
   const [isExpanded, setIsExpanded] = useState(false);
+  const isSensorDriven = config.source === 'sensor';
   
   // Decide on displayed WBSI: Use shrunk if small n_reports
-  const useShrunk = config.n_reports < 20;  // Threshold for small samples
+  const useShrunk = !isSensorDriven && config.n_reports < 20;  // Threshold for small samples
   const displayedWBSI = useShrunk ? (config.wbsi_display_shrunk ?? config.wbsi_display ?? 0) : (config.wbsi_display ?? config.wbsi_display_shrunk ?? 0);
   
   // Get comprehensive analysis
@@ -215,10 +216,10 @@ export const SeverityDistributionChart: React.FC<SeverityDistributionChartProps>
               variant="outline" 
               className={cn("text-xs", severityDescription.color)}
             >
-              WBSI: {displayedWBSI}%
+              {isSensorDriven ? 'Sensor Score' : 'WBSI'}: {displayedWBSI}%
             </Badge>
             <span className="text-xs text-gray-600">
-              {config.n_reports} reports, {config.consensus_percentage}% consensus
+              {isSensorDriven ? 'sensor-driven' : `${config.n_reports} reports, ${config.consensus_percentage}% consensus`}
             </span>
           </div>
           {useShrunk && (
@@ -278,7 +279,7 @@ export const SeverityDistributionChart: React.FC<SeverityDistributionChartProps>
                       {summaryReport.overall}
                     </p>
                     <p className="text-gray-600">
-                      {summaryReport.reliability}
+                      {isSensorDriven ? 'Assessment is based on the latest sensor telemetry for this location.' : summaryReport.reliability}
                     </p>
                   </div>
                 </div>

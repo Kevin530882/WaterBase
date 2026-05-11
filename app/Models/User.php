@@ -88,7 +88,9 @@ class User extends Authenticatable
 
     public function attendedEvents()
     {
-        return $this->belongsToMany(Event::class);
+        return $this->belongsToMany(Event::class)
+            ->withPivot(['joined_at', 'is_present', 'qr_scanned_at', 'task_note'])
+            ->withTimestamps();
     }
 
     public function createdEvents()

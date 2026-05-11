@@ -51,7 +51,7 @@ class Event extends Model
     public function attendees()
     {
         return $this->belongsToMany(User::class, 'event_user')
-            ->withPivot(['joined_at', 'is_present', 'qr_scanned_at'])
+            ->withPivot(['joined_at', 'is_present', 'qr_scanned_at', 'task_note'])
             ->withTimestamps();
     }
 

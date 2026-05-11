@@ -16,6 +16,7 @@ use App\Http\Controllers\OrganizationSocialController;
 use App\Http\Controllers\SystemSettingsController;
 use App\Http\Controllers\BadgeController;
 use App\Http\Controllers\ResearchDocumentController;
+use App\Http\Controllers\ManualReportDocumentController;
 use App\Http\Controllers\DeviceController;
 use App\Http\Controllers\ResearchGeotemporalController;
 use App\Http\Controllers\MapWbsiController;
@@ -46,6 +47,7 @@ Route::middleware(['auth:sanctum', 'banned'])->group(function () {
     Route::post('/events/{id}/start', [EventController::class, 'start']);
     Route::post('/events/{id}/qr-scan', [EventController::class, 'qrScan']);
     Route::post('/events/{id}/message-volunteers', [EventController::class, 'messageVolunteers']);
+    Route::patch('/events/{id}/volunteers/{userId}/task-note', [EventController::class, 'updateVolunteerTaskNote']);
     Route::post('/events/{id}/complete', [EventController::class, 'complete']);
     Route::get('/events/{id}/cleanup-evidence', [EventController::class, 'cleanupEvidence']);
     Route::post('/events/{id}/cleanup-evidence', [EventController::class, 'storeCleanupEvidence']);
@@ -203,6 +205,9 @@ Route::middleware(['auth:sanctum', 'banned'])->group(function () {
 
     // Research documents
     Route::apiResource('research-documents', ResearchDocumentController::class);
+    Route::apiResource('manual-report-documents', ManualReportDocumentController::class)
+        ->parameters(['manual-report-documents' => 'manualReportDocument'])
+        ->only(['index', 'store', 'update', 'destroy']);
     Route::post('/admin/maintenance/cache-clear', [MaintenanceController::class, 'clearCache']);
     Route::post('/admin/maintenance/view-clear', [MaintenanceController::class, 'clearViewCache']);
     Route::post('/admin/maintenance/route-clear', [MaintenanceController::class, 'clearRouteCache']);

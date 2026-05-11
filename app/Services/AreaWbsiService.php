@@ -75,6 +75,7 @@ class AreaWbsiService
 
     public function distributionForReports(iterable $reports): array
     {
+        $settings = $this->wbsiService->settings();
         $reportArray = is_array($reports) ? $reports : iterator_to_array($reports);
         $verified = array_values(array_filter($reportArray, fn (Report $report): bool => (string) $report->status === 'verified'));
         $severities = array_map(fn (Report $report): float => $this->wbsiService->reportSeverity($report), $verified);
@@ -106,6 +107,21 @@ class AreaWbsiService
         $consensus = $this->consensus($severities, $weights, $modalSeverity);
         $histogram = $this->histogram($severities, $weights);
         $severityBands = $this->severityBands($severities, $weights);
+        $config = [
+            'peak_severity' => $modalSeverity,
+            'consensus_range' => [max(0, $modalSeverity - 10), min(100, $modalSeverity + 10)],
+            'wbsi_display' => $modalSeverity,
+            'consensus_percentage' => round($consensus * 100, 1),
+            'severity_bands' => $severityBands,
+            'n_reports' => count($verified),
+            'is_polymodal' => false,
+        ];
+
+        if ((bool) $settings->wbsi_kde_distribution_enabled) {
+            $shrinkageFactor = count($verified) / (count($verified) + 20);
+            $config['wbsi_display_shrunk'] = round($modalSeverity * $shrinkageFactor, 1);
+            $config['shrinkage_factor'] = round($shrinkageFactor, 4);
+        }
 
         return [
             'wbsi' => $modalSeverity,
@@ -117,15 +133,7 @@ class AreaWbsiService
                 'density' => round($y, 6),
                 'normalized' => round($y * 100, 4),
             ], $kde['x'], $kde['y']),
-            'config' => [
-                'peak_severity' => $modalSeverity,
-                'consensus_range' => [max(0, $modalSeverity - 10), min(100, $modalSeverity + 10)],
-                'wbsi_display' => $modalSeverity,
-                'consensus_percentage' => round($consensus * 100, 1),
-                'severity_bands' => $severityBands,
-                'n_reports' => count($verified),
-                'is_polymodal' => false,
-            ],
+            'config' => $config,
             'outliers' => [],
         ];
     }
@@ -269,7 +277,7 @@ class AreaWbsiService
                     'area_wbsi' => null,
                     'source' => 'sensor_only',
                     'severity_label' => $score === null ? null : $this->wbsiService->severityLabel($score),
-                    'distribution' => $this->distributionForReports([]),
+                    'distribution' => $this->distributionForSensorScore($score),
                 ];
             })
             ->filter()
@@ -409,6 +417,28 @@ class AreaWbsiService
         }
 
         return ['x' => $x, 'y' => $y];
+    }
+
+    private function distributionForSensorScore(?float $score): array
+    {
+        return [
+            'wbsi' => $score,
+            'consensus' => 0.0,
+            'n_reports' => 0,
+            'bar_data' => [],
+            'kde_data' => [],
+            'config' => [
+                'peak_severity' => $score,
+                'consensus_range' => [0, 0],
+                'wbsi_display' => $score,
+                'consensus_percentage' => 0,
+                'severity_bands' => ['low' => 0, 'medium' => 0, 'high' => 0, 'critical' => 0],
+                'n_reports' => 0,
+                'is_polymodal' => false,
+                'source' => 'sensor',
+            ],
+            'outliers' => [],
+        ];
     }
 
     private function consensus(array $severities, array $weights, float $modalSeverity): float

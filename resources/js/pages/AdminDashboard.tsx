@@ -151,6 +151,7 @@ export const AdminDashboard = () => {
     const [wbsiSensorAssignmentRadiusM, setWbsiSensorAssignmentRadiusM] = useState(1000);
     const [wbsiSensorWeight, setWbsiSensorWeight] = useState(0.6);
     const [wbsiReportWeight, setWbsiReportWeight] = useState(0.4);
+    const [wbsiKdeDistributionEnabled, setWbsiKdeDistributionEnabled] = useState(false);
     const [wbsiFreshwaterPhMin, setWbsiFreshwaterPhMin] = useState(6.5);
     const [wbsiFreshwaterPhMax, setWbsiFreshwaterPhMax] = useState(8.5);
     const [wbsiFreshwaterTurbidityNtu, setWbsiFreshwaterTurbidityNtu] = useState(5);
@@ -638,6 +639,7 @@ export const AdminDashboard = () => {
                     setWbsiSensorAssignmentRadiusM(Number(data.wbsi_sensor_assignment_radius_m ?? 1000));
                     setWbsiSensorWeight(Number(data.wbsi_sensor_weight ?? 0.6));
                     setWbsiReportWeight(Number(data.wbsi_report_weight ?? 0.4));
+                    setWbsiKdeDistributionEnabled(Boolean(data.wbsi_kde_distribution_enabled));
                     setWbsiFreshwaterPhMin(Number(data.wbsi_freshwater_ph_min ?? 6.5));
                     setWbsiFreshwaterPhMax(Number(data.wbsi_freshwater_ph_max ?? 8.5));
                     setWbsiFreshwaterTurbidityNtu(Number(data.wbsi_freshwater_turbidity_ntu ?? 5));
@@ -1840,6 +1842,20 @@ export const AdminDashboard = () => {
                                         </div>
 
                                         <div>
+                                            <Label>KDE Distribution / Legacy Small-Sample Analysis</Label>
+                                            <p className="text-xs text-gray-500 mt-1 mb-2">When enabled, report distribution includes KDE small-sample shrinkage for the Pollution Analysis card.</p>
+                                            <div className="mt-1">
+                                                <Select value={wbsiKdeDistributionEnabled ? 'enabled' : 'disabled'} onValueChange={(v) => setWbsiKdeDistributionEnabled(v === 'enabled')}>
+                                                    <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
+                                                    <SelectContent>
+                                                        <SelectItem value="enabled">Enabled</SelectItem>
+                                                        <SelectItem value="disabled">Disabled</SelectItem>
+                                                    </SelectContent>
+                                                </Select>
+                                            </div>
+                                        </div>
+
+                                        <div>
                                             <h4 className="text-sm font-semibold text-waterbase-950">Freshwater Baselines</h4>
                                         </div>
                                         <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
@@ -1886,6 +1902,7 @@ export const AdminDashboard = () => {
                                                         wbsi_sensor_assignment_radius_m: wbsiSensorAssignmentRadiusM,
                                                         wbsi_sensor_weight: wbsiSensorWeight,
                                                         wbsi_report_weight: wbsiReportWeight,
+                                                        wbsi_kde_distribution_enabled: wbsiKdeDistributionEnabled,
                                                         wbsi_freshwater_ph_min: wbsiFreshwaterPhMin,
                                                         wbsi_freshwater_ph_max: wbsiFreshwaterPhMax,
                                                         wbsi_freshwater_turbidity_ntu: wbsiFreshwaterTurbidityNtu,

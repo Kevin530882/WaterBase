@@ -83,6 +83,7 @@ class AreaWbsiApiTest extends TestCase
             round((0.70 * $area['sensor_score']) + (0.30 * $area['report_wbsi']), 2),
             $area['area_wbsi']
         );
+        $this->assertArrayNotHasKey('wbsi_display_shrunk', $area['distribution']['config']);
     }
 
     public function test_sensor_without_report_area_is_sensor_only(): void
@@ -102,6 +103,64 @@ class AreaWbsiApiTest extends TestCase
             ->assertOk()
             ->assertJsonCount(1, 'areas')
             ->assertJsonPath('areas.0.source', 'sensor_only');
+    }
+
+    public function test_sensor_only_distribution_uses_sensor_score(): void
+    {
+        Sanctum::actingAs($this->makeUser());
+        $device = $this->makeDevice(['latitude' => 10.0, 'longitude' => 123.0]);
+        DeviceTelemetry::create([
+            'device_id' => $device->id,
+            'recorded_at' => now(),
+            'temperature_celsius' => 28,
+            'ph' => 7.2,
+            'tds_mg_l' => 180,
+            'turbidity_ntu' => 25,
+        ]);
+
+        $area = app(AreaWbsiService::class)->areas()[0];
+
+        $this->assertSame('sensor_only', $area['source']);
+        $this->assertSame($area['sensor_score'], $area['distribution']['wbsi']);
+        $this->assertSame($area['sensor_score'], $area['distribution']['config']['wbsi_display']);
+        $this->assertSame('sensor', $area['distribution']['config']['source']);
+        $this->assertSame(0, $area['distribution']['config']['n_reports']);
+    }
+
+    public function test_admin_settings_persist_kde_distribution_toggle(): void
+    {
+        Sanctum::actingAs($this->makeUser('admin'));
+
+        $payload = array_merge(SystemSetting::DEFAULTS, [
+            'wbsi_kde_distribution_enabled' => true,
+        ]);
+
+        $this->putJson('/api/admin/system-settings', $payload)
+            ->assertOk()
+            ->assertJsonPath('wbsi_kde_distribution_enabled', true);
+
+        $this->assertTrue((bool) SystemSetting::current()->wbsi_kde_distribution_enabled);
+    }
+
+    public function test_kde_distribution_toggle_adds_small_sample_shrinkage(): void
+    {
+        Sanctum::actingAs($this->makeUser());
+        SystemSetting::create(array_merge(SystemSetting::DEFAULTS, [
+            'wbsi_kde_distribution_enabled' => true,
+        ]));
+        $this->makeReport([
+            'latitude' => 10.0,
+            'longitude' => 123.0,
+            'severityPercentage' => 80,
+        ]);
+
+        $area = app(AreaWbsiService::class)->areas()[0];
+        $config = $area['distribution']['config'];
+
+        $this->assertArrayHasKey('wbsi_display_shrunk', $config);
+        $this->assertArrayHasKey('shrinkage_factor', $config);
+        $this->assertLessThan($config['wbsi_display'], $config['wbsi_display_shrunk']);
+        $this->assertSame(1, $config['n_reports']);
     }
 
     public function test_admin_settings_reject_invalid_weights(): void

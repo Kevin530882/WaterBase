@@ -112,6 +112,7 @@ export interface ChartData {
     };
     n_reports: number;
     is_polymodal: boolean;
+    source?: string;
   };
   outliers: Array<{
     report_id: number;

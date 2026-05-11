@@ -323,7 +323,7 @@ class EventController extends Controller
             // Get events the user has joined
             $joinedEvents = $user->attendedEvents()
                 ->with('creator')
-                ->withPivot(['is_present', 'qr_scanned_at', 'joined_at'])
+                ->withPivot(['is_present', 'qr_scanned_at', 'joined_at', 'task_note'])
                 ->orderBy('date', 'desc')
                 ->get();
 
@@ -377,12 +377,14 @@ class EventController extends Controller
                         'joined_at' => $user->pivot->joined_at ?? now()->toISOString(),
                         'is_present' => (bool) ($user->pivot->is_present ?? false),
                         'qr_scanned_at' => $user->pivot->qr_scanned_at,
+                        'task_note' => $user->pivot->task_note,
                         'pivot' => [
                             'user_id' => $user->id,
                             'event_id' => $event->id,
                             'created_at' => $user->pivot->created_at ?? now()->toISOString(),
                             'is_present' => (bool) ($user->pivot->is_present ?? false),
                             'qr_scanned_at' => $user->pivot->qr_scanned_at,
+                            'task_note' => $user->pivot->task_note,
                         ]
                     ];
                 });
@@ -394,6 +396,36 @@ class EventController extends Controller
         } catch (\Exception $e) {
             Log::error('Error fetching volunteers: ' . $e->getMessage());
             return response()->json(['message' => 'Failed to fetch volunteers: ' . $e->getMessage()], 500);
+        }
+    }
+
+    public function updateVolunteerTaskNote(Request $request, string $id, string $userId)
+    {
+        try {
+            $event = Event::findOrFail($id);
+
+            if ($event->user_id !== Auth::id()) {
+                return response()->json(['message' => 'Unauthorized'], 403);
+            }
+
+            if (!$event->attendees()->where('users.id', $userId)->exists()) {
+                return response()->json(['message' => 'Volunteer is not joined to this event'], 404);
+            }
+
+            $validated = $request->validate([
+                'task_note' => 'nullable|string|max:500',
+            ]);
+
+            $event->attendees()->updateExistingPivot((int) $userId, [
+                'task_note' => $validated['task_note'] ?? null,
+            ]);
+
+            return response()->json([
+                'message' => 'Volunteer task note updated',
+                'task_note' => $validated['task_note'] ?? null,
+            ]);
+        } catch (ModelNotFoundException $e) {
+            return response()->json(['message' => 'Event not found'], 404);
         }
     }
 

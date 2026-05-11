@@ -43,6 +43,29 @@ class NotificationService
             ],
             idempotencySeed: 'event-created-' . $event->id
         );
+
+        $nearbyVolunteerIds = array_values(array_diff($this->nearbyVolunteerIdsForEvent($event, 10.0), $recipientIds));
+        if (!empty($nearbyVolunteerIds)) {
+            $this->dispatchFanOut(
+                type: NotificationType::EVENT_CREATED,
+                recipientIds: $nearbyVolunteerIds,
+                severity: 'info',
+                title: 'Cleanup near a location you reported',
+                message: sprintf('"%s" needs volunteers near %s.', $event->title, $event->address),
+                metadata: [
+                    'actor' => $this->buildActor($actor),
+                    'target_id' => (string) $event->id,
+                    'target_type' => 'event',
+                    'template_vars' => [
+                        'event_title' => $event->title,
+                        'event_address' => $event->address,
+                        'radius_km' => 10,
+                    ],
+                    'channel' => 'in_app',
+                ],
+                idempotencySeed: 'event-created-nearby-' . $event->id
+            );
+        }
     }
 
     public function notifyEventStatusChanged(Event $event, string $oldStatus, string $newStatus, ?User $actor = null): void
@@ -496,5 +519,41 @@ class NotificationService
     private function enabled(): bool
     {
         return (bool) config('services.waterbase_notifications.enabled', true);
+    }
+
+    private function nearbyVolunteerIdsForEvent(Event $event, float $radiusKm): array
+    {
+        if ($event->latitude === null || $event->longitude === null) {
+            return [];
+        }
+
+        $eventLat = (float) $event->latitude;
+        $eventLng = (float) $event->longitude;
+
+        return Report::query()
+            ->with('user:id,role')
+            ->whereNotNull('latitude')
+            ->whereNotNull('longitude')
+            ->whereHas('user', fn ($query) => $query->where('role', 'volunteer'))
+            ->latest()
+            ->get(['id', 'user_id', 'latitude', 'longitude', 'created_at'])
+            ->unique('user_id')
+            ->filter(function (Report $report) use ($eventLat, $eventLng, $radiusKm) {
+                return $this->distanceKm($eventLat, $eventLng, (float) $report->latitude, (float) $report->longitude) <= $radiusKm;
+            })
+            ->pluck('user_id')
+            ->values()
+            ->all();
+    }
+
+    private function distanceKm(float $lat1, float $lng1, float $lat2, float $lng2): float
+    {
+        $earthRadiusKm = 6371.0;
+        $dLat = deg2rad($lat2 - $lat1);
+        $dLng = deg2rad($lng2 - $lng1);
+        $a = sin($dLat / 2) ** 2
+            + cos(deg2rad($lat1)) * cos(deg2rad($lat2)) * sin($dLng / 2) ** 2;
+
+        return $earthRadiusKm * 2 * atan2(sqrt($a), sqrt(1 - $a));
     }
 }
