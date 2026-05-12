@@ -42,6 +42,22 @@ export interface Telemetry {
   raw_payload: Record<string, unknown> | null;
   created_at: string;
   updated_at: string;
+  device?: {
+    id: number;
+    station_id: string | null;
+    name: string | null;
+    mac_address: string;
+    status: string;
+  } | null;
+}
+
+export interface TelemetryFilters {
+  q?: string;
+  from?: string;
+  to?: string;
+  status?: string;
+  sort?: string;
+  direction?: 'asc' | 'desc';
 }
 
 export interface MaintenanceSchedule {
@@ -395,13 +411,32 @@ class DeviceService {
     });
   }
 
-  async getTelemetryHistory(deviceId: number, page = 1, perPage = 50): Promise<PaginatedResponse<Telemetry>> {
+  private telemetryParams(page = 1, perPage = 50, filters: TelemetryFilters = {}) {
     const params = new URLSearchParams({
       page: String(page),
       per_page: String(perPage),
     });
 
+    if (filters.q) params.append('q', filters.q);
+    if (filters.from) params.append('from', filters.from);
+    if (filters.to) params.append('to', filters.to);
+    if (filters.status) params.append('status', filters.status);
+    if (filters.sort) params.append('sort', filters.sort);
+    if (filters.direction) params.append('direction', filters.direction);
+
+    return params;
+  }
+
+  async getTelemetryHistory(deviceId: number, page = 1, perPage = 50, filters: TelemetryFilters = {}): Promise<PaginatedResponse<Telemetry>> {
+    const params = this.telemetryParams(page, perPage, filters);
+
     return this.apiRequest(`/api/devices/${deviceId}/telemetry?${params.toString()}`);
+  }
+
+  async listTelemetry(page = 1, perPage = 50, filters: TelemetryFilters = {}): Promise<PaginatedResponse<Telemetry>> {
+    const params = this.telemetryParams(page, perPage, filters);
+
+    return this.apiRequest(`/api/device-telemetry?${params.toString()}`);
   }
 
   async requestLiveRead(deviceId: number): Promise<unknown> {

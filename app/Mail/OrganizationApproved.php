@@ -26,7 +26,7 @@ class OrganizationApproved extends Mailable
      */
     public function build()
     {
-        return $this->subject('Your organization account has been approved')
+        return $this->subject('Your WaterBase account has been approved')
             ->view('emails.organization_approved')
             ->with(['user' => $this->user]);
     }

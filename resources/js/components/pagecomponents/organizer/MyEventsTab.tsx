@@ -789,6 +789,7 @@ export const MyEventsTab = ({
                 onOpenChange={setQrDialogOpen}
                 eventId={qrEvent?.id ?? null}
                 eventTitle={qrEvent?.title}
+                eventLocation={qrEvent?.address}
                 currentVolunteers={qrEvent?.currentVolunteers || 0}
             />
 

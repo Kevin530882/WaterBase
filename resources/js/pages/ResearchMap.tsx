@@ -14,6 +14,7 @@ import {
   Calendar,
   Download,
   Droplets,
+  Eye,
   FileSpreadsheet,
   Gauge,
   Layers,
@@ -35,6 +36,7 @@ import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
+import { ROUTE } from "@/constants";
 import DeviceService, {
   ResearchCleanupEvent,
   ResearchCleanupRanking,
@@ -401,6 +403,12 @@ export const ResearchMap = () => {
               <h2 className="text-lg font-semibold text-waterbase-950">Water Quality Research</h2>
             </div>
             <p className="text-sm text-waterbase-600">Comprehensive geotemporal analysis with scientific water quality data</p>
+            <Link to={ROUTE.RESEARCH_DEVICES.path}>
+              <Button variant="outline" size="sm" className="mt-3 w-full justify-start">
+                <Eye className="w-4 h-4 mr-2" />
+                View Devices
+              </Button>
+            </Link>
           </div>
 
           <div className="p-4 border-b border-gray-200">
@@ -654,6 +662,11 @@ export const ResearchMap = () => {
                       <div>Temp: {station.latest_telemetry?.temperature_celsius ?? "N/A"} C</div>
                       <div>Updated: {station.last_seen_at ? new Date(station.last_seen_at).toLocaleString() : "Unknown"}</div>
                     </div>
+                    <Link to={ROUTE.RESEARCH_DEVICE_DETAIL.path.replace(':deviceId', String(station.id))}>
+                      <Button size="sm" className="mt-3 w-full">
+                        View Device
+                      </Button>
+                    </Link>
                   </div>
                 </Popup>
               </Marker>
@@ -722,6 +735,12 @@ export const ResearchMap = () => {
                   </div>
                 </div>
                 <div className="text-xs text-gray-600 border-t pt-3">Last Updated: {selectedStation.last_seen_at ? new Date(selectedStation.last_seen_at).toLocaleString() : "Unknown"}</div>
+                <Link to={ROUTE.RESEARCH_DEVICE_DETAIL.path.replace(':deviceId', String(selectedStation.id))}>
+                  <Button className="w-full">
+                    <Eye className="w-4 h-4 mr-2" />
+                    View Device
+                  </Button>
+                </Link>
               </div>
             </div>
           )}

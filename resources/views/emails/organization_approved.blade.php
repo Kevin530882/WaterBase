@@ -2,7 +2,7 @@
 <html>
 <head>
     <meta charset="utf-8">
-    <title>Organization Account Approved</title>
+    <title>Account Approved</title>
 </head>
 <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;">
     <div style="max-width: 600px; margin: 0 auto; padding: 20px;">
@@ -10,7 +10,7 @@
 
         <p>Hello {{ $user->firstName }} {{ $user->lastName }},</p>
 
-        <p>Your organization account for <strong>{{ $user->organization }}</strong> has been <strong>approved</strong>.</p>
+        <p>Your WaterBase account@if($user->organization) for <strong>{{ $user->organization }}</strong>@endif has been <strong>approved</strong>.</p>
 
         <p>You can now log in and use all features available to your account.</p>
 

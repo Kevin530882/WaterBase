@@ -14,14 +14,102 @@ interface QRCodeDialogProps {
     onOpenChange: (open: boolean) => void;
     eventId: number | null;
     eventTitle?: string;
+    eventLocation?: string;
     currentVolunteers?: number;
 }
+
+const wrapCanvasText = (
+    context: CanvasRenderingContext2D,
+    text: string,
+    maxWidth: number,
+) => {
+    const words = text.split(" ");
+    const lines: string[] = [];
+    let currentLine = "";
+
+    words.forEach((word) => {
+        const testLine = currentLine ? `${currentLine} ${word}` : word;
+        if (context.measureText(testLine).width > maxWidth && currentLine) {
+            lines.push(currentLine);
+            currentLine = word;
+        } else {
+            currentLine = testLine;
+        }
+    });
+
+    if (currentLine) {
+        lines.push(currentLine);
+    }
+
+    return lines.slice(0, 2);
+};
+
+const createAttendanceQrImage = async (
+    qrCodeDataUrl: string,
+    eventTitle: string,
+    eventLocation: string,
+) => {
+    const qrImage = new Image();
+    qrImage.src = qrCodeDataUrl;
+
+    await new Promise<void>((resolve, reject) => {
+        qrImage.onload = () => resolve();
+        qrImage.onerror = () => reject(new Error("Failed to load generated QR code"));
+    });
+
+    const canvas = document.createElement("canvas");
+    const context = canvas.getContext("2d");
+
+    if (!context) {
+        throw new Error("Unable to prepare QR image");
+    }
+
+    canvas.width = 420;
+    canvas.height = 560;
+
+    context.fillStyle = "#ffffff";
+    context.fillRect(0, 0, canvas.width, canvas.height);
+
+    context.fillStyle = "#0369a1";
+    context.fillRect(0, 0, canvas.width, 72);
+
+    context.fillStyle = "#ffffff";
+    context.font = "700 18px Arial";
+    context.textAlign = "center";
+    context.fillText("WaterBasePH", canvas.width / 2, 30);
+    context.font = "600 13px Arial";
+    context.fillText("QR Attendance", canvas.width / 2, 52);
+
+    context.fillStyle = "#0f172a";
+    context.font = "700 21px Arial";
+    wrapCanvasText(context, eventTitle, 340).forEach((line, index) => {
+        context.fillText(line, canvas.width / 2, 112 + index * 26);
+    });
+
+    context.fillStyle = "#475569";
+    context.font = "500 14px Arial";
+    wrapCanvasText(context, eventLocation, 340).forEach((line, index) => {
+        context.fillText(line, canvas.width / 2, 166 + index * 20);
+    });
+
+    context.drawImage(qrImage, 70, 210, 280, 280);
+
+    context.fillStyle = "#0369a1";
+    context.font = "700 13px Arial";
+    context.fillText("SCAN TO CHECK IN", canvas.width / 2, 520);
+    context.fillStyle = "#64748b";
+    context.font = "500 11px Arial";
+    context.fillText("Joined volunteers only", canvas.width / 2, 540);
+
+    return canvas.toDataURL("image/png");
+};
 
 export const QRCodeDialog = ({
     open,
     onOpenChange,
     eventId,
     eventTitle = "Cleanup Event",
+    eventLocation = "Cleanup location",
     currentVolunteers = 0,
 }: QRCodeDialogProps) => {
     const [qrDataUrl, setQrDataUrl] = useState<string>("");
@@ -37,7 +125,7 @@ export const QRCodeDialog = ({
             try {
                 console.log("Generating QR code for event:", eventId);
                 const QRCode = await import("qrcode");
-                const dataUrl = await QRCode.toDataURL(
+                const rawQrDataUrl = await QRCode.toDataURL(
                     `waterbase://event/${eventId}/attend`,
                     {
                         width: 300,
@@ -48,6 +136,7 @@ export const QRCodeDialog = ({
                         },
                     }
                 );
+                const dataUrl = await createAttendanceQrImage(rawQrDataUrl, eventTitle, eventLocation);
                 if (!cancelled) {
                     console.log("QR code generated successfully");
                     setQrDataUrl(dataUrl);
@@ -65,7 +154,7 @@ export const QRCodeDialog = ({
         return () => {
             cancelled = true;
         };
-    }, [open, eventId]);
+    }, [open, eventId, eventTitle, eventLocation]);
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
@@ -94,11 +183,11 @@ export const QRCodeDialog = ({
                             </Button>
                         </div>
                     ) : qrDataUrl ? (
-                        <div className="bg-white p-4 rounded-xl border-2 border-waterbase-200 shadow-sm">
+                        <div className="bg-white p-3 rounded-xl border-2 border-waterbase-200 shadow-sm">
                             <img
                                 src={qrDataUrl}
                                 alt="Event QR Code"
-                                className="w-64 h-64"
+                                className="w-72 max-w-full rounded-lg"
                             />
                         </div>
                     ) : (
@@ -110,7 +199,7 @@ export const QRCodeDialog = ({
                     <div className="flex items-center gap-2 text-sm text-waterbase-700 bg-waterbase-50 px-4 py-2 rounded-lg">
                         <Users className="w-4 h-4" />
                         <span>
-                            {currentVolunteers} volunteer{currentVolunteers !== 1 ? "s" : ""} checked in
+                            {currentVolunteers} volunteer{currentVolunteers !== 1 ? "s" : ""} joined
                         </span>
                     </div>
 

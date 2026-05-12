@@ -41,11 +41,17 @@ class UserController extends Controller
                 'phoneNumber' => 'required|string|max:15',
                 'role' => 'required|string|in:user,admin,ngo,lgu,researcher,volunteer',
                 'organization' => 'nullable|string|max:255',
-                'organization_proof_document' => 'nullable|file|mimes:pdf,jpg,jpeg,png|max:10240',
+                'registration_documents' => 'nullable|array',
+                'registration_documents.*' => 'file|mimes:pdf,jpg,jpeg,png|max:10240',
                 'areaOfResponsibility' => 'nullable|string|max:255',
+            ], [
+                'registration_documents.*.mimes' => 'Invalid file format. Upload a PDF, JPG, JPEG, or PNG file.',
+                'registration_documents.*.max' => 'File is too large. Maximum allowed size is 10MB.',
             ]);
 
             $isOrganizationRole = in_array($validated['role'], User::ORGANIZATION_ROLES, true);
+            $requiresApproval = in_array($validated['role'], User::VERIFICATION_ROLES, true);
+            $requiredDocuments = $this->registrationDocumentRequirements($validated['role']);
 
             if ($isOrganizationRole && empty(trim((string) ($validated['organization'] ?? '')))) {
                 return response()->json([
@@ -56,19 +62,35 @@ class UserController extends Controller
                 ], 422);
             }
 
-            if ($isOrganizationRole && !$request->hasFile('organization_proof_document')) {
+            foreach ($requiredDocuments as $documentKey => $documentName) {
+                if (!$request->hasFile("registration_documents.$documentKey")) {
+                    return response()->json([
+                        'message' => 'Validation failed',
+                        'errors' => [
+                            "registration_documents.$documentKey" => ["{$documentName} is required."],
+                        ],
+                    ], 422);
+                }
+            }
+
+            if ($requiresApproval && count($requiredDocuments) < 3) {
                 return response()->json([
                     'message' => 'Validation failed',
                     'errors' => [
-                        'organization_proof_document' => ['Proof of legitimacy document is required for organization accounts.'],
+                        'registration_documents' => ['At least 3 verification documents are required for this role.'],
                     ],
                 ], 422);
             }
 
-            $organizationProofPath = null;
-            if ($request->hasFile('organization_proof_document')) {
-                $organizationProofPath = $request->file('organization_proof_document')
-                    ->store('organization_proofs', 'public');
+            $registrationDocumentPaths = [];
+            foreach ($requiredDocuments as $documentKey => $documentName) {
+                $path = $request->file("registration_documents.$documentKey")
+                    ->store("registration_documents/{$validated['role']}", 'public');
+
+                $registrationDocumentPaths[$documentKey] = [
+                    'name' => $documentName,
+                    'path' => '/storage/' . $path,
+                ];
             }
 
             $user = User::create([
@@ -78,9 +100,9 @@ class UserController extends Controller
                 'password' => Hash::make($validated['password']),
                 'phoneNumber' => $validated['phoneNumber'],
                 'role' => $validated['role'],
-                'approval_status' => $isOrganizationRole ? User::STATUS_PENDING : User::STATUS_APPROVED,
+                'approval_status' => $requiresApproval ? User::STATUS_PENDING : User::STATUS_APPROVED,
                 'organization' => $validated['organization'] ?? null,
-                'organization_proof_document' => $organizationProofPath ? '/storage/' . $organizationProofPath : null,
+                'organization_proof_document' => !empty($registrationDocumentPaths) ? json_encode($registrationDocumentPaths) : null,
                 'areaOfResponsibility' => $validated['areaOfResponsibility'] ?? null,
             ]);
 
@@ -111,7 +133,7 @@ class UserController extends Controller
             }
 
             // Notify organization email that registration is pending approval
-            if ($isOrganizationRole) {
+            if ($requiresApproval) {
                 try {
                     Mail::to($user->email)->queue(new OrganizationPendingApproval($user));
                 } catch (\Throwable $e) {
@@ -163,10 +185,10 @@ class UserController extends Controller
             ], 403);
         }
 
-        if ($user->isOrganization() && $user->approval_status !== User::STATUS_APPROVED) {
+        if ($user->requiresApproval() && $user->approval_status !== User::STATUS_APPROVED) {
             $statusLabel = $user->approval_status === User::STATUS_REJECTED ? 'rejected' : 'pending';
             return response()->json([
-                'message' => 'Your organization account is under review. Please wait for admin approval before logging in.',
+                'message' => 'Your account is under review. Please wait for admin approval before logging in.',
                 'approval_status' => $statusLabel,
             ], 403);
         }
@@ -363,6 +385,28 @@ class UserController extends Controller
     private function isProfileComplete(User $user): bool
     {
         return !empty(trim((string) $user->phoneNumber));
+    }
+
+    private function registrationDocumentRequirements(string $role): array
+    {
+        return match (strtolower($role)) {
+            'ngo' => [
+                'sec_certificate' => 'SEC Certificate of Registration / Incorporation',
+                'articles_bylaws' => 'Articles of Incorporation and By-Laws',
+                'representative_authorization' => 'Authorization letter, valid organization ID, or board resolution naming the representative',
+            ],
+            'lgu' => [
+                'representative_id' => 'Official LGU employee ID or government ID of the representative',
+                'designation_letter' => 'Authorization letter, office order, or designation letter from the LGU',
+                'endorsement_letter' => 'Official request letter or endorsement letter using LGU letterhead',
+            ],
+            'researcher' => [
+                'institution_id' => 'Valid school ID, institutional ID, or employee ID',
+                'endorsement_letter' => 'Endorsement letter from adviser, department, institution, or research office',
+                'research_proof' => 'Approved research proposal, ethics clearance, or proof of research affiliation',
+            ],
+            default => [],
+        };
     }
 
     private function findOrCreateGoogleVolunteer(?string $email, ?string $googleId, ?string $name, ?string $avatar): User

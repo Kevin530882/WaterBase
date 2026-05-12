@@ -39,12 +39,14 @@ import {
     AlertTriangle,
     Filter,
     Zap,
+    RadioTower,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
 
 interface AreaReport {
     id: number;
+    source?: 'report' | 'sensor';
     location: string;
     coordinates: { lat: number; lng: number };
     reportCount: number;
@@ -54,6 +56,30 @@ interface AreaReport {
     estimatedCleanupEffort: string;
     priority: string;
     reports: Report[];
+    sensor?: SensorEventRecommendation;
+}
+
+interface Report {
+    id: number;
+}
+
+interface SensorEventRecommendation {
+    source: 'sensor';
+    device_id: number;
+    station_id: string | null;
+    name: string | null;
+    latitude: number;
+    longitude: number;
+    wbsi_score: number;
+    severity_label: string;
+    latest_telemetry: {
+        recorded_at?: string | null;
+        ph?: number | null;
+        turbidity_ntu?: number | null;
+        tds_mg_l?: number | null;
+        temperature_celsius?: number | null;
+    } | null;
+    last_seen_at: string | null;
 }
 
 // Event creation presets for faster event setup
@@ -81,13 +107,38 @@ const EVENT_PRESETS = {
     },
 };
 
+const getTodayDateInput = () => {
+    const today = new Date();
+    const year = today.getFullYear();
+    const month = String(today.getMonth() + 1).padStart(2, "0");
+    const day = String(today.getDate()).padStart(2, "0");
+
+    return `${year}-${month}-${day}`;
+};
+
+const getCurrentTimeInput = () => {
+    const now = new Date();
+    const hours = String(now.getHours()).padStart(2, "0");
+    const minutes = String(now.getMinutes()).padStart(2, "0");
+
+    return `${hours}:${minutes}`;
+};
+
+const isPastEventTime = (date: string, time: string) => {
+    if (!date || !time) return false;
+
+    return new Date(`${date}T${time}`) <= new Date();
+};
+
 export const SufficientReportsTab = ({
     eligibleAreas,
+    sensorRecommendation,
     isLoading = false,
     onSelectArea,
     onRefresh,
 }: {
     eligibleAreas: any[];
+    sensorRecommendation?: AreaReport | null;
     isLoading?: boolean;
     onSelectArea: (area: any) => void;
     onRefresh: () => void;
@@ -116,6 +167,7 @@ export const SufficientReportsTab = ({
                 return "bg-red-500 text-white";
             case "high":
                 return "bg-orange-500 text-white";
+            case "moderate":
             case "medium":
                 return "bg-yellow-500 text-black";
             case "low":
@@ -136,12 +188,55 @@ export const SufficientReportsTab = ({
         }));
     };
 
-    const generateDefaultTitle = () => {
-        if (!selectedArea) return "";
-        const severity = selectedArea.severityLevel.toLowerCase();
+    const generateDefaultTitleForArea = (area: AreaReport) => {
+        if (area.source === 'sensor') {
+            return `Sensor Cleanup Assessment: ${area.location}`;
+        }
+
+        const severity = area.severityLevel.toLowerCase();
         const isCritical = severity === "critical" || severity === "high";
         const prefix = isCritical ? "Urgent Cleanup:" : "Cleanup Event:";
-        return `${prefix} ${selectedArea.location}`;
+        return `${prefix} ${area.location}`;
+    };
+
+    const generateDefaultTitle = () => {
+        if (!selectedArea) return "";
+        return generateDefaultTitleForArea(selectedArea);
+    };
+
+    const generateDefaultDescription = (area: AreaReport) => {
+        if (area.source !== 'sensor' || !area.sensor) {
+            return `Cleanup event for ${area.location}`;
+        }
+
+        const telemetry = area.sensor.latest_telemetry;
+        const readings = [
+            telemetry?.ph !== null && telemetry?.ph !== undefined ? `pH ${Number(telemetry.ph).toFixed(2)}` : null,
+            telemetry?.turbidity_ntu !== null && telemetry?.turbidity_ntu !== undefined ? `turbidity ${Number(telemetry.turbidity_ntu).toFixed(1)} NTU` : null,
+            telemetry?.tds_mg_l !== null && telemetry?.tds_mg_l !== undefined ? `TDS ${Number(telemetry.tds_mg_l).toFixed(0)} mg/L` : null,
+            telemetry?.temperature_celsius !== null && telemetry?.temperature_celsius !== undefined ? `temperature ${Number(telemetry.temperature_celsius).toFixed(1)} C` : null,
+        ].filter(Boolean).join(', ');
+
+        return `Recommended from sensor station ${area.sensor.station_id || area.location}. Latest WBSI: ${Math.round(area.sensor.wbsi_score)}% (${area.sensor.severity_label}).${readings ? ` Latest readings: ${readings}.` : ''}`;
+    };
+
+    const openCreateEvent = (area: AreaReport) => {
+        setSelectedArea(area);
+        setNewEvent(prev => ({
+            ...prev,
+            title: generateDefaultTitleForArea(area),
+            description: generateDefaultDescription(area),
+        }));
+        setShowCreateEvent(true);
+    };
+
+    const isUrgentArea = (area: AreaReport) => {
+        if (area.source === 'sensor') {
+            return (area.sensor?.wbsi_score ?? 0) >= 75;
+        }
+
+        const severity = area.severityLevel.toLowerCase();
+        return severity === "critical" || severity === "high";
     };
 
     const handleCreateEvent = async () => {
@@ -153,6 +248,10 @@ export const SufficientReportsTab = ({
         }
         if (!newEvent.date || !newEvent.time) {
             setEventError("Date and time are required");
+            return;
+        }
+        if (isPastEventTime(newEvent.date, newEvent.time)) {
+            setEventError("Event time must be later than the current time.");
             return;
         }
         if (!newEvent.maxVolunteers || parseInt(newEvent.maxVolunteers) < 1) {
@@ -172,7 +271,7 @@ export const SufficientReportsTab = ({
                 date: newEvent.date,
                 time: newEvent.time,
                 duration: newEvent.duration,
-                description: newEvent.description || `Cleanup event for ${selectedArea.location}`,
+                description: newEvent.description || generateDefaultDescription(selectedArea),
                 maxVolunteers: parseInt(newEvent.maxVolunteers),
                 points: parseInt(newEvent.rewardPoints) || 50,
                 badge: newEvent.rewardBadge || "Environmental Volunteer",
@@ -228,17 +327,14 @@ export const SufficientReportsTab = ({
     };
 
     const filteredAreas = useMemo(() => {
-        let areas = eligibleAreas;
+        let areas = sensorRecommendation ? [sensorRecommendation, ...eligibleAreas] : eligibleAreas;
 
         if (showUrgentOnly) {
-            areas = areas.filter(area =>
-                area.severityLevel.toLowerCase() === 'high' ||
-                area.severityLevel.toLowerCase() === 'critical'
-            );
+            areas = areas.filter(area => isUrgentArea(area));
         }
 
         return areas;
-    }, [eligibleAreas, showUrgentOnly]);
+    }, [eligibleAreas, sensorRecommendation, showUrgentOnly]);
 
     if (isLoading) {
         return (
@@ -321,16 +417,25 @@ export const SufficientReportsTab = ({
             ) : (
                 <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
                     {filteredAreas.map((area) => {
+                        const isSensor = area.source === 'sensor';
+                        const isUrgent = isUrgentArea(area);
+                        const telemetry = area.sensor?.latest_telemetry;
+
                         return (
                             <Card key={area.id} className={cn(
                                 "border-waterbase-200 hover:shadow-lg transition-shadow",
-                                (area.severityLevel.toLowerCase() === 'critical' ||
-                                    area.severityLevel.toLowerCase() === 'high') &&
-                                showUrgentOnly && "ring-2 ring-red-200"
+                                isSensor && "border-waterbase-400 bg-waterbase-50/40",
+                                isUrgent && showUrgentOnly && "ring-2 ring-red-200"
                             )}>
                                 <CardHeader>
                                     <div className="flex items-start justify-between gap-3">
                                         <div className="flex-1 min-w-0">
+                                            {isSensor && (
+                                                <Badge variant="outline" className="mb-2 bg-white text-waterbase-700 border-waterbase-300">
+                                                    <RadioTower className="w-3 h-3 mr-1" />
+                                                    Sensor-driven
+                                                </Badge>
+                                            )}
                                             <CardTitle className="text-base sm:text-lg text-waterbase-950 break-words">
                                                 {area.location}
                                             </CardTitle>
@@ -347,44 +452,96 @@ export const SufficientReportsTab = ({
                                             >
                                                 {area.severityLevel}
                                             </Badge>
-                                            {(area.severityLevel.toLowerCase() === 'critical' ||
-                                                area.severityLevel.toLowerCase() === 'high') && (
+                                            {isUrgent && (
                                                     <Badge variant="destructive" className="text-xs px-2 py-1 h-auto">
                                                         <AlertTriangle className="w-3 h-3 mr-1" />
                                                         Urgent
                                                     </Badge>
-                                                )}
+                                            )}
                                         </div>
                                     </div>
                                 </CardHeader>
 
                                 <CardContent className="space-y-4">
-                                    <div className="grid grid-cols-2 gap-4 text-sm">
-                                        <div>
-                                            <span className="text-gray-600">Reports:</span>
-                                            <div className="font-semibold text-waterbase-950">
-                                                {area.reportCount} verified
+                                    {isSensor ? (
+                                        <div className="grid grid-cols-2 gap-4 text-sm">
+                                            <div>
+                                                <span className="text-gray-600">WBSI:</span>
+                                                <div className="font-semibold text-waterbase-950">
+                                                    {Math.round(area.sensor?.wbsi_score ?? 0)}%
+                                                </div>
+                                            </div>
+                                            <div>
+                                                <span className="text-gray-600">Station:</span>
+                                                <div className="font-semibold text-waterbase-950 break-words">
+                                                    {area.sensor?.station_id || `Device ${area.sensor?.device_id}`}
+                                                </div>
+                                            </div>
+                                            <div>
+                                                <span className="text-gray-600">Last Update:</span>
+                                                <div className="font-semibold text-waterbase-950">
+                                                    {area.lastReported}
+                                                </div>
+                                            </div>
+                                            <div>
+                                                <span className="text-gray-600">Priority:</span>
+                                                <div className="font-semibold capitalize text-waterbase-950">
+                                                    {area.priority}
+                                                </div>
+                                            </div>
+                                            <div>
+                                                <span className="text-gray-600">pH:</span>
+                                                <div className="font-semibold text-waterbase-950">
+                                                    {telemetry?.ph !== null && telemetry?.ph !== undefined ? Number(telemetry.ph).toFixed(2) : 'N/A'}
+                                                </div>
+                                            </div>
+                                            <div>
+                                                <span className="text-gray-600">Turbidity:</span>
+                                                <div className="font-semibold text-waterbase-950">
+                                                    {telemetry?.turbidity_ntu !== null && telemetry?.turbidity_ntu !== undefined ? `${Number(telemetry.turbidity_ntu).toFixed(1)} NTU` : 'N/A'}
+                                                </div>
+                                            </div>
+                                            <div>
+                                                <span className="text-gray-600">TDS:</span>
+                                                <div className="font-semibold text-waterbase-950">
+                                                    {telemetry?.tds_mg_l !== null && telemetry?.tds_mg_l !== undefined ? `${Number(telemetry.tds_mg_l).toFixed(0)} mg/L` : 'N/A'}
+                                                </div>
+                                            </div>
+                                            <div>
+                                                <span className="text-gray-600">Temp:</span>
+                                                <div className="font-semibold text-waterbase-950">
+                                                    {telemetry?.temperature_celsius !== null && telemetry?.temperature_celsius !== undefined ? `${Number(telemetry.temperature_celsius).toFixed(1)} C` : 'N/A'}
+                                                </div>
                                             </div>
                                         </div>
-                                        <div>
-                                            <span className="text-gray-600">Effort:</span>
-                                            <div className="font-semibold text-waterbase-950">
-                                                {area.estimatedCleanupEffort}
+                                    ) : (
+                                        <div className="grid grid-cols-2 gap-4 text-sm">
+                                            <div>
+                                                <span className="text-gray-600">Reports:</span>
+                                                <div className="font-semibold text-waterbase-950">
+                                                    {area.reportCount} verified
+                                                </div>
+                                            </div>
+                                            <div>
+                                                <span className="text-gray-600">Effort:</span>
+                                                <div className="font-semibold text-waterbase-950">
+                                                    {area.estimatedCleanupEffort}
+                                                </div>
+                                            </div>
+                                            <div>
+                                                <span className="text-gray-600">Last Report:</span>
+                                                <div className="font-semibold text-waterbase-950">
+                                                    {area.lastReported}
+                                                </div>
+                                            </div>
+                                            <div>
+                                                <span className="text-gray-600">Priority:</span>
+                                                <div className="font-semibold capitalize text-waterbase-950">
+                                                    {area.priority}
+                                                </div>
                                             </div>
                                         </div>
-                                        <div>
-                                            <span className="text-gray-600">Last Report:</span>
-                                            <div className="font-semibold text-waterbase-950">
-                                                {area.lastReported}
-                                            </div>
-                                        </div>
-                                        <div>
-                                            <span className="text-gray-600">Priority:</span>
-                                            <div className="font-semibold capitalize text-waterbase-950">
-                                                {area.priority}
-                                            </div>
-                                        </div>
-                                    </div>
+                                    )}
 
                                     {/* Action Buttons */}
                                     <div className="space-y-2">
@@ -403,21 +560,20 @@ export const SufficientReportsTab = ({
                                                 <Button
                                                     className={cn(
                                                         "w-full",
-                                                        (area.severityLevel.toLowerCase() === 'critical' ||
-                                                            area.severityLevel.toLowerCase() === 'high')
+                                                        isUrgent
                                                             ? "bg-red-500 hover:bg-red-600 text-white"
                                                             : "bg-waterbase-500 hover:bg-waterbase-600"
                                                     )}
                                                     onClick={() => {
-                                                        setSelectedArea(area);
-                                                        setShowCreateEvent(true);
+                                                        openCreateEvent(area);
                                                     }}
                                                 >
                                                     <Plus className="w-4 h-4 mr-2" />
-                                                    {(area.severityLevel.toLowerCase() === 'critical' ||
-                                                        area.severityLevel.toLowerCase() === 'high')
+                                                    {isUrgent
                                                         ? "Create Urgent Event"
-                                                        : "Create Cleanup Event"
+                                                        : isSensor
+                                                            ? "Create Sensor Event"
+                                                            : "Create Cleanup Event"
                                                     }
                                                 </Button>
                                             </DialogTrigger>
@@ -430,13 +586,6 @@ export const SufficientReportsTab = ({
                                                         Set up a new cleanup event for {selectedArea?.location}
                                                     </DialogDescription>
                                                 </DialogHeader>
-
-                                                {eventError && (
-                                                    <Alert variant="destructive">
-                                                        <AlertCircle className="h-4 w-4" />
-                                                        <AlertDescription>{eventError}</AlertDescription>
-                                                    </Alert>
-                                                )}
 
                                                 {/* Event Presets for quick setup */}
                                                 <div className="space-y-2">
@@ -491,6 +640,7 @@ export const SufficientReportsTab = ({
                                                                 id="date"
                                                                 type="date"
                                                                 value={newEvent.date}
+                                                                min={getTodayDateInput()}
                                                                 onChange={(e) => setNewEvent({ ...newEvent, date: e.target.value })}
                                                             />
                                                         </div>
@@ -500,6 +650,7 @@ export const SufficientReportsTab = ({
                                                                 id="time"
                                                                 type="time"
                                                                 value={newEvent.time}
+                                                                min={newEvent.date === getTodayDateInput() ? getCurrentTimeInput() : undefined}
                                                                 onChange={(e) => setNewEvent({ ...newEvent, time: e.target.value })}
                                                             />
                                                         </div>
@@ -581,6 +732,13 @@ export const SufficientReportsTab = ({
                                                     </div>
 
                                                     {/* Action Buttons */}
+                                                    {eventError && (
+                                                        <Alert variant="destructive">
+                                                            <AlertCircle className="h-4 w-4" />
+                                                            <AlertDescription>{eventError}</AlertDescription>
+                                                        </Alert>
+                                                    )}
+
                                                     <div className="flex justify-end space-x-2 pt-4">
                                                         <Button
                                                             variant="outline"
@@ -620,9 +778,10 @@ export const SufficientReportsTab = ({
                                             variant="outline"
                                             className="w-full"
                                             onClick={() => onSelectArea(area)}
+                                            disabled={isSensor}
                                         >
                                             <Eye className="w-4 h-4 mr-2" />
-                                            View Details ({area.reports?.length || 0} reports)
+                                            {isSensor ? "Sensor details shown" : `View Details (${area.reports?.length || 0} reports)`}
                                         </Button>
                                     </div>
                                 </CardContent>

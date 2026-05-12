@@ -29,6 +29,7 @@ import {
   Trash2,
   MapPin,
   Wrench,
+  FileSpreadsheet,
 } from 'lucide-react';
 import DeviceService, { Device } from '@/services/deviceService';
 import { ROUTE } from '@/constants';
@@ -276,6 +277,10 @@ export const AdminDevices = () => {
           </div>
 
           <div className="flex gap-2">
+            <Button variant="outline" onClick={() => navigate(ROUTE.ADMIN_TELEMETRY.path)} className="gap-2">
+              <FileSpreadsheet className="w-4 h-4" />
+              All Telemetry
+            </Button>
             <Button variant="outline" onClick={() => navigate(ROUTE.ADMIN_DEVICE_MAINTENANCE.path)} className="gap-2">
               <Wrench className="w-4 h-4" />
               Maintenance Hub

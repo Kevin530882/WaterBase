@@ -28,7 +28,7 @@ class OrganizationRejected extends Mailable
      */
     public function build()
     {
-        return $this->subject('Your organization account has been rejected')
+        return $this->subject('Your WaterBase account has been rejected')
             ->view('emails.organization_rejected')
             ->with([
                 'user' => $this->user,

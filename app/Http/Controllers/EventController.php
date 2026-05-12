@@ -12,14 +12,18 @@ use Illuminate\Validation\Rules\Enum;
 use App\Enums\EventStatus;
 use App\Services\BadgeEvaluationService;
 use App\Services\NotificationService;
+use Carbon\Carbon;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
+use Illuminate\Validation\ValidationException;
 
 class EventController extends Controller
 {
+    private const EVENT_TIMEZONE = 'Asia/Manila';
+
     public function __construct(
         private readonly NotificationService $notificationService,
         private readonly BadgeEvaluationService $badgeEvaluationService,
@@ -61,6 +65,15 @@ class EventController extends Controller
             'status' => ['sometimes', new Enum(EventStatus::class)],
             'user_id' => 'required|integer|exists:users,id',
         ]);
+
+        $eventDate = Carbon::parse($validated['date'])->toDateString();
+        $eventDateTime = Carbon::createFromFormat('Y-m-d H:i', "{$eventDate} {$validated['time']}", self::EVENT_TIMEZONE);
+
+        if ($eventDateTime->lessThanOrEqualTo(now(self::EVENT_TIMEZONE))) {
+            throw ValidationException::withMessages([
+                'time' => ['Event time must be later than the current time.'],
+            ]);
+        }
 
         // Set default status if not provided
         if (!isset($validated['status'])) {
@@ -491,6 +504,13 @@ class EventController extends Controller
                 return response()->json(['message' => 'Unauthorized - Please log in to check in'], 401);
             }
 
+            if ($user->role !== 'volunteer') {
+                return response()->json([
+                    'message' => 'Check-in not allowed',
+                    'details' => 'Only volunteers can check in for cleanup events'
+                ], 403);
+            }
+
             if (!in_array($event->status, ['recruiting', 'active'])) {
                 return response()->json([
                     'message' => 'Check-in not available',
@@ -498,38 +518,17 @@ class EventController extends Controller
                 ], 400);
             }
 
-            // Auto-join if not already joined
             if (!$event->attendees()->where('user_id', $user->id)->exists()) {
-                if ($event->status !== 'recruiting') {
-                    return response()->json([
-                        'message' => 'Cannot join this event',
-                        'details' => 'You must have joined during the recruiting phase (before the event started) to check in now'
-                    ], 400);
-                }
-
-                $currentVolunteers = $event->attendees()->count();
-                if ($currentVolunteers >= $event->maxVolunteers) {
-                    return response()->json([
-                        'message' => 'Event is full',
-                        'details' => "This event has reached its maximum capacity of {$event->maxVolunteers} volunteers"
-                    ], 400);
-                }
-
-                $event->attendees()->attach($user->id, [
-                    'joined_at' => now(),
-                    'is_present' => true,
-                    'qr_scanned_at' => now(),
-                ]);
-
-                $event->currentVolunteers = $currentVolunteers + 1;
-                $event->save();
-            } else {
-                // Update pivot to mark present
-                $event->attendees()->updateExistingPivot($user->id, [
-                    'is_present' => true,
-                    'qr_scanned_at' => now(),
-                ]);
+                return response()->json([
+                    'message' => 'Join required',
+                    'details' => 'You must join this event before scanning the attendance QR code.'
+                ], 403);
             }
+
+            $event->attendees()->updateExistingPivot($user->id, [
+                'is_present' => true,
+                'qr_scanned_at' => now(),
+            ]);
 
             Log::info('QR scan attendance recorded', [
                 'event_id' => $event->id,

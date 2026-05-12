@@ -36,6 +36,11 @@ interface PendingOrganization {
     created_at: string;
 }
 
+interface RegistrationProofDocument {
+    name: string;
+    path: string;
+}
+
 export const AdminOrganizations = () => {
     const { token } = useAuth();
     const [pendingOrgs, setPendingOrgs] = useState<PendingOrganization[]>([]);
@@ -124,6 +129,24 @@ export const AdminOrganizations = () => {
         window.open(url, "_blank");
     };
 
+    const getProofDocuments = (proof: string | null): RegistrationProofDocument[] => {
+        if (!proof) return [];
+
+        try {
+            const parsed = JSON.parse(proof);
+            if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+                return Object.values(parsed)
+                    .filter((item): item is RegistrationProofDocument => {
+                        return !!item && typeof item === "object" && "path" in item && "name" in item;
+                    });
+            }
+        } catch {
+            return [{ name: "Proof document", path: proof }];
+        }
+
+        return [];
+    };
+
     return (
         <div className="min-h-screen bg-gradient-to-br from-waterbase-50 to-enviro-50">
             <Navigation />
@@ -192,15 +215,21 @@ export const AdminOrganizations = () => {
                                                 <TableCell>{org.organization}</TableCell>
                                                 <TableCell>{org.areaOfResponsibility}</TableCell>
                                                 <TableCell>
-                                                    {org.organization_proof_document ? (
-                                                        <Button
-                                                            variant="ghost"
-                                                            size="sm"
-                                                            onClick={() => openProofDocument(org.organization_proof_document)}
-                                                        >
-                                                            <ExternalLink className="w-4 h-4 mr-1" />
-                                                            View
-                                                        </Button>
+                                                    {getProofDocuments(org.organization_proof_document).length > 0 ? (
+                                                        <div className="flex flex-col gap-1">
+                                                            {getProofDocuments(org.organization_proof_document).map((document, index) => (
+                                                                <Button
+                                                                    key={`${document.path}-${index}`}
+                                                                    variant="ghost"
+                                                                    size="sm"
+                                                                    className="justify-start"
+                                                                    onClick={() => openProofDocument(document.path)}
+                                                                >
+                                                                    <ExternalLink className="w-4 h-4 mr-1" />
+                                                                    <span className="max-w-[180px] truncate">{document.name}</span>
+                                                                </Button>
+                                                            ))}
+                                                        </div>
                                                     ) : (
                                                         <span className="text-gray-400 text-sm">None</span>
                                                     )}

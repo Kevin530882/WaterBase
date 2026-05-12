@@ -18,7 +18,7 @@ import {
 } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
 import Navigation from "@/components/Navigation";
-import { User, Mail, Lock, Phone, MapPin, AlertCircle, UserPlus, Loader2 } from "lucide-react";
+import { User, Mail, Lock, Phone, AlertCircle, UserPlus, Loader2, FileText, Eye, Upload } from "lucide-react";
 import { Link, useNavigate } from "react-router-dom";
 import {
     Dialog,
@@ -31,9 +31,92 @@ import {
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { SearchableSelect } from "@/components/pagecomponents/searchable-select";
 
+const MAX_DOCUMENT_SIZE_BYTES = 10 * 1024 * 1024;
+const ACCEPTED_DOCUMENT_TYPES = ["application/pdf", "image/jpeg", "image/jpg", "image/png"];
+const ACCEPTED_DOCUMENT_EXTENSIONS = [".pdf", ".jpg", ".jpeg", ".png"];
+const DOCUMENT_TEMPLATE_PLACEHOLDER = "/document-templates/registration-placeholder.svg";
+const DOCUMENT_TEMPLATE_PATHS = {
+    ngo: {
+        sec_certificate: "/storage/document-templates/ngo/NGO Certificate of Incorporation.png",
+        articles_bylaws: "/storage/document-templates/ngo/NGO SEC Business Registration.jpg",
+        representative_authorization: "/storage/document-templates/ngo/NGO Authorization Letter.png",
+    },
+    lgu: {
+        representative_id: "/storage/document-templates/lgu/LGU Official ID.jpg",
+        designation_letter: "/storage/document-templates/lgu/LGU Authorization Letter.png",
+        endorsement_letter: "/storage/document-templates/lgu/LGU Endorsement Letter.png",
+    },
+    researcher: {
+        institution_id: "/storage/document-templates/researcher/Researcher School ID.jpg",
+        endorsement_letter: "/storage/document-templates/researcher/Researcher Authorization Letter.png",
+        research_proof: "/storage/document-templates/researcher/Researcher Ethics Clearance.png",
+    },
+} as const;
+
+const ROLE_DOCUMENTS = {
+    ngo: [
+        {
+            key: "sec_certificate",
+            name: "SEC Certificate of Registration / Incorporation",
+            description: "Proves the NGO is legally registered with the SEC.",
+        },
+        {
+            key: "articles_bylaws",
+            name: "Articles of Incorporation and By-Laws",
+            description: "Shows the organization's purpose, structure, and operating rules.",
+        },
+        {
+            key: "representative_authorization",
+            name: "Representative Authorization",
+            description: "Confirms the registrant is authorized to represent the organization.",
+        },
+    ],
+    lgu: [
+        {
+            key: "representative_id",
+            name: "Official LGU Employee ID or Government ID",
+            description: "Verifies the representative's identity and LGU affiliation.",
+        },
+        {
+            key: "designation_letter",
+            name: "Authorization, Office Order, or Designation Letter",
+            description: "Confirms the LGU assigned the representative to register.",
+        },
+        {
+            key: "endorsement_letter",
+            name: "Official Request or Endorsement Letter",
+            description: "Shows official LGU intent using LGU letterhead.",
+        },
+    ],
+    researcher: [
+        {
+            key: "institution_id",
+            name: "Valid School, Institutional, or Employee ID",
+            description: "Verifies the researcher's institutional identity.",
+        },
+        {
+            key: "endorsement_letter",
+            name: "Endorsement Letter",
+            description: "Confirms support from an adviser, department, institution, or research office.",
+        },
+        {
+            key: "research_proof",
+            name: "Research Proposal, Ethics Clearance, or Affiliation Proof",
+            description: "Shows the research purpose or formal research affiliation.",
+        },
+    ],
+} as const;
+
+type VerificationRole = keyof typeof ROLE_DOCUMENTS;
+type RegistrationDocument = typeof ROLE_DOCUMENTS[VerificationRole][number];
+type DocumentFiles = Partial<Record<string, File>>;
+type DocumentErrors = Partial<Record<string, string>>;
+
 export const Register = () => {
     const [organizationOptions, setOrganizationOptions] = useState<string[]>([]);
-    const [organizationProofFile, setOrganizationProofFile] = useState<File | null>(null);
+    const [documentFiles, setDocumentFiles] = useState<DocumentFiles>({});
+    const [documentErrors, setDocumentErrors] = useState<DocumentErrors>({});
+    const [selectedTemplateDocument, setSelectedTemplateDocument] = useState<RegistrationDocument | null>(null);
     const [formData, setFormData] = useState({
         firstName: "",
         lastName: "",
@@ -49,6 +132,64 @@ export const Register = () => {
 
     const shouldShowOrganizationFields = (role: string) => {
         return ['ngo', 'lgu'].includes(role);
+    };
+
+    const getRoleDocuments = (role: string): readonly RegistrationDocument[] => {
+        return ROLE_DOCUMENTS[role as VerificationRole] ?? [];
+    };
+
+    const getTemplatePath = (role: string, documentKey?: string) => {
+        if (!documentKey) return DOCUMENT_TEMPLATE_PLACEHOLDER;
+
+        return DOCUMENT_TEMPLATE_PATHS[role as VerificationRole]?.[documentKey as keyof typeof DOCUMENT_TEMPLATE_PATHS[VerificationRole]]
+            ?? DOCUMENT_TEMPLATE_PLACEHOLDER;
+    };
+
+    const requiresRegistrationDocuments = getRoleDocuments(formData.role).length > 0;
+
+    const validateDocumentFile = (file: File) => {
+        const lowerName = file.name.toLowerCase();
+        const hasValidType = ACCEPTED_DOCUMENT_TYPES.includes(file.type);
+        const hasValidExtension = ACCEPTED_DOCUMENT_EXTENSIONS.some((extension) => lowerName.endsWith(extension));
+
+        if (!hasValidType && !hasValidExtension) {
+            return "Invalid file format. Upload a PDF, JPG, JPEG, or PNG file.";
+        }
+
+        if (file.size > MAX_DOCUMENT_SIZE_BYTES) {
+            return "File is too large. Maximum allowed size is 10MB.";
+        }
+
+        return "";
+    };
+
+    const handleDocumentChange = (documentKey: string, file?: File) => {
+        if (!file) {
+            setDocumentFiles((current) => {
+                const next = { ...current };
+                delete next[documentKey];
+                return next;
+            });
+            return;
+        }
+
+        const validationError = validateDocumentFile(file);
+        setDocumentErrors((current) => ({ ...current, [documentKey]: validationError }));
+
+        if (validationError) {
+            setDocumentFiles((current) => {
+                const next = { ...current };
+                delete next[documentKey];
+                return next;
+            });
+            return;
+        }
+
+        setDocumentFiles((current) => ({ ...current, [documentKey]: file }));
+    };
+
+    const getFilePreviewUrl = (file: File) => {
+        return file.type.startsWith("image/") ? URL.createObjectURL(file) : "";
     };
 
     const [isLoading, setIsLoading] = useState(false);
@@ -115,8 +256,16 @@ export const Register = () => {
                 setError("Area of responsibility is required for your role");
                 return false;
             }
-            if (!organizationProofFile) {
-                setError("Proof of legitimacy document is required for organization accounts");
+        }
+        if (requiresRegistrationDocuments) {
+            const missingDocument = getRoleDocuments(formData.role).find((document) => !documentFiles[document.key]);
+            if (missingDocument) {
+                setError(`${missingDocument.name} is required for ${formData.role.toUpperCase()} registration`);
+                return false;
+            }
+            const invalidDocument = getRoleDocuments(formData.role).find((document) => documentErrors[document.key]);
+            if (invalidDocument) {
+                setError(documentErrors[invalidDocument.key] || "Please fix document upload errors before continuing");
                 return false;
             }
         }
@@ -159,11 +308,14 @@ export const Register = () => {
             if (shouldShowOrganizationFields(formData.role)) {
                 requestBody.append('organization', formData.organization);
                 requestBody.append('areaOfResponsibility', formData.areaOfResponsibility);
-
-                if (organizationProofFile) {
-                    requestBody.append('organization_proof_document', organizationProofFile);
-                }
             }
+
+            getRoleDocuments(formData.role).forEach((document) => {
+                const file = documentFiles[document.key];
+                if (file) {
+                    requestBody.append(`registration_documents[${document.key}]`, file);
+                }
+            });
 
             const response = await fetch('/api/register', {
                 method: 'POST',
@@ -176,8 +328,7 @@ export const Register = () => {
             const data = await response.json();
 
             if (response.ok) {
-                const isOrg = shouldShowOrganizationFields(formData.role);
-                if (isOrg) {
+                if (requiresRegistrationDocuments) {
                     // Show a modal to clearly tell organization users they must wait for approval
                     setShowPendingModal(true);
                 } else {
@@ -198,7 +349,8 @@ export const Register = () => {
                     role: "",
                     agreeToTerms: false,
                 });
-                setOrganizationProofFile(null);
+                setDocumentFiles({});
+                setDocumentErrors({});
             } else {
                 // Handle validation errors from Laravel
                 if (data.errors) {
@@ -320,9 +472,11 @@ export const Register = () => {
                                 <Label htmlFor="role">User Type</Label>
                                 <Select
                                     value={formData.role}
-                                    onValueChange={(value) =>
-                                        setFormData({ ...formData, role: value })
-                                    }
+                                    onValueChange={(value) => {
+                                        setFormData({ ...formData, role: value });
+                                        setDocumentFiles({});
+                                        setDocumentErrors({});
+                                    }}
                                     disabled={isLoading}
                                 >
                                     <SelectTrigger>
@@ -366,19 +520,71 @@ export const Register = () => {
                                 </div>
                             )}
 
-                            {shouldShowOrganizationFields(formData.role) && (
-                                <div>
-                                    <Label htmlFor="organizationProof">Proof of Legitimacy *</Label>
-                                    <Input
-                                        id="organizationProof"
-                                        type="file"
-                                        accept=".pdf,.png,.jpg,.jpeg"
-                                        onChange={(e) => setOrganizationProofFile(e.target.files?.[0] ?? null)}
-                                        disabled={isLoading}
-                                    />
-                                    <p className="text-xs text-gray-500 mt-1">
-                                        Upload SEC registration, government accreditation, or equivalent proof (PDF/JPG/PNG, max 10MB).
-                                    </p>
+                            {requiresRegistrationDocuments && (
+                                <div className="space-y-3">
+                                    <div>
+                                        <Label>Required Documents *</Label>
+                                        <p className="text-xs text-gray-500 mt-1">
+                                            Upload all role-based documents. Accepted formats: PDF, JPG, JPEG, PNG. Max size: 10MB each.
+                                        </p>
+                                    </div>
+                                    {getRoleDocuments(formData.role).map((document) => {
+                                        const file = documentFiles[document.key];
+                                        const previewUrl = file ? getFilePreviewUrl(file) : "";
+
+                                        return (
+                                            <div key={document.key} className="rounded-lg border border-waterbase-100 bg-white p-3 space-y-3">
+                                                <div>
+                                                    <div className="text-sm font-medium text-waterbase-950">{document.name}</div>
+                                                    <p className="text-xs text-gray-500 mt-1">{document.description}</p>
+                                                </div>
+                                                {file && (
+                                                    <div className="flex items-center gap-3 rounded-md bg-waterbase-50 p-2">
+                                                        {previewUrl ? (
+                                                            <img src={previewUrl} alt={`${document.name} preview`} className="h-12 w-12 rounded object-cover border" />
+                                                        ) : (
+                                                            <div className="h-12 w-12 rounded border bg-white flex items-center justify-center">
+                                                                <FileText className="h-6 w-6 text-waterbase-500" />
+                                                            </div>
+                                                        )}
+                                                        <div className="min-w-0 flex-1">
+                                                            <div className="truncate text-sm text-waterbase-900">{file.name}</div>
+                                                            <div className="text-xs text-waterbase-600">{(file.size / (1024 * 1024)).toFixed(2)} MB</div>
+                                                        </div>
+                                                    </div>
+                                                )}
+                                                {documentErrors[document.key] && (
+                                                    <p className="text-xs text-red-600">{documentErrors[document.key]}</p>
+                                                )}
+                                                <div className="flex flex-col sm:flex-row gap-2">
+                                                    <Button type="button" variant="outline" className="flex-1" disabled={isLoading} asChild>
+                                                        <label htmlFor={`document-${document.key}`} className="cursor-pointer">
+                                                            <Upload className="w-4 h-4 mr-2" />
+                                                            {file ? "Replace File" : "Upload File"}
+                                                        </label>
+                                                    </Button>
+                                                    <Input
+                                                        id={`document-${document.key}`}
+                                                        type="file"
+                                                        accept=".pdf,.png,.jpg,.jpeg"
+                                                        className="sr-only"
+                                                        onChange={(e) => handleDocumentChange(document.key, e.target.files?.[0])}
+                                                        disabled={isLoading}
+                                                    />
+                                                    <Button
+                                                        type="button"
+                                                        variant="ghost"
+                                                        className="flex-1"
+                                                        onClick={() => setSelectedTemplateDocument(document)}
+                                                        disabled={isLoading}
+                                                    >
+                                                        <Eye className="w-4 h-4 mr-2" />
+                                                        View Template
+                                                    </Button>
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
                                 </div>
                             )}
 
@@ -478,7 +684,7 @@ export const Register = () => {
                             <Button
                                 type="submit"
                                 className="w-full bg-waterbase-500 hover:bg-waterbase-600"
-                                disabled={!formData.agreeToTerms || isLoading}
+                                disabled={!formData.agreeToTerms || isLoading || (requiresRegistrationDocuments && getRoleDocuments(formData.role).some((document) => !documentFiles[document.key] || documentErrors[document.key]))}
                             >
                                 {isLoading ? (
                                     <>
@@ -507,12 +713,30 @@ export const Register = () => {
                 </Card>
             </div>
 
+            <Dialog open={!!selectedTemplateDocument} onOpenChange={(open) => !open && setSelectedTemplateDocument(null)}>
+                <DialogContent className="sm:max-w-lg">
+                    <DialogHeader>
+                        <DialogTitle>{selectedTemplateDocument?.name}</DialogTitle>
+                        <DialogDescription>
+                            Sample document template for this role and document type.
+                        </DialogDescription>
+                    </DialogHeader>
+                    <div className="rounded-lg border border-dashed border-waterbase-200 bg-waterbase-50 p-4">
+                        <img
+                            src={getTemplatePath(formData.role, selectedTemplateDocument?.key)}
+                            alt={`${selectedTemplateDocument?.name ?? "Registration document"} template`}
+                            className="mx-auto h-64 w-full rounded-md object-contain bg-white"
+                        />
+                    </div>
+                </DialogContent>
+            </Dialog>
+
             <Dialog open={showPendingModal} onOpenChange={(open) => setShowPendingModal(open)}>
                 <DialogContent className="sm:max-w-lg">
                     <DialogHeader>
-                        <DialogTitle>Organization Registration Pending</DialogTitle>
+                        <DialogTitle>Registration Pending Review</DialogTitle>
                         <DialogDescription>
-                            Your organization registration has been received and is pending admin review. We will notify you via email once your organization is approved. You may sign in after approval.
+                            Your registration has been received and is pending admin review. We will notify you via email once your account is approved. You may sign in after approval.
                         </DialogDescription>
                     </DialogHeader>
                     <DialogFooter>

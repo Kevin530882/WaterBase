@@ -9,6 +9,7 @@ export const AdminDeviceDetail = lazy(() => import('./AdminDeviceDetail').then(m
 export const AdminDeviceMaintenance = lazy(() => import('./AdminDeviceMaintenance').then(m => ({ default: m.AdminDeviceMaintenance })));
 export const AdminOrganizations = lazy(() => import('./AdminOrganizations').then(m => ({ default: m.AdminOrganizations })));
 export const AdminReports = lazy(() => import('./AdminReports').then(m => ({ default: m.AdminReports })));
+export const AdminTelemetry = lazy(() => import('./AdminTelemetry').then(m => ({ default: m.AdminTelemetry })));
 export const Community = lazy(() => import('./Community').then(m => ({ default: m.Community })));
 export const Dashboard = lazy(() => import('./Dashboard').then(m => ({ default: m.Dashboard })));
 export const Home = lazy(() => import('./Home').then(m => ({ default: m.Home })));
@@ -26,6 +27,8 @@ export const Profile = lazy(() => import('./Profile').then(m => ({ default: m.Pr
 export const Register = lazy(() => import('./Register').then(m => ({ default: m.Register })));
 export const ReportPollution = lazy(() => import('./ReportPollution').then(m => ({ default: m.ReportPollution })));
 export const ResearcherActivityLog = lazy(() => import('./ResearcherActivityLog').then(m => ({ default: m.ResearcherActivityLog })));
+export const ResearchDeviceDetail = lazy(() => import('./ResearchDeviceDetail').then(m => ({ default: m.ResearchDeviceDetail })));
+export const ResearchDevices = lazy(() => import('./ResearchDevices').then(m => ({ default: m.ResearchDevices })));
 export const ResearchMap = lazy(() => import('./ResearchMap').then(m => ({ default: m.ResearchMap })));
 export const VolunteerActivityLog = lazy(() => import('./VolunteerActivityLog').then(m => ({ default: m.VolunteerActivityLog })));
 export const VolunteerPortal = lazy(() => import('./VolunteerPortal').then(m => ({ default: m.VolunteerPortal })));

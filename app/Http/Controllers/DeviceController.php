@@ -3,6 +3,9 @@
 namespace App\Http\Controllers;
 
 use App\Models\Device;
+use App\Models\DeviceTelemetry;
+use App\Models\Event;
+use App\Models\User;
 use App\Services\DeviceActivityLogService;
 use App\Services\DeviceRegistryService;
 use App\Services\DevicePerformanceService;
@@ -15,6 +18,9 @@ use Illuminate\Validation\Rule;
 
 class DeviceController extends Controller
 {
+    private const SENSOR_EVENT_THRESHOLD = 25.0;
+    private const EVENT_DUPLICATE_RADIUS_KM = 0.1;
+
     public function __construct(
         protected DeviceRegistryService $deviceRegistryService,
         protected MqttBridgeService $mqttBridgeService,
@@ -285,6 +291,70 @@ class DeviceController extends Controller
         }));
     }
 
+    public function sensorEventRecommendation(Request $request)
+    {
+        $user = $request->user();
+
+        if (!$user || !in_array(strtolower((string) $user->role), User::ORGANIZATION_ROLES, true)) {
+            return response()->json(['message' => 'Unauthorized'], 403);
+        }
+
+        if (!$this->hasGeographicBounds($user)) {
+            return response()->json(['recommendation' => null]);
+        }
+
+        $recommendation = Device::query()
+            ->whereNotNull('paired_at')
+            ->whereNotNull('latitude')
+            ->whereNotNull('longitude')
+            ->whereBetween('latitude', [$user->bbox_south, $user->bbox_north])
+            ->whereBetween('longitude', [$user->bbox_west, $user->bbox_east])
+            ->with('latestTelemetry')
+            ->get()
+            ->filter(fn (Device $device) => $device->latestTelemetry !== null)
+            ->map(function (Device $device) {
+                $scores = $this->wbsiService->scoreTelemetryForDevice(
+                    $device,
+                    $device->latestTelemetry,
+                    $this->wbsiService->nearbyReportScore((float) $device->latitude, (float) $device->longitude)
+                );
+
+                $score = $scores['master_wbsi'] ?? $scores['sensor_score'];
+
+                return [
+                    'device' => $device,
+                    'scores' => $scores,
+                    'score' => $score === null ? null : (float) $score,
+                ];
+            })
+            ->filter(fn (array $candidate) => $candidate['score'] !== null && $candidate['score'] >= self::SENSOR_EVENT_THRESHOLD)
+            ->sortByDesc('score')
+            ->first(fn (array $candidate) => !$this->hasNearbyOpenEvent($candidate['device']));
+
+        if (!$recommendation) {
+            return response()->json(['recommendation' => null]);
+        }
+
+        /** @var Device $device */
+        $device = $recommendation['device'];
+        $scores = $recommendation['scores'];
+
+        return response()->json([
+            'recommendation' => [
+                'source' => 'sensor',
+                'device_id' => $device->id,
+                'station_id' => $device->station_id,
+                'name' => $device->name,
+                'latitude' => $device->latitude,
+                'longitude' => $device->longitude,
+                'wbsi_score' => $recommendation['score'],
+                'severity_label' => $scores['master_severity_label'] ?? $scores['severity_label'],
+                'latest_telemetry' => $device->latestTelemetry,
+                'last_seen_at' => $device->last_seen_at,
+            ],
+        ]);
+    }
+
     public function activityLogs(Request $request, Device $device)
     {
         $logs = $device->activityLogs()
@@ -292,6 +362,34 @@ class DeviceController extends Controller
             ->paginate($request->integer('per_page', 20));
 
         return response()->json($logs);
+    }
+
+    private function hasGeographicBounds(User $user): bool
+    {
+        return $user->bbox_south !== null
+            && $user->bbox_north !== null
+            && $user->bbox_west !== null
+            && $user->bbox_east !== null;
+    }
+
+    private function hasNearbyOpenEvent(Device $device): bool
+    {
+        $latitude = (float) $device->latitude;
+        $longitude = (float) $device->longitude;
+        $latDelta = self::EVENT_DUPLICATE_RADIUS_KM / 111.0;
+        $lngDelta = self::EVENT_DUPLICATE_RADIUS_KM / max(1.0, 111.0 * cos(deg2rad($latitude)));
+
+        return Event::query()
+            ->whereIn('status', ['recruiting', 'active'])
+            ->whereBetween('latitude', [$latitude - $latDelta, $latitude + $latDelta])
+            ->whereBetween('longitude', [$longitude - $lngDelta, $longitude + $lngDelta])
+            ->get()
+            ->contains(fn (Event $event) => $this->wbsiService->distanceKm(
+                $latitude,
+                $longitude,
+                (float) $event->latitude,
+                (float) $event->longitude
+            ) <= self::EVENT_DUPLICATE_RADIUS_KM);
     }
 
     public function storeTelemetry(Request $request, Device $device)
@@ -321,23 +419,14 @@ class DeviceController extends Controller
         ]);
     }
 
+    public function telemetry(Request $request)
+    {
+        return response()->json($this->telemetryQuery($request)->paginate($this->telemetryPerPage($request)));
+    }
+
     public function history(Request $request, Device $device)
     {
-        $validated = $request->validate([
-            'from' => 'nullable|date',
-            'to' => 'nullable|date',
-            'per_page' => 'nullable|integer|min:1|max:100',
-        ]);
-
-        $telemetry = $device->telemetry()
-            ->when(isset($validated['from']), function ($query) use ($validated) {
-                $query->where('recorded_at', '>=', $validated['from']);
-            })
-            ->when(isset($validated['to']), function ($query) use ($validated) {
-                $query->where('recorded_at', '<=', $validated['to']);
-            })
-            ->orderByDesc('recorded_at')
-            ->paginate($validated['per_page'] ?? 20);
+        $telemetry = $this->telemetryQuery($request, $device)->paginate($this->telemetryPerPage($request));
 
         return response()->json($telemetry);
     }
@@ -384,5 +473,72 @@ class DeviceController extends Controller
         };
 
         return response()->json($response);
+    }
+
+    private function telemetryQuery(Request $request, ?Device $device = null)
+    {
+        $validated = $request->validate([
+            'q' => 'nullable|string|max:255',
+            'from' => 'nullable|date',
+            'to' => 'nullable|date',
+            'status' => 'nullable|string|max:50',
+            'sort' => 'nullable|string',
+            'direction' => 'nullable|string|in:asc,desc',
+            'per_page' => 'nullable|integer|min:1|max:100',
+        ]);
+
+        $sort = $validated['sort'] ?? 'recorded_at';
+        $direction = $validated['direction'] ?? 'desc';
+        $telemetrySorts = [
+            'recorded_at',
+            'received_at',
+            'latency_ms',
+            'temperature_celsius',
+            'ph',
+            'turbidity_ntu',
+            'tds_mg_l',
+        ];
+
+        if (!in_array($sort, [...$telemetrySorts, 'station_id', 'device_name'], true)) {
+            $sort = 'recorded_at';
+            $direction = 'desc';
+        }
+
+        $query = DeviceTelemetry::query()
+            ->select('device_telemetries.*')
+            ->with('device:id,station_id,name,mac_address,status')
+            ->whereHas('device')
+            ->when($device, fn ($telemetryQuery) => $telemetryQuery->where('device_id', $device->id))
+            ->when(isset($validated['from']), fn ($telemetryQuery) => $telemetryQuery->where('recorded_at', '>=', $validated['from']))
+            ->when(isset($validated['to']), fn ($telemetryQuery) => $telemetryQuery->where('recorded_at', '<=', $validated['to']))
+            ->when(!empty($validated['status']), function ($telemetryQuery) use ($validated) {
+                $telemetryQuery->whereHas('device', fn ($deviceQuery) => $deviceQuery->where('status', $validated['status']));
+            })
+            ->when(!empty($validated['q']), function ($telemetryQuery) use ($validated) {
+                $search = $validated['q'];
+                $telemetryQuery->whereHas('device', function ($deviceQuery) use ($search) {
+                    $deviceQuery
+                        ->where('station_id', 'like', "%{$search}%")
+                        ->orWhere('name', 'like', "%{$search}%")
+                        ->orWhere('mac_address', 'like', "%{$search}%");
+                });
+            });
+
+        if ($sort === 'station_id' || $sort === 'device_name') {
+            $column = $sort === 'station_id' ? 'devices.station_id' : 'devices.name';
+            $query
+                ->join('devices', 'devices.id', '=', 'device_telemetries.device_id')
+                ->orderBy($column, $direction)
+                ->orderByDesc('device_telemetries.recorded_at');
+        } else {
+            $query->orderBy("device_telemetries.{$sort}", $direction);
+        }
+
+        return $query;
+    }
+
+    private function telemetryPerPage(Request $request): int
+    {
+        return $request->integer('per_page', 20);
     }
 }

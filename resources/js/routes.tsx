@@ -89,6 +89,20 @@ export const AppRoutes = () => {
                                 </RoleGuard>
                             </ProtectedRoute>
                         } />
+                        <Route path={ROUTE.ADMIN_DEVICE_MAINTENANCE.path} element={
+                            <ProtectedRoute>
+                                <RoleGuard roles={['admin']}>
+                                    <VIEWS.AdminDeviceMaintenance />
+                                </RoleGuard>
+                            </ProtectedRoute>
+                        } />
+                        <Route path={ROUTE.ADMIN_TELEMETRY.path} element={
+                            <ProtectedRoute>
+                                <RoleGuard roles={['admin']}>
+                                    <VIEWS.AdminTelemetry />
+                                </RoleGuard>
+                            </ProtectedRoute>
+                        } />
                         <Route path={ROUTE.ADMIN_DEVICE_DETAIL.path} element={
                             <ProtectedRoute>
                                 <RoleGuard roles={['admin']}>
@@ -96,10 +110,17 @@ export const AppRoutes = () => {
                                 </RoleGuard>
                             </ProtectedRoute>
                         } />
-                        <Route path={ROUTE.ADMIN_DEVICE_MAINTENANCE.path} element={
+                        <Route path={ROUTE.RESEARCH_DEVICES.path} element={
                             <ProtectedRoute>
-                                <RoleGuard roles={['admin']}>
-                                    <VIEWS.AdminDeviceMaintenance />
+                                <RoleGuard roles={['researcher']}>
+                                    <VIEWS.ResearchDevices />
+                                </RoleGuard>
+                            </ProtectedRoute>
+                        } />
+                        <Route path={ROUTE.RESEARCH_DEVICE_DETAIL.path} element={
+                            <ProtectedRoute>
+                                <RoleGuard roles={['researcher']}>
+                                    <VIEWS.ResearchDeviceDetail />
                                 </RoleGuard>
                             </ProtectedRoute>
                         } />

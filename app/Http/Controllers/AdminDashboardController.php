@@ -401,7 +401,7 @@ class AdminDashboardController extends Controller
         $declinedReports = Report::where('status', 'declined')->count();
 
         // Calculate pending organization approvals
-        $pendingOrganizations = User::whereIn('role', User::ORGANIZATION_ROLES)
+        $pendingOrganizations = User::whereIn('role', User::VERIFICATION_ROLES)
             ->where('approval_status', User::STATUS_PENDING)
             ->count();
 
@@ -464,7 +464,7 @@ class AdminDashboardController extends Controller
         }
 
         $users = User::query()
-            ->whereIn('role', User::ORGANIZATION_ROLES)
+            ->whereIn('role', User::VERIFICATION_ROLES)
             ->where('approval_status', User::STATUS_PENDING)
             ->with('approvedBy:id,firstName,lastName')
             ->latest()
@@ -479,8 +479,8 @@ class AdminDashboardController extends Controller
             return response()->json(['message' => 'Unauthorized'], 403);
         }
 
-        if (!$user->isOrganization()) {
-            return response()->json(['message' => 'User is not an organization account'], 422);
+        if (!$user->requiresApproval()) {
+            return response()->json(['message' => 'User account does not require approval'], 422);
         }
 
         $user->approval_status = User::STATUS_APPROVED;
@@ -511,8 +511,8 @@ class AdminDashboardController extends Controller
             return response()->json(['message' => 'Unauthorized'], 403);
         }
 
-        if (!$user->isOrganization()) {
-            return response()->json(['message' => 'User is not an organization account'], 422);
+        if (!$user->requiresApproval()) {
+            return response()->json(['message' => 'User account does not require approval'], 422);
         }
 
         $validated = $request->validate([

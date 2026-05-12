@@ -6,6 +6,7 @@ use App\Models\Device;
 use App\Models\DeviceActivityLog;
 use App\Models\DeviceMaintenanceLog;
 use App\Models\DeviceTelemetry;
+use App\Models\Event;
 use App\Models\MetricsDaily;
 use App\Models\MetricsMonthly;
 use App\Models\User;
@@ -106,6 +107,89 @@ class DeviceApiTest extends TestCase
             ->assertJsonPath('total', 1);
     }
 
+    public function test_all_device_telemetry_can_be_filtered_and_sorted(): void
+    {
+        Sanctum::actingAs($this->makeUser('admin'));
+
+        $alpha = $this->makeDevice('AA:BB:CC:DD:EE:10', 'alpha-station', 'Alpha River', 'online');
+        $beta = $this->makeDevice('AA:BB:CC:DD:EE:11', 'beta-station', 'Beta Creek', 'offline');
+
+        DeviceTelemetry::create([
+            'device_id' => $alpha->id,
+            'recorded_at' => '2026-05-01 08:00:00',
+            'received_at' => '2026-05-01 08:00:02',
+            'latency_ms' => 2000,
+            'temperature_celsius' => 28.4,
+            'ph' => 7.1,
+            'turbidity_ntu' => 9.2,
+            'tds_mg_l' => 145,
+        ]);
+
+        DeviceTelemetry::create([
+            'device_id' => $beta->id,
+            'recorded_at' => '2026-05-03 08:00:00',
+            'received_at' => '2026-05-03 08:00:01',
+            'latency_ms' => 1000,
+            'temperature_celsius' => 31.2,
+            'ph' => 6.8,
+            'turbidity_ntu' => 18.5,
+            'tds_mg_l' => 180,
+        ]);
+
+        $this->getJson('/api/device-telemetry?q=alpha&from=2026-05-01&to=2026-05-02&per_page=10')
+            ->assertOk()
+            ->assertJsonPath('total', 1)
+            ->assertJsonPath('data.0.device.station_id', 'alpha-station');
+
+        $this->getJson('/api/device-telemetry?status=offline&per_page=10')
+            ->assertOk()
+            ->assertJsonPath('total', 1)
+            ->assertJsonPath('data.0.device.station_id', 'beta-station');
+
+        $this->getJson('/api/device-telemetry?sort=ph&direction=asc&per_page=10')
+            ->assertOk()
+            ->assertJsonPath('data.0.device.station_id', 'beta-station')
+            ->assertJsonPath('data.1.device.station_id', 'alpha-station');
+
+        $this->getJson('/api/device-telemetry?sort=station_id&direction=desc&per_page=10')
+            ->assertOk()
+            ->assertJsonPath('data.0.device.station_id', 'beta-station')
+            ->assertJsonPath('data.1.device.station_id', 'alpha-station');
+
+        $this->getJson('/api/device-telemetry?sort=not_allowed&direction=asc&per_page=10')
+            ->assertOk()
+            ->assertJsonPath('data.0.device.station_id', 'beta-station');
+    }
+
+    public function test_device_telemetry_history_filters_are_scoped_to_the_device(): void
+    {
+        Sanctum::actingAs($this->makeUser('admin'));
+
+        $alpha = $this->makeDevice('AA:BB:CC:DD:EE:12', 'alpha-scope', 'Alpha Scope', 'online');
+        $beta = $this->makeDevice('AA:BB:CC:DD:EE:13', 'beta-scope', 'Beta Scope', 'online');
+
+        DeviceTelemetry::create([
+            'device_id' => $alpha->id,
+            'recorded_at' => '2026-05-01 08:00:00',
+            'ph' => 7.1,
+        ]);
+
+        DeviceTelemetry::create([
+            'device_id' => $beta->id,
+            'recorded_at' => '2026-05-02 08:00:00',
+            'ph' => 6.9,
+        ]);
+
+        $this->getJson('/api/devices/' . $alpha->id . '/telemetry?q=beta&per_page=10')
+            ->assertOk()
+            ->assertJsonPath('total', 0);
+
+        $this->getJson('/api/devices/' . $alpha->id . '/telemetry?q=alpha&per_page=10')
+            ->assertOk()
+            ->assertJsonPath('total', 1)
+            ->assertJsonPath('data.0.device.station_id', 'alpha-scope');
+    }
+
     public function test_deleting_device_preserves_historical_records(): void
     {
         $user = $this->makeUser('admin');
@@ -202,6 +286,91 @@ class DeviceApiTest extends TestCase
         $this->assertSame(1, Device::withTrashed()->where('mac_address', 'AA:BB:CC:DD:EE:04')->count());
     }
 
+    public function test_organization_sensor_recommendation_returns_highest_scored_sensor_in_area(): void
+    {
+        $user = $this->makeUser('ngo');
+        $user->forceFill([
+            'bbox_south' => 14.0,
+            'bbox_north' => 15.0,
+            'bbox_west' => 120.0,
+            'bbox_east' => 122.0,
+        ])->save();
+        Sanctum::actingAs($user);
+
+        $lower = $this->makeDevice('AA:BB:CC:DD:EE:20', 'lower-station', 'Lower Station', 'online');
+        $higher = $this->makeDevice('AA:BB:CC:DD:EE:21', 'higher-station', 'Higher Station', 'online');
+        $outside = $this->makeDevice('AA:BB:CC:DD:EE:22', 'outside-station', 'Outside Station', 'online');
+        $outside->forceFill(['latitude' => 16.0, 'longitude' => 123.0])->save();
+
+        $this->recordTelemetry($lower, 8.0);
+        $this->recordTelemetry($higher, 20.0);
+        $this->recordTelemetry($outside, 40.0);
+
+        $this->getJson('/api/organization/sensor-event-recommendation')
+            ->assertOk()
+            ->assertJsonPath('recommendation.source', 'sensor')
+            ->assertJsonPath('recommendation.device_id', $higher->id)
+            ->assertJsonPath('recommendation.station_id', 'higher-station');
+    }
+
+    public function test_organization_sensor_recommendation_is_null_below_threshold(): void
+    {
+        $user = $this->makeUser('lgu');
+        $user->forceFill([
+            'bbox_south' => 14.0,
+            'bbox_north' => 15.0,
+            'bbox_west' => 120.0,
+            'bbox_east' => 122.0,
+        ])->save();
+        Sanctum::actingAs($user);
+
+        $device = $this->makeDevice('AA:BB:CC:DD:EE:23', 'below-station', 'Below Station', 'online');
+        $this->recordTelemetry($device, 6.0);
+
+        $this->getJson('/api/organization/sensor-event-recommendation')
+            ->assertOk()
+            ->assertJsonPath('recommendation', null);
+    }
+
+    public function test_organization_sensor_recommendation_skips_sensors_with_open_nearby_events(): void
+    {
+        $user = $this->makeUser('ngo');
+        $user->forceFill([
+            'bbox_south' => 14.0,
+            'bbox_north' => 15.0,
+            'bbox_west' => 120.0,
+            'bbox_east' => 122.0,
+        ])->save();
+        Sanctum::actingAs($user);
+
+        $blocked = $this->makeDevice('AA:BB:CC:DD:EE:24', 'blocked-station', 'Blocked Station', 'online');
+        $available = $this->makeDevice('AA:BB:CC:DD:EE:25', 'available-station', 'Available Station', 'online');
+        $available->forceFill(['latitude' => 14.7, 'longitude' => 121.2])->save();
+
+        $this->recordTelemetry($blocked, 30.0);
+        $this->recordTelemetry($available, 10.0);
+
+        Event::create([
+            'title' => 'Existing cleanup',
+            'address' => 'Blocked Station',
+            'latitude' => $blocked->latitude,
+            'longitude' => $blocked->longitude,
+            'date' => now()->addDay()->toDateString(),
+            'time' => '09:00',
+            'duration' => 2,
+            'description' => 'Already scheduled',
+            'maxVolunteers' => 10,
+            'points' => 20,
+            'badge' => 'Volunteer',
+            'status' => 'recruiting',
+            'user_id' => $user->id,
+        ]);
+
+        $this->getJson('/api/organization/sensor-event-recommendation')
+            ->assertOk()
+            ->assertJsonPath('recommendation.device_id', $available->id);
+    }
+
     private function makeUser(string $role): User
     {
         return User::create([
@@ -218,6 +387,29 @@ class DeviceApiTest extends TestCase
             'push_pref_event_reminders' => true,
             'push_pref_achievements' => false,
             'push_quiet_hours_enabled' => false,
+        ]);
+    }
+
+    private function makeDevice(string $macAddress, string $stationId, string $name, string $status): Device
+    {
+        return Device::create([
+            'mac_address' => $macAddress,
+            'station_id' => $stationId,
+            'name' => $name,
+            'status' => $status,
+            'paired_at' => now(),
+            'latitude' => 14.58,
+            'longitude' => 121.0,
+        ]);
+    }
+
+    private function recordTelemetry(Device $device, float $turbidity): DeviceTelemetry
+    {
+        return DeviceTelemetry::create([
+            'device_id' => $device->id,
+            'recorded_at' => now(),
+            'received_at' => now(),
+            'turbidity_ntu' => $turbidity,
         ]);
     }
 }

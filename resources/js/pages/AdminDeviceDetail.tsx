@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useCallback, useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import Navigation from '@/components/Navigation';
@@ -44,7 +44,8 @@ import {
   ChevronLeft,
   ChevronRight,
 } from 'lucide-react';
-import DeviceService, { Device, Telemetry, MaintenanceLog, DailyMetrics, ActivityLog, MaintenanceSchedule } from '@/services/deviceService';
+import DeviceService, { Device, MaintenanceLog, DailyMetrics, ActivityLog, TelemetryFilters } from '@/services/deviceService';
+import { TelemetryTable } from '@/components/pagecomponents/TelemetryTable';
 import { ROUTE } from '@/constants';
 import 'leaflet/dist/leaflet.css';
 import { MapContainer, TileLayer, Marker, Popup } from 'react-leaflet';
@@ -108,11 +109,6 @@ export const AdminDeviceDetail = () => {
   const [scheduleReminder, setScheduleReminder] = useState(14);
   const [scheduleLoading, setScheduleLoading] = useState(false);
 
-  // Telemetry pagination
-  const [telemetryHistory, setTelemetryHistory] = useState<Telemetry[]>([]);
-  const [telemetryPage, setTelemetryPage] = useState(1);
-  const [telemetryLastPage, setTelemetryLastPage] = useState(1);
-
   // Activity logs pagination
   const [activityLogs, setActivityLogs] = useState<ActivityLog[]>([]);
   const [activityPage, setActivityPage] = useState(1);
@@ -141,7 +137,6 @@ export const AdminDeviceDetail = () => {
       }
 
       await Promise.all([
-        fetchTelemetry(1),
         fetchActivityLogs(1),
         deviceService.getMaintenance(Number(deviceId)).then(m => setMaintenanceLogs(m.logs)),
         deviceService.getDailyMetrics(Number(deviceId)).then(setDailyMetrics),
@@ -153,13 +148,10 @@ export const AdminDeviceDetail = () => {
     }
   };
 
-  const fetchTelemetry = async (page: number) => {
+  const fetchTelemetry = useCallback((page: number, perPage: number, filters: TelemetryFilters) => {
     const deviceService = new DeviceService(token!);
-    const history = await deviceService.getTelemetryHistory(Number(deviceId), page, 20);
-    setTelemetryHistory(history.data);
-    setTelemetryPage(history.current_page);
-    setTelemetryLastPage(history.last_page);
-  };
+    return deviceService.getTelemetryHistory(Number(deviceId), page, perPage, filters);
+  }, [deviceId, token]);
 
   const fetchActivityLogs = async (page: number) => {
     const deviceService = new DeviceService(token!);
@@ -423,61 +415,12 @@ export const AdminDeviceDetail = () => {
           </TabsList>
 
           <TabsContent value="telemetry">
-            <Card className="border-waterbase-200">
-              <CardHeader>
-                <CardTitle>Recent Telemetry</CardTitle>
-                <CardDescription>
-                  Page {telemetryPage} of {telemetryLastPage} &middot; {telemetryHistory.length} records shown
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                {telemetryHistory.length === 0 ? (
-                  <p className="text-waterbase-500">No telemetry recorded yet.</p>
-                ) : (
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-sm">
-                      <thead>
-                        <tr className="border-b border-waterbase-200">
-                          <th className="text-left py-2 px-3">Recorded</th>
-                          <th className="text-left py-2 px-3">Received</th>
-                          <th className="text-left py-2 px-3">Latency</th>
-                          <th className="text-left py-2 px-3">Temp</th>
-                          <th className="text-left py-2 px-3">pH</th>
-                          <th className="text-left py-2 px-3">Turbidity</th>
-                          <th className="text-left py-2 px-3">TDS</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {telemetryHistory.map((t) => (
-                          <tr key={t.id} className="border-b border-waterbase-100">
-                            <td className="py-2 px-3 whitespace-nowrap">{new Date(t.recorded_at).toLocaleString()}</td>
-                            <td className="py-2 px-3 whitespace-nowrap">{t.received_at ? new Date(t.received_at).toLocaleString() : '--'}</td>
-                            <td className="py-2 px-3 whitespace-nowrap">
-                              {t.latency_ms !== null ? `${t.latency_ms} ms` : '--'}
-                            </td>
-                            <td className="py-2 px-3">{t.temperature_celsius != null && !isNaN(Number(t.temperature_celsius)) ? Number(t.temperature_celsius).toFixed(1) : '--'}</td>
-                            <td className="py-2 px-3">{t.ph != null && !isNaN(Number(t.ph)) ? Number(t.ph).toFixed(2) : '--'}</td>
-                            <td className="py-2 px-3">{t.turbidity_ntu != null && !isNaN(Number(t.turbidity_ntu)) ? Number(t.turbidity_ntu).toFixed(1) : '--'}</td>
-                            <td className="py-2 px-3">{t.tds_mg_l != null && !isNaN(Number(t.tds_mg_l)) ? Number(t.tds_mg_l).toFixed(0) : '--'}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                    {telemetryLastPage > 1 && (
-                      <div className="flex items-center justify-center gap-2 mt-4">
-                        <Button variant="outline" size="sm" onClick={() => fetchTelemetry(telemetryPage - 1)} disabled={telemetryPage <= 1}>
-                          <ChevronLeft className="w-4 h-4" />
-                        </Button>
-                        <span className="text-sm text-waterbase-600">{telemetryPage} / {telemetryLastPage}</span>
-                        <Button variant="outline" size="sm" onClick={() => fetchTelemetry(telemetryPage + 1)} disabled={telemetryPage >= telemetryLastPage}>
-                          <ChevronRight className="w-4 h-4" />
-                        </Button>
-                      </div>
-                    )}
-                  </div>
-                )}
-              </CardContent>
-            </Card>
+            <TelemetryTable
+              title="Recent Telemetry"
+              description="Search, sort, and export readings recorded by this sensor."
+              downloadFilename={`telemetry-device-${device.id}.csv`}
+              fetchRows={fetchTelemetry}
+            />
           </TabsContent>
 
           <TabsContent value="maintenance">

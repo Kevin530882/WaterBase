@@ -45,6 +45,7 @@ interface Report {
 
 interface AreaReport {
     id: number;
+    source?: 'report' | 'sensor';
     location: string;
     coordinates: { lat: number; lng: number };
     reportCount: number;
@@ -54,6 +55,26 @@ interface AreaReport {
     estimatedCleanupEffort: string;
     priority: string;
     reports: Report[];
+    sensor?: SensorEventRecommendation;
+}
+
+interface SensorEventRecommendation {
+    source: 'sensor';
+    device_id: number;
+    station_id: string | null;
+    name: string | null;
+    latitude: number;
+    longitude: number;
+    wbsi_score: number;
+    severity_label: string;
+    latest_telemetry: {
+        recorded_at?: string | null;
+        ph?: number | null;
+        turbidity_ntu?: number | null;
+        tds_mg_l?: number | null;
+        temperature_celsius?: number | null;
+    } | null;
+    last_seen_at: string | null;
 }
 
 export const OrganizerPortal = () => {
@@ -67,6 +88,7 @@ export const OrganizerPortal = () => {
     const [createdEvents, setCreatedEvents] = useState<any[]>([]);
     const [isLoadingEvents, setIsLoadingEvents] = useState(false);
     const [editingEvent, setEditingEvent] = useState<any>(null);
+    const [sensorRecommendation, setSensorRecommendation] = useState<AreaReport | null>(null);
 
     const fetchReports = async (eventsData?: any[]) => {
         if (!token) {
@@ -142,6 +164,61 @@ export const OrganizerPortal = () => {
             console.log('Falling back to legacy coordinate-based grouping');
             processAreasLegacy(reports, eventsData);
         }
+    };
+
+    const fetchSensorRecommendation = async () => {
+        if (!token) return null;
+
+        try {
+            const response = await fetch('/api/organization/sensor-event-recommendation', {
+                headers: {
+                    'Authorization': `Bearer ${token}`,
+                    'Accept': 'application/json',
+                },
+            });
+
+            if (!response.ok) {
+                console.error('Failed to fetch sensor recommendation:', response.status);
+                return null;
+            }
+
+            const data = await response.json();
+            const recommendation = data.recommendation as SensorEventRecommendation | null;
+
+            if (!recommendation) {
+                return null;
+            }
+
+            return sensorRecommendationToArea(recommendation);
+        } catch (error) {
+            console.error('Error fetching sensor recommendation:', error);
+            return null;
+        }
+    };
+
+    const sensorRecommendationToArea = (recommendation: SensorEventRecommendation): AreaReport => {
+        const location = recommendation.name || recommendation.station_id || `Sensor ${recommendation.device_id}`;
+        const lastUpdatedAt = recommendation.last_seen_at || recommendation.latest_telemetry?.recorded_at;
+
+        return {
+            id: -recommendation.device_id,
+            source: 'sensor',
+            location,
+            coordinates: {
+                lat: recommendation.latitude,
+                lng: recommendation.longitude,
+            },
+            reportCount: 0,
+            severityLevel: recommendation.severity_label || 'Moderate',
+            lastReported: lastUpdatedAt
+                ? formatDistanceToNow(new Date(lastUpdatedAt), { addSuffix: true })
+                : 'Unknown',
+            description: `Sensor WBSI ${Math.round(recommendation.wbsi_score)}% from ${recommendation.station_id || location}`,
+            estimatedCleanupEffort: recommendation.wbsi_score >= 75 ? 'High effort required' : 'Assessment needed',
+            priority: recommendation.wbsi_score >= 75 ? 'High' : 'Medium',
+            reports: [],
+            sensor: recommendation,
+        };
     };
 
     // Helper functions to check event-location relationships
@@ -547,6 +624,7 @@ export const OrganizerPortal = () => {
             }
 
             // Then fetch reports with the events data
+            setSensorRecommendation(await fetchSensorRecommendation());
             await fetchReports(eventsData);
         };
 
@@ -586,6 +664,7 @@ export const OrganizerPortal = () => {
         }
 
         // Then fetch reports with the events data
+        setSensorRecommendation(await fetchSensorRecommendation());
         await fetchReports(eventsData);
     };
 
@@ -745,6 +824,7 @@ export const OrganizerPortal = () => {
                     <TabsContent value="areas">
                         <SufficientReportsTab
                             eligibleAreas={eligibleAreas}
+                            sensorRecommendation={sensorRecommendation}
                             isLoading={isLoading}
                             onSelectArea={(area) => {
                                 setSelectedArea(area);

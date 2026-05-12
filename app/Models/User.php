@@ -13,6 +13,7 @@ class User extends Authenticatable
     use HasFactory, Notifiable, HasApiTokens;
 
     public const ORGANIZATION_ROLES = ['ngo', 'lgu'];
+    public const VERIFICATION_ROLES = ['ngo', 'lgu', 'researcher'];
     public const USER_STATUS_ACTIVE = 'active';
     public const USER_STATUS_BANNED = 'banned';
 
@@ -183,6 +184,11 @@ class User extends Authenticatable
     public function isOrganization(): bool
     {
         return in_array(strtolower((string) $this->role), self::ORGANIZATION_ROLES, true);
+    }
+
+    public function requiresApproval(): bool
+    {
+        return in_array(strtolower((string) $this->role), self::VERIFICATION_ROLES, true);
     }
 
     public function isTemporarilyBanned(): bool

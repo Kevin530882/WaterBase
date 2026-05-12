@@ -83,13 +83,25 @@ export const ROUTE = {
         path: "/admin/devices",
         name: "Admin Devices",
     },
+    ADMIN_DEVICE_MAINTENANCE: {
+        path: "/admin/devices/maintenance",
+        name: "Admin Device Maintenance",
+    },
+    ADMIN_TELEMETRY: {
+        path: "/admin/telemetry",
+        name: "Admin Telemetry",
+    },
     ADMIN_DEVICE_DETAIL: {
         path: "/admin/devices/:deviceId",
         name: "Admin Device Detail",
     },
-    ADMIN_DEVICE_MAINTENANCE: {
-        path: "/admin/devices/maintenance",
-        name: "Admin Device Maintenance",
+    RESEARCH_DEVICES: {
+        path: "/research/devices",
+        name: "Research Devices",
+    },
+    RESEARCH_DEVICE_DETAIL: {
+        path: "/research/devices/:deviceId",
+        name: "Research Device Detail",
     },
     ACTIVITY_LOG : {
         path: "/activity-log",

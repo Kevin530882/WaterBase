@@ -2,7 +2,7 @@
 <html>
 <head>
     <meta charset="utf-8">
-    <title>Organization Account Rejected</title>
+    <title>Account Rejected</title>
 </head>
 <body style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;">
     <div style="max-width: 600px; margin: 0 auto; padding: 20px;">
@@ -10,7 +10,7 @@
 
         <p>Hello {{ $user->firstName }} {{ $user->lastName }},</p>
 
-        <p>We regret to inform you that your organization account for <strong>{{ $user->organization }}</strong> has been <strong>rejected</strong>.</p>
+        <p>We regret to inform you that your WaterBase account@if($user->organization) for <strong>{{ $user->organization }}</strong>@endif has been <strong>rejected</strong>.</p>
 
         @if($notes)
             <p><strong>Reason:</strong></p>

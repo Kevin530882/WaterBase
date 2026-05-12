@@ -96,12 +96,14 @@ Route::middleware(['auth:sanctum', 'banned'])->group(function () {
 
     // Device / telemetry routes
     Route::get('/map/wbsi-areas', [MapWbsiController::class, 'areas']);
+    Route::get('/organization/sensor-event-recommendation', [DeviceController::class, 'sensorEventRecommendation']);
 
     Route::get('/devices', [DeviceController::class, 'index']);
     Route::get('/devices/map', [DeviceController::class, 'mapDevices']);
     Route::get('/devices/discovered', [DeviceController::class, 'discovered']);
     Route::get('/devices/maintenance/overdue', [DeviceController::class, 'overdueMaintenance']);
     Route::get('/devices/maintenance/upcoming', [DeviceController::class, 'upcomingMaintenance']);
+    Route::get('/device-telemetry', [DeviceController::class, 'telemetry']);
 
     Route::get('/devices/{device}', [DeviceController::class, 'show']);
     Route::delete('/devices/{device}', [DeviceController::class, 'destroy']);

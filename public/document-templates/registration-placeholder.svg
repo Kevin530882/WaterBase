@@ -1,0 +1,13 @@
+<svg width="720" height="480" viewBox="0 0 720 480" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="720" height="480" rx="24" fill="#F0F9FF"/>
+  <rect x="180" y="54" width="360" height="372" rx="16" fill="white" stroke="#BAE6FD" stroke-width="4"/>
+  <rect x="226" y="114" width="268" height="24" rx="12" fill="#0EA5E9"/>
+  <rect x="226" y="164" width="220" height="14" rx="7" fill="#BAE6FD"/>
+  <rect x="226" y="196" width="268" height="14" rx="7" fill="#BAE6FD"/>
+  <rect x="226" y="228" width="238" height="14" rx="7" fill="#BAE6FD"/>
+  <rect x="226" y="286" width="120" height="72" rx="12" fill="#DCFCE7" stroke="#22C55E" stroke-width="3"/>
+  <path d="M256 323L278 344L316 302" stroke="#16A34A" stroke-width="10" stroke-linecap="round" stroke-linejoin="round"/>
+  <rect x="372" y="304" width="92" height="14" rx="7" fill="#BAE6FD"/>
+  <rect x="372" y="336" width="76" height="14" rx="7" fill="#BAE6FD"/>
+  <text x="360" y="410" fill="#0369A1" font-family="Arial, sans-serif" font-size="20" font-weight="700" text-anchor="middle">Template Preview Placeholder</text>
+</svg>

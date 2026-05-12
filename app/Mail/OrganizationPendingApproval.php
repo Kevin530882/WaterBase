@@ -26,7 +26,7 @@ class OrganizationPendingApproval extends Mailable
      */
     public function build()
     {
-        return $this->subject('Your organization registration is pending approval')
+        return $this->subject('Your WaterBase account registration is pending approval')
             ->view('emails.organization_pending')
             ->with(['user' => $this->user]);
     }
